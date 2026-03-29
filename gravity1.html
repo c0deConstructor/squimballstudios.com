@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "vs4szh6lz8");
+</script>
+<meta charset="UTF-8" />
+<title>Gravity Sim 1</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+    height: 100%;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  canvas {
+    display: block;
+    cursor: none;
+    position: fixed;
+    top: 0; left: 0;
+  }
+
+  /* ---- CONTROL PANEL ---- */
+  #panel {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh;
+    width: 230px;
+    background: rgba(0,0,0,0.72);
+    border-right: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 16px 16px;
+    gap: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.12) transparent;
+    transition: transform 0.35s cubic-bezier(.77,0,.175,1);
+  }
+
+  #panel.hidden {
+    transform: translateX(-230px);
+  }
+
+  #panel-title {
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+
+  .section-label {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.22);
+    margin: 14px 0 8px;
+  }
+
+  .control-row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 10px;
+  }
+
+  .ctrl-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .ctrl-label {
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.04em;
+  }
+
+  .ctrl-value {
+    font-size: 10px;
+    color: rgba(120,220,255,0.85);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 3px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  input[type=range]:hover {
+    background: rgba(255,255,255,0.17);
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: rgba(120,220,255,0.9);
+    box-shadow: 0 0 8px rgba(120,220,255,0.5);
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.15s;
+  }
+
+  input[type=range]::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 14px rgba(120,220,255,0.8);
+    transform: scale(1.2);
+  }
+
+  input[type=range]::-moz-range-thumb {
+    width: 13px;
+    height: 13px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(120,220,255,0.9);
+    box-shadow: 0 0 8px rgba(120,220,255,0.5);
+    cursor: pointer;
+  }
+
+  /* ---- RESET BUTTON ---- */
+  #resetBtn {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    width: 100%;
+    padding-bottom: 2px;
+  }
+
+  #resetBtn button {
+    width: 100%;
+    padding: 9px 0;
+    background: transparent;
+    border: 1px solid rgba(255,80,80,0.4);
+    color: rgba(255,110,110,0.85);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+  }
+
+  #resetBtn button:hover {
+    background: rgba(255,60,60,0.12);
+    border-color: rgba(255,80,80,0.75);
+    color: rgba(255,140,140,1);
+    box-shadow: 0 0 14px rgba(255,60,60,0.2);
+  }
+
+  #resetBtn button:active {
+    transform: scale(0.97);
+  }
+
+  /* ---- TOGGLE TAB ---- */
+  #toggleBtn {
+    position: fixed;
+    top: 50%;
+    left: 230px;
+    transform: translateY(-50%);
+    z-index: 25;
+    background: rgba(0,0,0,0.65);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-left: none;
+    color: rgba(255,255,255,0.4);
+    font-size: 11px;
+    padding: 10px 5px;
+    cursor: pointer;
+    writing-mode: vertical-rl;
+    letter-spacing: 0.12em;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    border-radius: 0 4px 4px 0;
+    transition: left 0.35s cubic-bezier(.77,0,.175,1), color 0.2s;
+    backdrop-filter: blur(8px);
+    user-select: none;
+  }
+
+  #toggleBtn:hover {
+    color: rgba(255,255,255,0.75);
+  }
+
+  #toggleBtn.panel-hidden {
+    left: 0;
+  }
+
+  /* ---- START OVERLAY ---- */
+  #startButton {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: rgba(0,0,0,0.88);
+    color: white;
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 300;
+    font-size: 22px;
+    cursor: pointer;
+    z-index: 30;
+    letter-spacing: 0.08em;
+    gap: 10px;
+  }
+
+  #startButton span {
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.38);
+    text-transform: uppercase;
+  }
+
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 4px 0 2px;
+  }
+
+  /* ---- SOCIAL ICON BUTTONS ---- */
+  #social-icons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 4px 0 16px;
+  }
+
+  .social-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 42px;
+    height: 42px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.45);
+    transition: all 0.18s;
+    padding: 0;
+  }
+
+  .social-btn svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .social-btn span {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.28);
+    line-height: 1;
+  }
+
+  .social-btn:hover {
+    background: rgba(120,220,255,0.09);
+    border-color: rgba(120,220,255,0.4);
+    color: rgba(120,220,255,0.95);
+    box-shadow: 0 0 12px rgba(120,220,255,0.18);
+  }
+
+  .social-btn:hover span {
+    color: rgba(120,220,255,0.65);
+  }
+
+  /* ---- MODAL OVERLAY ---- */
+  #modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #modal-overlay.open {
+    display: flex;
+  }
+
+  /* ---- MODAL BOX ---- */
+  .modal {
+    display: none;
+    position: relative;
+    width: 320px;
+    max-width: calc(100vw - 48px);
+    background: rgba(8,10,16,0.98);
+    border: 1px solid rgba(120,220,255,0.18);
+    border-radius: 14px;
+    padding: 32px 28px 28px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 40px rgba(120,220,255,0.05);
+    animation: modalIn 0.22s cubic-bezier(.34,1.4,.64,1);
+  }
+
+  .modal.active {
+    display: block;
+  }
+
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.88) translateY(16px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.25);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .modal-close:hover {
+    color: rgba(255,255,255,0.75);
+    background: rgba(255,255,255,0.07);
+  }
+
+  .modal-icon {
+    font-size: 2.4rem;
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+
+  .modal-icon-btc { color: #f7931a; text-shadow: 0 0 20px rgba(247,147,26,0.5); }
+  .modal-icon-eth { color: #627eea; text-shadow: 0 0 20px rgba(98,126,234,0.5); }
+  .modal-icon-gh  { color: rgba(200,200,200,0.8); }
+
+  .modal-title {
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 600;
+    font-size: 18px;
+    color: rgba(255,255,255,0.92);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+
+  .modal-subtitle {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.28);
+    margin-bottom: 20px;
+  }
+
+  .modal-desc {
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 300;
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.65;
+    margin: 0 0 22px;
+  }
+
+  /* QR placeholder box */
+  .qr-box {
+    width: 160px;
+    height: 160px;
+    margin: 0 auto 16px;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 8px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .qr-placeholder-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .qr-corner-tl, .qr-corner-tr, .qr-corner-bl, .qr-corner-br {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-color: rgba(120,220,255,0.35);
+    border-style: solid;
+  }
+  .qr-corner-tl { top: 10px; left: 10px;  border-width: 2px 0 0 2px; }
+  .qr-corner-tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+  .qr-corner-bl { bottom: 10px; left: 10px;  border-width: 0 0 2px 2px; }
+  .qr-corner-br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+
+  .qr-hint {
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.18);
+    line-height: 1.7;
+    text-align: center;
+  }
+
+  /* Wallet address */
+  .modal-addr {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: rgba(255,255,255,0.35);
+    word-break: break-all;
+    line-height: 1.7;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin-bottom: 14px;
+    letter-spacing: 0.04em;
+    text-align: left;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .modal-btn {
+    padding: 9px 20px;
+    background: transparent;
+    border: 1px solid rgba(120,220,255,0.3);
+    color: rgba(120,220,255,0.8);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: all 0.18s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .modal-btn:hover {
+    background: rgba(120,220,255,0.1);
+    border-color: rgba(120,220,255,0.65);
+    color: rgba(120,220,255,1);
+    box-shadow: 0 0 16px rgba(120,220,255,0.2);
+  }
+
+  .modal-btn.copied {
+    border-color: rgba(100,255,160,0.5);
+    color: rgba(100,255,160,0.9);
+  }
+</style>
+</head>
+<body>
+
+<div id="startButton">
+  Click to Start
+  <span>Hold Mouse to Attract</span>
+</div>
+
+<!-- CONTROL PANEL -->
+<div id="panel">
+  <div id="panel-title">⟁ Gravity Controls</div>
+
+  <div class="section-label">Simulation</div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Particle Count</span>
+      <span class="ctrl-value" id="val-PARTICLE_COUNT">20000</span>
+    </div>
+    <input type="range" id="sl-PARTICLE_COUNT" min="1000" max="80000" step="1000" value="20000">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Base Gravity</span>
+      <span class="ctrl-value" id="val-BASE_GRAVITY">0.020</span>
+    </div>
+    <input type="range" id="sl-BASE_GRAVITY" min="0" max="0.15" step="0.001" value="0.02">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Max Gravity</span>
+      <span class="ctrl-value" id="val-MAX_GRAVITY">0.350</span>
+    </div>
+    <input type="range" id="sl-MAX_GRAVITY" min="0.05" max="1.0" step="0.005" value="0.35">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Stillness Rate</span>
+      <span class="ctrl-value" id="val-STILLNESS_RATE">0.0008</span>
+    </div>
+    <input type="range" id="sl-STILLNESS_RATE" min="0.0001" max="0.005" step="0.0001" value="0.0008">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Damping</span>
+      <span class="ctrl-value" id="val-DAMPING">0.9950</span>
+    </div>
+    <input type="range" id="sl-DAMPING" min="0.95" max="1.0" step="0.0001" value="0.995">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Particle Size</span>
+      <span class="ctrl-value" id="val-PARTICLE_SIZE">1.00</span>
+    </div>
+    <input type="range" id="sl-PARTICLE_SIZE" min="0.1" max="2" step="0.01" value="1">
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Audio</div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Min Frequency</span>
+      <span class="ctrl-value" id="val-MIN_FREQ">15 Hz</span>
+    </div>
+    <input type="range" id="sl-MIN_FREQ" min="10" max="200" step="1" value="15">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Max Frequency</span>
+      <span class="ctrl-value" id="val-MAX_FREQ">750 Hz</span>
+    </div>
+    <input type="range" id="sl-MAX_FREQ" min="50" max="1000" step="5" value="750">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Volume</span>
+      <span class="ctrl-value" id="val-VOLUME">0.00</span>
+    </div>
+    <input type="range" id="sl-VOLUME" min="0" max="0.01" step="0.0001" value="0">
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Cursor Glow</div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Core (Idle)</span>
+      <span class="ctrl-value" id="val-CORE_RADIUS_IDLE">3</span>
+    </div>
+    <input type="range" id="sl-CORE_RADIUS_IDLE" min="1" max="20" step="0.5" value="3">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Field (Idle)</span>
+      <span class="ctrl-value" id="val-FIELD_RADIUS_IDLE">18</span>
+    </div>
+    <input type="range" id="sl-FIELD_RADIUS_IDLE" min="5" max="80" step="1" value="18">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Core (Active)</span>
+      <span class="ctrl-value" id="val-CORE_RADIUS_ACTIVE">6</span>
+    </div>
+    <input type="range" id="sl-CORE_RADIUS_ACTIVE" min="1" max="30" step="0.5" value="6">
+  </div>
+
+  <div class="control-row">
+    <div class="ctrl-header">
+      <span class="ctrl-label">Field (Active)</span>
+      <span class="ctrl-value" id="val-FIELD_RADIUS_ACTIVE">45</span>
+    </div>
+    <input type="range" id="sl-FIELD_RADIUS_ACTIVE" min="10" max="150" step="1" value="45">
+  </div>
+
+  <!-- SOCIAL / CRYPTO SECTION -->
+  <div class="section-label" style="margin-top:16px;">Stay Tuned!</div>
+  <div id="social-icons">
+
+    <button class="social-btn" data-modal="modal-gh" title="GitHub">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+      <span>GitHub</span>
+    </button>
+	
+    <button class="social-btn" data-modal="modal-btc" title="Bitcoin Donation">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M9 7.5h4a2 2 0 0 1 0 4H9m0-4v4m0 0h4.5a2 2 0 0 1 0 4H9m0-4v4M10.5 7V6m0 10.5V17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span>BTC</span>
+    </button>
+
+    <button class="social-btn" data-modal="modal-eth" title="Ethereum Donation">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L4 12.5l8 4.5 8-4.5L12 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 12.5L12 22l8-9.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 2v15" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/></svg>
+      <span>ETH</span>
+    </button>
+
+    <button class="social-btn" data-modal="modal-kofi" title="Ko-fi">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6h16v2a6 6 0 0 1-6 6H4V6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 9h2a2 2 0 0 1 0 4h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 14l1.5 4h9L18 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Ko-fi</span>
+    </button>
+
+  </div>
+
+  <div id="resetBtn">
+    <button id="resetSimBtn">⟳ Reset Simulation</button>
+  </div>
+</div>
+
+<!-- ==================== MODALS ==================== -->
+<div id="modal-overlay">
+
+  <!-- GitHub Modal -->
+  <div class="modal" id="modal-gh">
+    <button class="modal-close" data-close>✕</button>
+    <div class="modal-icon modal-icon-gh" style="font-size:2rem;">⌥</div>
+    <div class="modal-title">GitHub</div>
+    <div class="modal-subtitle">Source code, forks &amp; contributions</div>
+    <p class="modal-desc">Explore the code, fork it, break it, make it yours. Stars are appreciated!</p>
+    <div class="modal-actions">
+      <a class="modal-btn modal-link" href="https://github.com/c0deConstructor" target="_blank" rel="noopener">Open on GitHub →</a>
+    </div>
+  </div>
+  
+  <!-- BTC Modal -->
+  <div class="modal" id="modal-btc">
+    <button class="modal-close" data-close>✕</button>
+    <div class="modal-icon modal-icon-btc">₿</div>
+    <div class="modal-title">Bitcoin</div>
+    <div class="modal-subtitle">Scan QR or copy address to donate</div>
+    <div class="qr-box">
+      <div class="qr-placeholder-inner">
+        <div class="qr-corner-tl"></div><div class="qr-corner-tr"></div>
+        <div class="qr-corner-bl"></div><div class="qr-corner-br"></div>
+        <span class="qr-hint">Replace with your<br>BTC QR image</span>
+      </div>
+    </div>
+    <div class="modal-addr" id="addr-btc">YOUR_BTC_ADDRESS_HERE</div>
+    <div class="modal-actions">
+      <button class="modal-btn copy-btn" onclick="copyAddr('addr-btc', this)">Copy Address</button>
+    </div>
+  </div>
+
+  <!-- ETH Modal -->
+  <div class="modal" id="modal-eth">
+    <button class="modal-close" data-close>✕</button>
+    <div class="modal-icon modal-icon-eth">⬡</div>
+    <div class="modal-title">Ethereum</div>
+    <div class="modal-subtitle">Scan QR or copy address to donate</div>
+    <div class="qr-box">
+      <div class="qr-placeholder-inner">
+        <div class="qr-corner-tl"></div><div class="qr-corner-tr"></div>
+        <div class="qr-corner-bl"></div><div class="qr-corner-br"></div>
+        <span class="qr-hint">Replace with your<br>ETH QR image</span>
+      </div>
+    </div>
+    <div class="modal-addr" id="addr-eth">YOUR_ETH_ADDRESS_HERE</div>
+    <div class="modal-actions">
+      <button class="modal-btn copy-btn" onclick="copyAddr('addr-eth', this)">Copy Address</button>
+    </div>
+  </div>
+
+  <!-- Ko-fi Modal -->
+  <div class="modal" id="modal-kofi">
+    <button class="modal-close" data-close>✕</button>
+    <div class="modal-icon" style="font-size:2rem;">☕</div>
+    <div class="modal-title">Ko-fi</div>
+    <div class="modal-subtitle">Support the work</div>
+    <p class="modal-desc">If this made you smile or saved you time, a coffee goes a long way toward the next experiment.</p>
+    <div class="modal-actions">
+      <a class="modal-btn modal-link" href="https://ko-fi.com/squimball" target="_blank" rel="noopener">Support on Ko-fi →</a>
+    </div>
+  </div>
+
+</div>
+<!-- ================================================ -->
+
+<!-- PANEL TOGGLE TAB -->
+<div id="toggleBtn">Controls</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+/* =======================
+   LIVE VARIABLES (defaults)
+   ======================= */
+let cfg = {
+  PARTICLE_COUNT:      20000,
+  BASE_GRAVITY:        0.02,
+  MAX_GRAVITY:         0.35,
+  STILLNESS_RATE:      0.0008,
+  DAMPING:             0.995,
+  MIN_FREQ:            15,
+  MAX_FREQ:            700,
+  VOLUME:              0.0,
+  CORE_RADIUS_IDLE:    3,
+  FIELD_RADIUS_IDLE:   18,
+  CORE_RADIUS_ACTIVE:  6,
+  FIELD_RADIUS_ACTIVE: 45,
+  PARTICLE_SIZE:       1.0,
+};
+
+/* =======================
+   SLIDER WIRING
+   ======================= */
+const formatters = {
+  PARTICLE_COUNT:      v => Math.round(v).toLocaleString(),
+  BASE_GRAVITY:        v => parseFloat(v).toFixed(3),
+  MAX_GRAVITY:         v => parseFloat(v).toFixed(3),
+  STILLNESS_RATE:      v => parseFloat(v).toFixed(4),
+  DAMPING:             v => parseFloat(v).toFixed(4),
+  MIN_FREQ:            v => `${Math.round(v)} Hz`,
+  MAX_FREQ:            v => `${Math.round(v)} Hz`,
+  VOLUME:              v => parseFloat(v).toFixed(2),
+  CORE_RADIUS_IDLE:    v => parseFloat(v).toFixed(1),
+  FIELD_RADIUS_IDLE:   v => Math.round(v),
+  CORE_RADIUS_ACTIVE:  v => parseFloat(v).toFixed(1),
+  FIELD_RADIUS_ACTIVE: v => Math.round(v),
+  PARTICLE_SIZE:       v => parseFloat(v).toFixed(2),
+};
+
+for (const key of Object.keys(cfg)) {
+  const slider = document.getElementById(`sl-${key}`);
+  const valEl  = document.getElementById(`val-${key}`);
+  if (!slider) continue;
+
+  slider.addEventListener('input', () => {
+    cfg[key] = parseFloat(slider.value);
+    valEl.textContent = formatters[key](slider.value);
+
+    // Live-update audio if running
+    if (key === 'VOLUME' && gain) {
+      gain.gain.setTargetAtTime(cfg.VOLUME, audioCtx.currentTime, 0.05);
+    }
+  });
+}
+
+/* =======================
+   PANEL TOGGLE
+   ======================= */
+const panel     = document.getElementById('panel');
+const toggleBtn = document.getElementById('toggleBtn');
+let panelOpen   = true;
+
+toggleBtn.addEventListener('click', () => {
+  panelOpen = !panelOpen;
+  panel.classList.toggle('hidden', !panelOpen);
+  toggleBtn.classList.toggle('panel-hidden', !panelOpen);
+  toggleBtn.textContent = panelOpen ? 'Controls' : 'Controls';
+});
+
+/* =======================
+   CANVAS
+   ======================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* =======================
+   MOUSE
+   ======================= */
+let mouse = {
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  lastX: null,
+  lastY: null,
+  stillTime: 0,
+  down: false
+};
+
+window.addEventListener("mousemove", e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+window.addEventListener("mousedown", e => {
+  if (e.button === 0 && !e.target.closest('#panel') && !e.target.closest('#toggleBtn')) {
+    mouse.down = true;
+  }
+});
+window.addEventListener("mouseup", e => {
+  if (e.button === 0) mouse.down = false;
+});
+
+/* =======================
+   AUDIO
+   ======================= */
+let audioCtx, osc, gain;
+let audioReady = false;
+let currentFreq = 20;
+
+const startButton = document.getElementById("startButton");
+
+startButton.addEventListener("click", () => {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  osc  = audioCtx.createOscillator();
+  gain = audioCtx.createGain();
+
+  osc.type = "sawtooth";
+  osc.frequency.value = cfg.MIN_FREQ;
+  gain.gain.value = cfg.VOLUME;
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+
+  audioReady = true;
+  startButton.remove();
+});
+
+/* =======================
+   PARTICLES
+   ======================= */
+class Particle {
+  constructor() { this.init(); }
+
+  init() {
+    this.x  = Math.random() * canvas.width;
+    this.y  = Math.random() * canvas.height;
+    this.vx = (Math.random() - 0.5) * 0.5;
+    this.vy = (Math.random() - 0.5) * 0.5;
+  }
+
+  update(g) {
+    if (g > 0) {
+      const dx = mouse.x - this.x;
+      const dy = mouse.y - this.y;
+      const d  = Math.sqrt(dx*dx + dy*dy) + 0.001;
+      const f  = g / d;
+      this.vx += dx * f;
+      this.vy += dy * f;
+    }
+    this.vx *= cfg.DAMPING;
+    this.vy *= cfg.DAMPING;
+    this.x  += this.vx;
+    this.y  += this.vy;
+  }
+
+  draw() {
+    ctx.fillRect(this.x, this.y, cfg.PARTICLE_SIZE, cfg.PARTICLE_SIZE);
+  }
+}
+
+let particles = [];
+
+function initParticles() {
+  particles = Array.from({ length: Math.round(cfg.PARTICLE_COUNT) }, () => new Particle());
+}
+initParticles();
+
+/* =======================
+   RESET BUTTON
+   ======================= */
+document.getElementById('resetSimBtn').addEventListener('click', () => {
+  mouse.stillTime = 0;
+  mouse.lastX = null;
+  mouse.lastY = null;
+  currentFreq = cfg.MIN_FREQ;
+  initParticles();
+});
+
+/* =======================
+   GLOWING CURSOR
+   ======================= */
+function drawGravitySource(g) {
+  const active = mouse.down;
+  const core   = active ? cfg.CORE_RADIUS_ACTIVE : cfg.CORE_RADIUS_IDLE;
+  const field  = active ? cfg.FIELD_RADIUS_ACTIVE : cfg.FIELD_RADIUS_IDLE;
+  const alpha  = active ? 0.25 : 0.12;
+  const pulse  = active ? 1 + g * 10 : 1;
+
+  const grad = ctx.createRadialGradient(
+    mouse.x, mouse.y, 0,
+    mouse.x, mouse.y, field * pulse
+  );
+  grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(mouse.x, mouse.y, field * pulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(mouse.x, mouse.y, core, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/* =======================
+   SOUND
+   ======================= */
+function updateSound() {
+  if (!audioReady) return;
+
+  let cx = 0, cy = 0;
+  for (const p of particles) { cx += p.x; cy += p.y; }
+  cx /= particles.length;
+  cy /= particles.length;
+
+  let spread = 0;
+  for (const p of particles) {
+    const dx = p.x - cx, dy = p.y - cy;
+    spread += Math.sqrt(dx*dx + dy*dy);
+  }
+  spread /= particles.length;
+
+  const maxSpread = Math.sqrt(canvas.width**2 + canvas.height**2) * 0.25;
+  const norm   = Math.max(0, Math.min(1, 1 - spread / maxSpread));
+  const target = cfg.MIN_FREQ + norm * (cfg.MAX_FREQ - cfg.MIN_FREQ);
+  currentFreq += (target - currentFreq) * 0.05;
+
+  osc.frequency.setValueAtTime(currentFreq, audioCtx.currentTime);
+  gain.gain.setValueAtTime(cfg.VOLUME, audioCtx.currentTime);
+}
+
+/* =======================
+   STILLNESS
+   ======================= */
+function updateMouseStillness() {
+  if (!mouse.down) {
+    mouse.stillTime = 0;
+    mouse.lastX = mouse.x;
+    mouse.lastY = mouse.y;
+    return;
+  }
+  if (mouse.lastX !== null) {
+    const dx = mouse.x - mouse.lastX;
+    const dy = mouse.y - mouse.lastY;
+    mouse.stillTime = Math.sqrt(dx*dx + dy*dy) < 0.5
+      ? Math.min(1, mouse.stillTime + cfg.STILLNESS_RATE)
+      : 0;
+  }
+  mouse.lastX = mouse.x;
+  mouse.lastY = mouse.y;
+}
+
+/* =======================
+   LOOP
+   ======================= */
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  updateMouseStillness();
+
+  const gravity = mouse.down
+    ? cfg.BASE_GRAVITY + mouse.stillTime * (cfg.MAX_GRAVITY - cfg.BASE_GRAVITY)
+    : 0;
+
+  ctx.fillStyle = "#fff";
+  for (const p of particles) {
+    p.update(gravity);
+    p.draw();
+  }
+
+  drawGravitySource(gravity);
+  updateSound();
+
+  requestAnimationFrame(animate);
+}
+
+/* =======================
+   MODALS
+   ======================= */
+const overlay = document.getElementById('modal-overlay');
+
+// Open modal when social button clicked
+document.querySelectorAll('.social-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const targetId = btn.getAttribute('data-modal');
+    const modal    = document.getElementById(targetId);
+    if (!modal) return;
+
+    // Hide all modals, show the target
+    document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+    modal.classList.add('active');
+    overlay.classList.add('open');
+  });
+});
+
+// Close via ✕ button
+document.querySelectorAll('[data-close]').forEach(btn => {
+  btn.addEventListener('click', closeModal);
+});
+
+// Close by clicking the dark overlay backdrop
+overlay.addEventListener('click', e => {
+  if (e.target === overlay) closeModal();
+});
+
+// Close with Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+function closeModal() {
+  overlay.classList.remove('open');
+  document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+}
+
+function copyAddr(elId, btn) {
+  const text = document.getElementById(elId).textContent.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy Address';
+      btn.classList.remove('copied');
+    }, 2200);
+  }).catch(() => {
+    // Fallback for browsers that block clipboard
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy Address';
+      btn.classList.remove('copied');
+    }, 2200);
+  });
+}
+
+animate();
+</script>
+</body>
+</html>
