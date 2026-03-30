@@ -658,17 +658,22 @@
     <button class="modal-close" data-close>✕</button>
     <div class="modal-icon modal-icon-btc">₿</div>
     <div class="modal-title">Bitcoin</div>
-    <div class="modal-subtitle">Scan QR or copy address to donate</div>
+    <div class="modal-subtitle">Scan QR or copy address to donate<br /><br />Help me continue to grow and create cool things for all to enjoy!</div>
     <div class="qr-box">
       <div class="qr-placeholder-inner">
         <div class="qr-corner-tl"></div><div class="qr-corner-tr"></div>
         <div class="qr-corner-bl"></div><div class="qr-corner-br"></div>
-        <span class="qr-hint">Replace with your<br>BTC QR image</span>
+        <span class="qr-hint"><img src="images/btc-address.png" /></span>
       </div>
     </div>
-    <div class="modal-addr" id="addr-btc">YOUR_BTC_ADDRESS_HERE</div>
+    <div class="modal-addr" id="addr-btc" style="text-align: center;">1MKmJGv8M4suSFSyJiVrQjFhatP6gfdr1F</div>
     <div class="modal-actions">
       <button class="modal-btn copy-btn" onclick="copyAddr('addr-btc', this)">Copy Address</button>
+    </div>
+    <div class="modal-addr" id="addr-info" style="margin-top: 16px; text-align: center;">
+      Do not send BCH to this address<br /><br />
+      This address can only receive Bitcoin on the Bitcoin network. Don't send Bitcoin on any other network or it may be lost.<br /><br />
+      Allow 27 min for processing.
     </div>
   </div>
 
@@ -677,18 +682,23 @@
     <button class="modal-close" data-close>✕</button>
     <div class="modal-icon modal-icon-eth">⬡</div>
     <div class="modal-title">Ethereum</div>
-    <div class="modal-subtitle">Scan QR or copy address to donate</div>
+    <div class="modal-subtitle">Scan QR or copy address to donate<br /><br />Help me continue to grow and create cool things for all to enjoy!</div>
     <div class="qr-box">
       <div class="qr-placeholder-inner">
         <div class="qr-corner-tl"></div><div class="qr-corner-tr"></div>
         <div class="qr-corner-bl"></div><div class="qr-corner-br"></div>
-        <span class="qr-hint">Replace with your<br>ETH QR image</span>
+        <span class="qr-hint"><img src="images/eth-address.png" /></span>
       </div>
     </div>
-    <div class="modal-addr" id="addr-eth">YOUR_ETH_ADDRESS_HERE</div>
+    <div class="modal-addr" id="addr-eth" style="text-align: center;">0xd32b4c53329a45ed2d24E21C830779877F5E6eD1</div>
     <div class="modal-actions">
       <button class="modal-btn copy-btn" onclick="copyAddr('addr-eth', this)">Copy Address</button>
     </div>
+    <div class="modal-addr" id="addr-info" style="margin-top: 16px; text-align: center;">
+      Do not send any ERC-20s, NFTs or WETH to this address<br /><br />
+      This address can only receive Ethereum on the Ethereum network. Don't send Ethereum on any other network or it may be lost.<br /><br />
+      Allow 5 min for processing.
+    </div>    
   </div>
 
   <!-- Ko-fi Modal -->
