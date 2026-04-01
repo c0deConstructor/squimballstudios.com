@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seismic Pulse — Earthquake Animator</title>
+<!-- d3 for geo projection & TopoJSON rendering -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #05070f;
+    --panel-bg: rgba(8, 12, 24, 0.97);
+    --border: rgba(0,200,180,0.18);
+    --accent: #00c8b4;
+    --accent2: #ff6b35;
+    --accent3: #ffd166;
+    --text: #c8dde8;
+    --text-dim: #5a7a8a;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+    --panel-w: 300px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+  }
+
+  /* ── CANVAS ── */
+  #canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 0;
+    cursor: grab;
+  }
+  #canvas.dragging { cursor: grabbing; }
+
+  /* ── GRID OVERLAY ── */
+  #grid-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    pointer-events: none;
+    z-index: 1;
+    background-image:
+      linear-gradient(rgba(0,200,180,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,200,180,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ── QUERY PANEL (center modal) ── */
+  #query-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 50% 40%, rgba(0,200,180,0.07) 0%, rgba(5,7,15,0.97) 70%);
+  }
+
+  #query-box {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    padding: 36px 40px 32px;
+    width: min(600px, 92vw);
+    max-height: 92vh;
+    overflow-y: auto;
+    box-shadow: 0 0 60px rgba(0,200,180,0.12), 0 0 0 1px rgba(0,200,180,0.06);
+    position: relative;
+  }
+
+  #query-box::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 40px;
+    width: 60px; height: 2px;
+    background: var(--accent2);
+  }
+
+  .q-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .q-heading {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #fff;
+    margin-bottom: 28px;
+    text-transform: uppercase;
+  }
+
+  .q-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 20px;
+  }
+
+  .q-field { display: flex; flex-direction: column; gap: 6px; }
+  .q-field.full { grid-column: 1 / -1; }
+
+  .q-field label {
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  .q-field input {
+    background: rgba(0,200,180,0.04);
+    border: 1px solid rgba(0,200,180,0.2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    -webkit-appearance: none;
+  }
+
+  .q-field input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,200,180,0.1);
+  }
+
+  .q-divider { grid-column: 1 / -1; height: 1px; background: var(--border); margin: 4px 0; }
+
+  .q-section-label {
+    grid-column: 1 / -1;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--accent2);
+    text-transform: uppercase;
+    padding-top: 4px;
+  }
+
+  #fetch-btn {
+    margin-top: 24px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 14px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: color 0.2s, background 0.2s;
+  }
+
+  #fetch-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s ease;
+    z-index: -1;
+  }
+
+  #fetch-btn:hover { color: var(--bg); }
+  #fetch-btn:hover::before { transform: scaleX(1); }
+
+  #fetch-error {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent2);
+    min-height: 16px;
+  }
+
+  /* ── LEFT SETTINGS PANEL ── */
+  #settings-panel {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--panel-w);
+    height: 100vh;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+    transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  #settings-panel.collapsed {
+    transform: translateX(calc(-1 * var(--panel-w)));
+  }
+
+  #panel-inner {
+    background: var(--panel-bg);
+    border-right: 1px solid var(--border);
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px 20px 24px;
+    pointer-events: all;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  #panel-inner::-webkit-scrollbar { width: 4px; }
+  #panel-inner::-webkit-scrollbar-thumb { background: var(--border); }
+
+  #panel-toggle {
+    position: absolute;
+    right: -36px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 80px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-left: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: all;
+    color: var(--accent);
+    transition: background 0.2s;
+    writing-mode: vertical-lr;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+  }
+
+  #panel-toggle:hover { background: rgba(0,200,180,0.1); }
+
+  .panel-section { margin-bottom: 24px; }
+
+  .panel-section-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .slider-row { margin-bottom: 14px; }
+
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+
+  .slider-label span:first-child {
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+
+  .slider-label span:last-child {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: rgba(0,200,180,0.15);
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(0,200,180,0.5);
+    transition: transform 0.15s;
+  }
+
+  input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.3); }
+
+  input[type=range]::-moz-range-thumb {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+  }
+
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .color-row label { font-size: 12px; font-weight: 600; flex: 1; letter-spacing: 0.06em; }
+
+  .color-row input[type=color] {
+    width: 36px; height: 24px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    padding: 1px;
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+
+  .checkbox-row input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+  .checkbox-row label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; }
+
+  .panel-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px solid rgba(0,200,180,0.3);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 9px;
+    cursor: pointer;
+    margin-bottom: 8px;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+
+  .panel-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,200,180,0.05); }
+  .panel-btn.danger:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ── HUD ── */
+  #hud {
+    position: fixed;
+    top: 20px; right: 20px;
+    z-index: 40;
+    text-align: right;
+    pointer-events: none;
+  }
+
+  #hud-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 4px; }
+  #hud-count { font-family: var(--mono); font-size: 32px; color: var(--accent); line-height: 1; }
+  #hud-label { font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+  #hud-time { margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  #hud-current-time { font-family: var(--mono); font-size: 13px; color: var(--accent3); margin-top: 2px; }
+  #hud-zoom { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* ── ZOOM CONTROLS ── */
+  #zoom-controls {
+    position: fixed;
+    bottom: 70px; left: 20px;
+    z-index: 40;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .zoom-btn {
+    width: 32px; height: 32px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s;
+    line-height: 1;
+  }
+
+  .zoom-btn:hover { background: rgba(0,200,180,0.12); border-color: var(--accent); }
+
+  /* ── PROGRESS BAR ── */
+  #progress-bar-wrap {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    z-index: 40;
+    background: rgba(0,200,180,0.08);
+    pointer-events: none;
+  }
+
+  #progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent3));
+    transition: width 0.1s linear;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* ── CONTROLS BAR ── */
+  #controls-bar {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    padding: 10px 16px;
+  }
+
+  .ctrl-btn {
+    background: transparent;
+    border: 1px solid rgba(0,200,180,0.25);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+
+  .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .ctrl-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,200,180,0.08); }
+
+  /* ── LEGEND ── */
+  #legend {
+    position: fixed;
+    bottom: 70px; right: 20px;
+    z-index: 40;
+    text-align: right;
+    pointer-events: none;
+  }
+
+  .legend-title { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; }
+
+  .legend-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 5px; }
+  .legend-circle { border-radius: 50%; opacity: 0.75; flex-shrink: 0; }
+  .legend-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+  /* ── LOADING OVERLAY ── */
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    background: var(--bg);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .loader-ring {
+    width: 60px; height: 60px;
+    border: 2px solid rgba(0,200,180,0.1);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loader-text { font-family: var(--mono); font-size: 12px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; }
+  #loader-count { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+
+  /* ── TOOLTIP ── */
+  #tooltip {
+    position: fixed;
+    z-index: 60;
+    pointer-events: none;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-top: 1px solid var(--accent);
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--text);
+    max-width: 240px;
+    display: none;
+  }
+
+  #tooltip b { color: var(--accent); font-size: 13px; }
+
+  /* ── MAP STATUS ── */
+  #map-status {
+    position: fixed;
+    bottom: 70px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    pointer-events: none;
+    display: none;
+  }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<div id="grid-overlay"></div>
+
+<!-- QUERY MODAL -->
+<div id="query-modal">
+  <div id="query-box">
+    <div class="q-title">USGS Earthquake Catalog</div>
+    <div class="q-heading">Seismic Pulse</div>
+    <div class="q-grid">
+      <div class="q-section-label">// Time Range</div>
+      <div class="q-field">
+        <label>Start Date</label>
+        <input type="date" id="q-start" value="2026-01-01">
+      </div>
+      <div class="q-field">
+        <label>End Date</label>
+        <input type="date" id="q-end" value="2026-12-31">
+      </div>
+      <div class="q-divider"></div>
+      <div class="q-section-label">// Search Center</div>
+      <div class="q-field">
+        <label>Center Latitude</label>
+        <input type="number" id="q-lat" value="20.799" step="0.001" min="-90" max="90">
+      </div>
+      <div class="q-field">
+        <label>Center Longitude</label>
+        <input type="number" id="q-lon" value="-61.98" step="0.001" min="-180" max="180">
+      </div>
+      <div class="q-field full">
+        <label>Search Radius (km)</label>
+        <input type="number" id="q-radius" value="400" min="1" max="20000">
+      </div>
+      <div class="q-divider"></div>
+      <div class="q-section-label">// Magnitude Filter</div>
+      <div class="q-field">
+        <label>Min Magnitude</label>
+        <input type="number" id="q-minmag" value="1.0" step="0.1" min="0" max="10">
+      </div>
+      <div class="q-field">
+        <label>Max Magnitude</label>
+        <input type="number" id="q-maxmag" value="9.5" step="0.1" min="0" max="10">
+      </div>
+    </div>
+    <button id="fetch-btn">▶ Fetch &amp; Animate</button>
+    <div id="fetch-error"></div>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay">
+  <div class="loader-ring"></div>
+  <div class="loader-text">Querying USGS Catalog</div>
+  <div id="loader-count"></div>
+</div>
+
+<!-- LEFT SETTINGS PANEL -->
+<div id="settings-panel" class="collapsed">
+  <div id="panel-inner">
+    <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.25em;color:var(--accent);text-transform:uppercase;margin-bottom:20px;">⚙ Settings</div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">Animation</div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Speed Multiplier</span><span id="lbl-speed">200×</span></div>
+        <input type="range" id="sl-speed" min="0.1" max="500" step="0.1" value="100">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Fade Out Time (s)</span><span id="lbl-fade">2s</span></div>
+        <input type="range" id="sl-fade" min="0.3" max="15" step="0.1" value="2">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">2</span></div>
+        <input type="range" id="sl-rings" min="0" max="5" step="1" value="2">
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">Circle Size</div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Base Radius (px)</span><span id="lbl-baseR">4</span></div>
+        <input type="range" id="sl-baseR" min="1" max="20" step="0.5" value="4">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Mag Scale Factor</span><span id="lbl-magScale">2.5</span></div>
+        <input type="range" id="sl-magScale" min="0.5" max="8" step="0.1" value="2.5">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Max Radius Cap (px)</span><span id="lbl-maxR">50</span></div>
+        <input type="range" id="sl-maxR" min="10" max="200" step="2" value="50">
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">Colors</div>
+      <div class="color-row">
+        <label>Low Mag (≤4)</label>
+        <input type="color" id="col-low" value="#00c8b4">
+      </div>
+      <div class="color-row">
+        <label>Mid Mag (4–6)</label>
+        <input type="color" id="col-mid" value="#ffd166">
+      </div>
+      <div class="color-row">
+        <label>High Mag (≥6)</label>
+        <input type="color" id="col-high" value="#ff6b35">
+      </div>
+      <div class="color-row">
+        <label>Background</label>
+        <input type="color" id="col-bg" value="#05070f">
+      </div>
+      <div class="color-row">
+        <label>Map Lines</label>
+        <input type="color" id="col-map" value="#1a2a3a">
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">Visual Options</div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="chk-glow" checked>
+        <label for="chk-glow">Glow Effect</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="chk-depth" checked>
+        <label for="chk-depth">Depth Shading</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="chk-trail" checked>
+        <label for="chk-trail">Afterglow Trail</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="chk-grid" checked>
+        <label for="chk-grid">Grid Overlay</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="chk-labels" checked>
+        <label for="chk-labels">Magnitude Labels</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="chk-map" checked>
+        <label for="chk-map">Map Background</label>
+      </div>
+      <div class="slider-row" style="margin-top:8px">
+        <div class="slider-label"><span>Trail Opacity</span><span id="lbl-trail">0.04</span></div>
+        <input type="range" id="sl-trail" min="0" max="0.3" step="0.005" value="0.04">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Map Line Width</span><span id="lbl-mapW">0.6</span></div>
+        <input type="range" id="sl-mapW" min="0.2" max="3" step="0.1" value="0.6">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Map Opacity</span><span id="lbl-mapOpacity">0.7</span></div>
+        <input type="range" id="sl-mapOpacity" min="0.05" max="1" step="0.05" value="0.7">
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-section-title">Controls</div>
+      <button class="panel-btn" id="btn-restart">↺ Restart Animation</button>
+      <button class="panel-btn" id="btn-reset-view">⊕ Reset View</button>
+      <button class="panel-btn" id="btn-new-query">✦ New Query</button>
+      <button class="panel-btn danger" id="btn-pause-panel">⏸ Pause / Resume</button>
+    </div>
+  </div>
+  <button id="panel-toggle">SETTINGS</button>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hud-title">Earthquakes</div>
+  <div id="hud-count">0</div>
+  <div id="hud-label">Total Events</div>
+  <div id="hud-time">Animation Time</div>
+  <div id="hud-current-time">—</div>
+  <div id="hud-zoom"></div>
+</div>
+
+<!-- ZOOM CONTROLS -->
+<div id="zoom-controls">
+  <button class="zoom-btn" id="btn-zoom-in" title="Zoom In">+</button>
+  <button class="zoom-btn" id="btn-zoom-out" title="Zoom Out">−</button>
+</div>
+
+<!-- CONTROLS BAR -->
+<div id="controls-bar" style="display:none">
+  <button class="ctrl-btn" id="btn-play">▶ Play</button>
+  <button class="ctrl-btn" id="btn-pause">⏸ Pause</button>
+  <button class="ctrl-btn" id="btn-rewind">↺ Restart</button>
+  <button class="ctrl-btn" id="btn-query">✦ New Query</button>
+</div>
+
+<!-- LEGEND -->
+<div id="legend" style="display:none">
+  <div class="legend-title">Magnitude</div>
+  <div class="legend-row">
+    <span class="legend-label">≥ 7</span>
+    <div class="legend-circle" style="width:22px;height:22px;background:#ff6b35;"></div>
+  </div>
+  <div class="legend-row">
+    <span class="legend-label">5 – 7</span>
+    <div class="legend-circle" style="width:14px;height:14px;background:#ffd166;"></div>
+  </div>
+  <div class="legend-row">
+    <span class="legend-label">3 – 5</span>
+    <div class="legend-circle" style="width:8px;height:8px;background:#00c8b4;"></div>
+  </div>
+</div>
+
+<!-- MAP STATUS -->
+<div id="map-status">Loading world map…</div>
+
+<!-- PROGRESS BAR -->
+<div id="progress-bar-wrap">
+  <div id="progress-bar"></div>
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+let earthquakes = [];
+let animActive = false;
+let animPaused = false;
+let animFrame = null;
+let lastRealTs = null;
+let simTime = 0;
+let activeCircles = [];
+let queryParams = {};
+
+// ── Pan / Zoom state ──
+// All drawing goes through a viewport transform: translate(panX, panY) scale(zoom)
+// The base projection is computed at zoom=1, pan=0,0
+let panX = 0, panY = 0;
+let zoom = 1;
+let isDragging = false;
+let dragStartX = 0, dragStartY = 0;
+let dragPanX = 0, dragPanY = 0;
+
+// ── Base projection (zoom=1, no pan) ──
+let baseScale = 1;
+let baseOffX = 0, baseOffY = 0;
+
+// ── World map geo data ──
+let worldGeoReady = false;
+let worldLandPaths = [];   // array of Path2D
+let worldBorderPaths = []; // country borders
+
+// ─── SETTINGS ───────────────────────────────────────────────────────────────
+const settings = {
+  speed: 200,
+  fadeTime: 2,
+  rings: 2,
+  baseR: 4,
+  magScale: 2.5,
+  maxR: 50,
+  glow: true,
+  depth: true,
+  trail: true,
+  trailAlpha: 0.04,
+  grid: true,
+  labels: true,
+  map: true,
+  mapColor: '#1a2a3a',
+  mapLineWidth: 0.6,
+  mapOpacity: 0.7,
+  colLow: '#00c8b4',
+  colMid: '#ffd166',
+  colHigh: '#ff6b35',
+  colBg: '#05070f',
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WORLD MAP — fetch Natural Earth 110m via CDN (TopoJSON)
+// ═══════════════════════════════════════════════════════════════════════════
+async function loadWorldMap() {
+  const statusEl = document.getElementById('map-status');
+  statusEl.style.display = 'block';
+  try {
+    // Natural Earth 110m countries via unpkg
+    const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    if (!resp.ok) throw new Error('fetch failed');
+    const world = await resp.json();
+
+    // Extract land and borders using topojson
+    const land = topojson.feature(world, world.objects.land);
+    const countries = topojson.feature(world, world.objects.countries);
+    const borders = topojson.mesh(world, world.objects.countries, (a, b) => a !== b);
+
+    // Store as GeoJSON features for d3 path rendering
+    window._worldLand = land;
+    window._worldCountries = countries;
+    window._worldBorders = borders;
+    worldGeoReady = true;
+    statusEl.style.display = 'none';
+
+    // If projection is already set up, pre-bake paths
+    if (baseScale > 1) rebuildMapPaths();
+  } catch(e) {
+    statusEl.textContent = 'Map unavailable';
+    console.warn('World map load failed:', e);
+  }
+}
+
+// Build canvas Path2D objects from GeoJSON using current projection
+// We use a custom d3 path that writes to a Path2D
+let d3Projection = null;
+
+function rebuildMapPaths() {
+  if (!worldGeoReady || !window._worldLand) return;
+
+  // Build a d3 equirectangular projection matching our baseScale/offsets
+  // Our project(lat,lon) = { x: lon*baseScale+baseOffX, y: baseOffY - lat*baseScale }
+  // d3 equirectangular: x = (lon+180)/360 * width, y = (90-lat)/180 * height
+  // We need a custom transform. Use d3.geoTransform to map directly.
+  d3Projection = d3.geoTransform({
+    point: function(lon, lat) {
+      this.stream.point(
+        lon * baseScale + baseOffX,
+        baseOffY - lat * baseScale
+      );
+    }
+  });
+
+  const pathGen = d3.geoPath(d3Projection);
+
+  // Build Path2D for land fill
+  const landPath = new Path2D(pathGen(window._worldLand));
+  const bordersPath = new Path2D(pathGen(window._worldBorders));
+
+  worldLandPaths = [landPath];
+  worldBorderPaths = [bordersPath];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+
+function lerpColor(a, b, t) {
+  const ca = hexToRgb(a), cb = hexToRgb(b);
+  return `rgb(${Math.round(ca.r+(cb.r-ca.r)*t)},${Math.round(ca.g+(cb.g-ca.g)*t)},${Math.round(ca.b+(cb.b-ca.b)*t)})`;
+}
+
+function magColor(mag) {
+  if (mag <= 4) return settings.colLow;
+  if (mag <= 6) return lerpColor(settings.colLow, settings.colMid, (mag-4)/2);
+  return lerpColor(settings.colMid, settings.colHigh, Math.min(1,(mag-6)/2));
+}
+
+function magRadius(mag) {
+  return Math.min(settings.maxR, settings.baseR + Math.pow(Math.max(0, mag), settings.magScale));
+}
+
+// ── Base projection (no pan/zoom) ──
+function setupProjection() {
+  const { lat, lon, radiusKm } = queryParams;
+  const dLat = (radiusKm / 111.32) * 1.05;
+  const dLon = dLat / Math.cos(lat * Math.PI / 180);
+
+  const minLat = lat - dLat, maxLat = lat + dLat;
+  const minLon = lon - dLon, maxLon = lon + dLon;
+
+  const scaleX = W / (maxLon - minLon);
+  const scaleY = H / (maxLat - minLat);
+  baseScale = Math.min(scaleX, scaleY) * 0.8;
+
+  const latRange = (maxLat - minLat) * baseScale;
+  const lonRange = (maxLon - minLon) * baseScale;
+
+  baseOffX = (W - lonRange) / 2 - minLon * baseScale;
+  baseOffY = (H - latRange) / 2 + maxLat * baseScale;
+
+  // Reset pan/zoom
+  panX = 0; panY = 0; zoom = 1;
+  updateHudZoom();
+
+  // Rebuild map paths with new projection
+  if (worldGeoReady) rebuildMapPaths();
+}
+
+// Project lat/lon → canvas pixel (base coords, before pan/zoom transform)
+function projectBase(lat, lon) {
+  return {
+    x: lon * baseScale + baseOffX,
+    y: baseOffY - lat * baseScale
+  };
+}
+
+// Project lat/lon → screen pixel (with current pan/zoom applied)
+function projectScreen(lat, lon) {
+  const b = projectBase(lat, lon);
+  return {
+    x: b.x * zoom + panX,
+    y: b.y * zoom + panY
+  };
+}
+
+// ── Canvas resize ──
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  if (earthquakes.length) {
+    setupProjection();
+  }
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PAN & ZOOM
+// ═══════════════════════════════════════════════════════════════════════════
+function updateHudZoom() {
+  document.getElementById('hud-zoom').textContent = `zoom ${zoom.toFixed(2)}×`;
+}
+
+function applyZoom(factor, cx, cy) {
+  // cx, cy = screen pivot point (zoom toward cursor or screen center)
+  const newZoom = Math.max(0.2, Math.min(50, zoom * factor));
+  const scale = newZoom / zoom;
+  panX = cx - scale * (cx - panX);
+  panY = cy - scale * (cy - panY);
+  zoom = newZoom;
+  updateHudZoom();
+}
+
+// Mouse drag
+canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  // Don't drag if over a UI element
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragPanX = panX;
+  dragPanY = panY;
+  canvas.classList.add('dragging');
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  panX = dragPanX + (e.clientX - dragStartX);
+  panY = dragPanY + (e.clientY - dragStartY);
+});
+
+window.addEventListener('mouseup', e => {
+  if (e.button !== 0) return;
+  isDragging = false;
+  canvas.classList.remove('dragging');
+});
+
+// Touch drag
+let touchStartX = 0, touchStartY = 0, touchPanX = 0, touchPanY = 0;
+let touchStartDist = 0, touchStartZoom = 1;
+
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchPanX = panX; touchPanY = panY;
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    touchStartDist = Math.hypot(dx, dy);
+    touchStartZoom = zoom;
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && isDragging) {
+    panX = touchPanX + (e.touches[0].clientX - touchStartX);
+    panY = touchPanY + (e.touches[0].clientY - touchStartY);
+  } else if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const newZoom = Math.max(0.2, Math.min(50, touchStartZoom * dist / touchStartDist));
+    const scale = newZoom / zoom;
+    panX = cx - scale * (cx - panX);
+    panY = cy - scale * (cy - panY);
+    zoom = newZoom;
+    updateHudZoom();
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => { isDragging = false; });
+
+// Mouse wheel zoom
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  applyZoom(factor, e.clientX, e.clientY);
+}, { passive: false });
+
+// Zoom buttons
+document.getElementById('btn-zoom-in').addEventListener('click', () =>
+  applyZoom(1.4, W/2, H/2));
+document.getElementById('btn-zoom-out').addEventListener('click', () =>
+  applyZoom(1/1.4, W/2, H/2));
+
+// Reset view
+function resetView() {
+  panX = 0; panY = 0; zoom = 1;
+  updateHudZoom();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FETCH EARTHQUAKES
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchEarthquakes(params) {
+  const url = new URL('https://earthquake.usgs.gov/fdsnws/event/1/query');
+  url.searchParams.set('format', 'geojson');
+  url.searchParams.set('starttime', params.start);
+  url.searchParams.set('endtime', params.end);
+  url.searchParams.set('latitude', params.lat);
+  url.searchParams.set('longitude', params.lon);
+  url.searchParams.set('maxradiuskm', params.radiusKm);
+  url.searchParams.set('minmagnitude', params.minMag);
+  url.searchParams.set('maxmagnitude', params.maxMag);
+  url.searchParams.set('orderby', 'time-asc');
+  url.searchParams.set('limit', 20000);
+
+  const resp = await fetch(url.toString());
+  if (!resp.ok) throw new Error(`USGS returned ${resp.status}`);
+  const data = await resp.json();
+  return data.features.map(f => ({
+    time: f.properties.time,
+    mag: f.properties.mag,
+    lat: f.geometry.coordinates[1],
+    lon: f.geometry.coordinates[0],
+    depth: f.geometry.coordinates[2],
+    place: f.properties.place,
+    id: f.id,
+  })).filter(e => e.mag != null).sort((a,b) => a.time - b.time);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════════════════════
+let eqIndex = 0;
+let totalSimDuration = 0;
+
+function startAnimation() {
+  eqIndex = 0;
+  simTime = 0;
+  lastRealTs = null;
+  activeCircles = [];
+  animActive = true;
+  animPaused = false;
+
+  totalSimDuration = earthquakes.length < 2 ? 1000
+    : earthquakes[earthquakes.length - 1].time - earthquakes[0].time;
+
+  document.getElementById('hud-count').textContent = earthquakes.length;
+  document.getElementById('controls-bar').style.display = 'flex';
+  document.getElementById('legend').style.display = 'block';
+  document.getElementById('zoom-controls').style.display = 'flex';
+  document.getElementById('btn-play').classList.remove('active');
+  document.getElementById('btn-pause').classList.add('active');
+
+  if (animFrame) cancelAnimationFrame(animFrame);
+  animFrame = requestAnimationFrame(animTick);
+}
+
+function animTick(ts) {
+  if (!animActive) return;
+
+  if (!animPaused) {
+    if (lastRealTs !== null) {
+      const realDelta = ts - lastRealTs;
+      simTime += realDelta * settings.speed * 1000.0;
+    }
+    lastRealTs = ts;
+
+    // Spawn new earthquakes
+    if (earthquakes.length > 0) {
+      const t0 = earthquakes[0].time;
+      while (eqIndex < earthquakes.length) {
+        const eq = earthquakes[eqIndex];
+        if ((eq.time - t0) <= simTime) {
+          const pos = projectScreen(eq.lat, eq.lon);
+          activeCircles.push({
+            lat: eq.lat, lon: eq.lon,
+            mag: eq.mag, depth: eq.depth, place: eq.place,
+            color: magColor(eq.mag),
+            radius: magRadius(eq.mag),
+            born: performance.now(),
+          });
+          eqIndex++;
+        } else break;
+      }
+    }
+
+    drawFrame();
+
+    const progress = totalSimDuration > 0 ? Math.min(1, simTime / totalSimDuration) : 1;
+    document.getElementById('progress-bar').style.width = (progress * 100) + '%';
+
+    if (earthquakes.length > 0) {
+      const curMs = earthquakes[0].time + simTime;
+      document.getElementById('hud-current-time').textContent =
+        new Date(curMs).toUTCString().slice(5, 22);
+    }
+
+    if (simTime >= totalSimDuration && eqIndex >= earthquakes.length && activeCircles.length === 0) {
+      document.getElementById('progress-bar').style.width = '100%';
+      animActive = false;
+      document.getElementById('btn-pause').classList.remove('active');
+      return;
+    }
+  } else {
+    lastRealTs = null;
+    drawFrame();
+  }
+
+  animFrame = requestAnimationFrame(animTick);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DRAW FRAME
+// ═══════════════════════════════════════════════════════════════════════════
+function drawFrame() {
+  const now = performance.now();
+
+  // ── Background ──
+  if (settings.trail) {
+    const bg = hexToRgb(settings.colBg);
+    ctx.fillStyle = `rgba(${bg.r},${bg.g},${bg.b},${settings.trailAlpha + 0.18})`;
+  } else {
+    ctx.fillStyle = settings.colBg;
+  }
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Apply viewport transform for map & earthquakes ──
+  ctx.save();
+  ctx.translate(panX, panY);
+  ctx.scale(zoom, zoom);
+
+  // ── Draw world map ──
+  if (settings.map && worldGeoReady && worldLandPaths.length > 0) {
+    ctx.save();
+    ctx.globalAlpha = settings.mapOpacity;
+
+    // Land fill (subtle, slightly lighter than background)
+    const bg = hexToRgb(settings.colBg);
+    const landR = Math.min(255, bg.r + 12);
+    const landG = Math.min(255, bg.g + 18);
+    const landB = Math.min(255, bg.b + 22);
+    ctx.fillStyle = `rgb(${landR},${landG},${landB})`;
+    for (const p of worldLandPaths) ctx.fill(p);
+
+    // Country borders
+    ctx.strokeStyle = settings.mapColor;
+    ctx.lineWidth = settings.mapLineWidth / zoom; // compensate for zoom so lines stay thin
+    ctx.globalAlpha = settings.mapOpacity;
+    for (const p of worldBorderPaths) ctx.stroke(p);
+
+    ctx.restore();
+  }
+
+  // ── Center crosshair ──
+  if (queryParams.lat !== undefined) {
+    const center = projectBase(queryParams.lat, queryParams.lon);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,200,180,0.25)';
+    ctx.lineWidth = 1 / zoom;
+    const cs = 12 / zoom;
+    ctx.beginPath();
+    ctx.moveTo(center.x - cs, center.y); ctx.lineTo(center.x + cs, center.y);
+    ctx.moveTo(center.x, center.y - cs); ctx.lineTo(center.x, center.y + cs);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Prune dead circles ──
+  const fadeSec = settings.fadeTime;
+  activeCircles = activeCircles.filter(c => (now - c.born) / 1000 < fadeSec);
+
+  // ── Draw circles (using base coordinates so they stay fixed to the map) ──
+  for (const c of activeCircles) {
+    const age = (now - c.born) / 1000;
+    const life = age / fadeSec;
+    const alpha = Math.max(0, 1 - life);
+
+    // Always recompute screen-space position from lat/lon (handles pan/zoom correctly)
+    const pos = projectBase(c.lat, c.lon);
+    const cx = pos.x, cy = pos.y;
+
+    // Scale radius inversely with zoom so circles maintain same visual size
+    const r = c.radius / zoom;
+
+    ctx.save();
+
+    if (settings.glow) {
+      ctx.shadowColor = c.color;
+      ctx.shadowBlur = r * 1.8;
+    }
+
+    let fillColor = c.color;
+    if (settings.depth && c.depth > 0) {
+      const df = Math.min(1, c.depth / 300);
+      const cc = hexToRgb(c.color);
+      fillColor = `rgb(${Math.round(cc.r*(1-df*0.5))},${Math.round(cc.g*(1-df*0.5))},${Math.min(255,Math.round(cc.b+df*60))})`;
+    }
+
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+
+    // Ripple rings
+    ctx.shadowBlur = 0;
+    const ringCount = Math.floor(settings.rings);
+    for (let i = 1; i <= ringCount; i++) {
+      const ringR = r + r * life * i * 2.5;
+      const ringAlpha = alpha * (1 - i / (ringCount + 1)) * 0.6;
+      if (ringAlpha <= 0) continue;
+      ctx.globalAlpha = ringAlpha;
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = c.color;
+      ctx.lineWidth = Math.max(0.3, (1.5 - i * 0.3) / zoom);
+      ctx.stroke();
+    }
+
+    // Magnitude label
+    if (settings.labels && c.mag >= 5 && alpha > 0.2) {
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.round((8 + r * 0.3))}px 'Share Tech Mono', monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(c.mag.toFixed(1), cx, cy);
+    }
+
+    ctx.restore();
+  }
+
+  ctx.restore(); // end viewport transform
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI BINDINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Panel toggle
+const panel = document.getElementById('settings-panel');
+document.getElementById('panel-toggle').addEventListener('click', () => {
+  panel.classList.toggle('collapsed');
+});
+
+// Sliders
+function bindSlider(id, lblId, key, fmt) {
+  const sl = document.getElementById(id);
+  const lbl = document.getElementById(lblId);
+  sl.addEventListener('input', () => {
+    settings[key] = parseFloat(sl.value);
+    lbl.textContent = fmt(settings[key]);
+  });
+  lbl.textContent = fmt(settings[key]);
+}
+
+bindSlider('sl-speed',    'lbl-speed',      'speed',      v => v.toFixed(1)+'×');
+bindSlider('sl-fade',     'lbl-fade',       'fadeTime',   v => v.toFixed(1)+'s');
+bindSlider('sl-rings',    'lbl-rings',      'rings',      v => v);
+bindSlider('sl-baseR',    'lbl-baseR',      'baseR',      v => v);
+bindSlider('sl-magScale', 'lbl-magScale',   'magScale',   v => v.toFixed(1));
+bindSlider('sl-maxR',     'lbl-maxR',       'maxR',       v => v);
+bindSlider('sl-trail',    'lbl-trail',      'trailAlpha', v => v.toFixed(3));
+bindSlider('sl-mapW',     'lbl-mapW',       'mapLineWidth', v => v.toFixed(1));
+bindSlider('sl-mapOpacity','lbl-mapOpacity','mapOpacity', v => v.toFixed(2));
+
+// Checkboxes
+function bindCheck(id, key, cb) {
+  const el = document.getElementById(id);
+  el.addEventListener('change', () => { settings[key] = el.checked; if(cb) cb(); });
+}
+bindCheck('chk-glow',  'glow');
+bindCheck('chk-depth', 'depth');
+bindCheck('chk-trail', 'trail');
+bindCheck('chk-labels','labels');
+bindCheck('chk-map',   'map');
+bindCheck('chk-grid',  'grid', () => {
+  document.getElementById('grid-overlay').style.display = settings.grid ? '' : 'none';
+});
+
+// Colors
+function bindColor(id, key, cb) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { settings[key] = el.value; if(cb) cb(); });
+}
+bindColor('col-low',  'colLow');
+bindColor('col-mid',  'colMid');
+bindColor('col-high', 'colHigh');
+bindColor('col-bg',   'colBg');
+bindColor('col-map',  'mapColor');
+
+// Playback buttons
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (!animActive && earthquakes.length) startAnimation();
+  else if (animPaused) {
+    animPaused = false;
+    lastRealTs = null;
+    document.getElementById('btn-play').classList.remove('active');
+    document.getElementById('btn-pause').classList.add('active');
+    if (!animFrame) animFrame = requestAnimationFrame(animTick);
+  }
+});
+
+document.getElementById('btn-pause').addEventListener('click', () => {
+  animPaused = !animPaused;
+  if (animPaused) {
+    document.getElementById('btn-pause').classList.remove('active');
+    document.getElementById('btn-play').classList.add('active');
+  } else {
+    lastRealTs = null;
+    document.getElementById('btn-pause').classList.add('active');
+    document.getElementById('btn-play').classList.remove('active');
+    if (!animFrame) animFrame = requestAnimationFrame(animTick);
+  }
+});
+
+document.getElementById('btn-rewind').addEventListener('click', () => {
+  if (earthquakes.length) startAnimation();
+});
+
+document.getElementById('btn-query').addEventListener('click', openQuery);
+document.getElementById('btn-restart').addEventListener('click', () => {
+  if (earthquakes.length) startAnimation();
+});
+document.getElementById('btn-new-query').addEventListener('click', openQuery);
+document.getElementById('btn-pause-panel').addEventListener('click', () => {
+  document.getElementById('btn-pause').click();
+});
+document.getElementById('btn-reset-view').addEventListener('click', resetView);
+
+// ── QUERY SUBMIT ──────────────────────────────────────────────────────────
+document.getElementById('fetch-btn').addEventListener('click', async () => {
+  const start  = document.getElementById('q-start').value;
+  const end    = document.getElementById('q-end').value;
+  const lat    = parseFloat(document.getElementById('q-lat').value);
+  const lon    = parseFloat(document.getElementById('q-lon').value);
+  const rKm    = parseFloat(document.getElementById('q-radius').value);
+  const minMag = parseFloat(document.getElementById('q-minmag').value);
+  const maxMag = parseFloat(document.getElementById('q-maxmag').value);
+  const errEl  = document.getElementById('fetch-error');
+
+  errEl.textContent = '';
+  if (!start || !end)          { errEl.textContent = 'Please enter start and end dates.'; return; }
+  if (isNaN(lat) || isNaN(lon)){ errEl.textContent = 'Please enter valid coordinates.'; return; }
+  if (isNaN(rKm) || rKm <= 0) { errEl.textContent = 'Please enter a valid radius.'; return; }
+  if (minMag >= maxMag)        { errEl.textContent = 'Min magnitude must be less than max.'; return; }
+
+  queryParams = { start, end, lat, lon, radiusKm: rKm, minMag, maxMag };
+
+  document.getElementById('query-modal').style.display = 'none';
+  const loading = document.getElementById('loading-overlay');
+  loading.style.display = 'flex';
+  document.getElementById('loader-count').textContent = '';
+
+  try {
+    earthquakes = await fetchEarthquakes(queryParams);
+    if (earthquakes.length === 0) {
+      loading.style.display = 'none';
+      document.getElementById('query-modal').style.display = 'flex';
+      errEl.textContent = 'No earthquakes found for these parameters.';
+      return;
+    }
+    document.getElementById('loader-count').textContent = `${earthquakes.length} events found`;
+    await new Promise(r => setTimeout(r, 600));
+
+    resize();
+    setupProjection();
+
+    loading.style.display = 'none';
+    startAnimation();
+
+  } catch(e) {
+    loading.style.display = 'none';
+    document.getElementById('query-modal').style.display = 'flex';
+    errEl.textContent = 'Error: ' + e.message;
+  }
+});
+
+function openQuery() {
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  animActive = false;
+  document.getElementById('query-modal').style.display = 'flex';
+  document.getElementById('controls-bar').style.display = 'none';
+}
+
+// ── TOOLTIP ON HOVER ──────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+
+canvas.addEventListener('mousemove', e => {
+  if (isDragging) { tooltip.style.display = 'none'; return; }
+  if (!animActive && activeCircles.length === 0) return;
+
+  const mx = e.clientX, my = e.clientY;
+  const now = performance.now();
+
+  // Convert mouse to base (pre-transform) coords
+  const baseMouseX = (mx - panX) / zoom;
+  const baseMouseY = (my - panY) / zoom;
+
+  let best = null, bestDist = Infinity;
+  for (const c of activeCircles) {
+    const age = (now - c.born) / 1000;
+    if (age >= settings.fadeTime) continue;
+    const pos = projectBase(c.lat, c.lon);
+    const d = Math.hypot(baseMouseX - pos.x, baseMouseY - pos.y);
+    const hitR = (c.radius / zoom) + 10 / zoom;
+    if (d < hitR && d < bestDist) { bestDist = d; best = c; }
+  }
+
+  if (best) {
+    tooltip.style.display = 'block';
+    tooltip.style.left = (mx + 16) + 'px';
+    tooltip.style.top  = (my - 10) + 'px';
+    tooltip.innerHTML = `<b>M${best.mag.toFixed(1)}</b><br>${best.place || 'Unknown'}<br>Depth: ${best.depth != null ? best.depth.toFixed(1)+' km' : '—'}`;
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+
+canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+ctx.fillStyle = settings.colBg;
+ctx.fillRect(0, 0, W, H);
+
+// Start loading world map in background
+loadWorldMap();
+</script>
+</body>
+</html>
