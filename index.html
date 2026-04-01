@@ -1,43 +1,339 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "vs4szh6lz8");
-</script>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Squimball Studios</title>
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    background: #000;
-    height: 100%;
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0e0e10;
+    --bar:       #16161a;
+    --border:    #2a2a30;
+    --accent:    #e8ff47;
+    --muted:     #555560;
+    --text:      #c8c8d4;
+    --hover-bg:  #22222a;
+    --panel-bg:  #13131a;
+    --bar-h:     32px;
   }
-  canvas {
-    display: block;
-    cursor: none;
+
+  html, body { height: 100%; background: var(--bg); font-family: 'JetBrains Mono', monospace; color: var(--text); overflow: hidden; }
+
+  /* ── TOP BAR ──────────────────────────────────────────── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: var(--bar-h);
+    background: var(--bar);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 2px;
+    padding: 0 6px;
+    z-index: 300;
+    user-select: none;
   }
-  #startButton {
+
+  .pg-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    border: 1px solid var(--border);
+    background: transparent; color: var(--muted);
+    font-family: inherit; font-size: 10px; font-weight: 600;
+    cursor: pointer; border-radius: 3px;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .pg-btn:hover  { background: var(--hover-bg); color: var(--text); border-color: var(--muted); }
+  .pg-btn.active { background: var(--accent); color: #0e0e10; border-color: var(--accent); }
+
+  .sep    { width: 1px; height: 16px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+  .spacer { flex: 1; }
+
+  .icon-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 22px;
+    border: 1px solid transparent; background: transparent;
+    color: var(--muted); cursor: pointer; border-radius: 3px;
+    text-decoration: none; font-size: 11px; font-family: inherit;
+    transition: color .12s, background .12s, border-color .12s;
+    position: relative;
+  }
+  .icon-btn:hover      { color: var(--text); background: var(--hover-bg); }
+  .icon-btn.panel-open { color: var(--accent); border-color: var(--border); background: var(--hover-bg); }
+  .icon-btn svg        { width: 13px; height: 13px; fill: currentColor; }
+
+  /* tooltip — hidden when panel is open */
+  [data-tip] { position: relative; }
+  [data-tip]::after {
+    content: attr(data-tip);
+    position: absolute; top: calc(100% + 7px); left: 50%;
+    transform: translateX(10%);
+    background: #1e1e26; color: var(--text); font-size: 9px;
+    letter-spacing: .05em; padding: 3px 7px; border-radius: 3px;
+    border: 1px solid var(--border); white-space: nowrap;
+    pointer-events: none; opacity: 0;
+    transition: opacity .15s .25s; z-index: 400;
+  }
+  [data-tip]:not(.panel-open):hover::after { opacity: 1; }
+
+  [data-tip-rtl] { position: relative; }
+  [data-tip-rtl]::after {
+    content: attr(data-tip-rtl);
+    position: absolute; top: calc(100% + 7px); left: 50%;
+    transform: translateX(-120%);
+    background: #1e1e26; color: var(--text); font-size: 9px;
+    letter-spacing: .05em; padding: 3px 7px; border-radius: 3px;
+    border: 1px solid var(--border); white-space: nowrap;
+    pointer-events: none; opacity: 0;
+    transition: opacity .15s .25s; z-index: 400;
+  }
+  [data-tip-rtl]:not(.panel-open):hover::after { opacity: 1; }
+
+  /* ── SLIDE-DOWN PANELS ────────────────────────────────── */
+  .panel {
     position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.85);
-    color: white;
-    font-family: sans-serif;
-    font-size: 24px;
-    cursor: pointer;
-    z-index: 10;
+    top: var(--bar-h);
+    right: 10px;
+    width: 320px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    border-radius: 0 0 6px 6px;
+    z-index: 200;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height .3s cubic-bezier(.4,0,.2,1), opacity .22s ease;
+  }
+  .panel.open { max-height: 520px; opacity: 1; pointer-events: all; }
+
+  .panel-inner { padding: 16px 18px 18px; }
+
+  .panel h2 {
+    font-size: 10px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent);
+    margin-bottom: 10px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel p { font-size: 10px; line-height: 1.75; color: var(--text); margin-bottom: 8px; }
+  .panel a { color: var(--accent); text-decoration: none; }
+  .panel a:hover { text-decoration: underline; }
+
+  .addr-row {
+    display: flex; align-items: center; gap: 8px;
+    background: #0a0a0e; border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 10px; margin-top: 8px;
+  }
+  .addr-row code {
+    flex: 1; font-size: 9px; color: var(--muted);
+    word-break: break-all; line-height: 1.5; font-family: inherit;
+  }
+  .copy-btn {
+    flex-shrink: 0; background: var(--hover-bg); border: 1px solid var(--border);
+    color: var(--text); font-family: inherit; font-size: 9px; letter-spacing: .05em;
+    padding: 4px 9px; border-radius: 3px; cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .copy-btn:hover  { background: var(--accent); color: #0e0e10; border-color: var(--accent); }
+  .copy-btn.copied { background: #1a3a1a; color: #7ef07e; border-color: #3a6a3a; }
+
+  .kofi-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 12px; padding: 8px 16px;
+    background: #461919; border: none; border-radius: 4px;
+    color: #fff; font-family: inherit; font-size: 10px; font-weight: 700;
+    cursor: pointer; text-decoration: none;
+    transition: opacity .15s;
+  }
+  .kofi-btn:hover { opacity: .85; }
+
+  .gh-stats { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  .gh-pill {
+    background: var(--hover-bg); border: 1px solid var(--border);
+    border-radius: 20px; font-size: 9px; padding: 3px 10px;
+    color: var(--text); letter-spacing: .04em;
+  }
+  .gh-pill span { color: var(--accent); font-weight: 700; }
+
+  .panel-note {
+    margin-top: 10px; font-size: 9px; color: var(--muted);
+    line-height: 1.6; letter-spacing: .03em;
+  }
+
+  /* invisible scrim to catch outside clicks */
+  #scrim { display: none; position: fixed; inset: 0; z-index: 150; }
+  #scrim.active { display: block; }
+
+  /* ── CONTENT PANE ─────────────────────────────────────── */
+  #content { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
+
+  .page-frame { width: 100%; height: 100%; border: none; display: none; background: var(--bg); }
+  .page-frame.active { display: block; }
+
+  #placeholder {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
   }
 </style>
 </head>
 <body>
-	<iframe style="border:0px; width:100%; height: 100%;" src="gravity1.html" />
+
+<!-- ══════════════════════════════════════════════════════
+     TOP BAR
+════════════════════════════════════════════════════════ -->
+<nav id="topbar">
+
+  <button class="pg-btn active" data-tip="Garvity Simulator 1"       onclick="show(0)">1</button>
+  <button class="pg-btn"        data-tip="Earthquake Animator"       onclick="show(1)">2</button>
+
+  <div class="spacer"></div>
+
+  <!-- GitHub -->
+  <button class="icon-btn" data-tip-rtl="GitHub" onclick="togglePanel('gh-panel', this)">
+    <svg viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+  </button>
+
+  <!-- Ko-fi -->
+  <button class="icon-btn" data-tip-rtl="Support" onclick="togglePanel('kofi-panel', this)">
+    <svg viewBox="0 0 24 24"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.238-.3-.404-.494-.44-.87-.065-.749.19-1.34.692-1.728.73-.563 1.669-.207 2.148.27.283.282.508.637.7.888.175-.235.39-.582.67-.871.509-.505 1.415-.843 2.125-.24.739.626.871 1.668.571 2.596zm7.391 2.16c-.924.824-5.503 1.754-5.503-2.267 0-3.213 3.12-3.981 5.503-3.533.858.165 1.578.662 1.755 1.578.343 1.753-.524 3.348-1.755 4.222z"/></svg>
+  </button>
+
+  <div class="sep"></div>
+
+  <!-- Bitcoin -->
+  <button class="icon-btn" data-tip-rtl="Bitcoin" onclick="togglePanel('btc-panel', this)">
+    <svg viewBox="0 0 24 24"><path d="M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.548v-.002zm-6.35-4.613c.24-1.59-.974-2.45-2.64-3.03l.54-2.153-1.315-.328-.525 2.107c-.345-.087-.705-.167-1.064-.25l.526-2.127-1.32-.33-.54 2.165c-.285-.065-.567-.13-.84-.2l-1.815-.45-.35 1.407s.975.225.955.236c.535.136.63.486.615.766l-1.477 5.92c-.075.166-.24.406-.614.314.015.02-.96-.24-.96-.24l-.66 1.51 1.71.426.93.242-.54 2.19 1.32.327.54-2.17c.36.1.705.19 1.05.273l-.51 2.154 1.32.33.545-2.19c2.24.427 3.93.257 4.64-1.774.57-1.637-.03-2.58-1.217-3.196.854-.193 1.5-.76 1.68-1.93h.01zm-3.01 4.22c-.404 1.64-3.157.75-4.05.53l.72-2.9c.896.23 3.757.67 3.33 2.37zm.41-4.24c-.37 1.49-2.662.735-3.405.55l.654-2.64c.744.18 3.137.524 2.75 2.084v.006z"/></svg>
+  </button>
+
+  <!-- Ethereum -->
+  <button class="icon-btn" data-tip-rtl="Ethereum" onclick="togglePanel('eth-panel', this)">
+    <svg viewBox="0 0 24 24"><path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z"/></svg>
+  </button>
+
+</nav>
+
+<!-- click-outside scrim -->
+<div id="scrim" onclick="closeAllPanels()"></div>
+
+<!-- ══════════════════════════════════════════════════════
+     DROP-DOWN PANELS  (overlay the content, never push it)
+════════════════════════════════════════════════════════ -->
+
+<!-- GitHub -->
+<div class="panel" id="gh-panel">
+  <div class="panel-inner">
+    <h2>GitHub</h2>
+    <p>Open-source projects, experiments, and tools.</p>
+    <!-- <div class="gh-stats">
+      <div class="gh-pill"><span>42</span>&nbsp;repos</div>
+      <div class="gh-pill"><span>138</span>&nbsp;followers</div>
+      <div class="gh-pill"><span>3.2k</span>&nbsp;commits</div>
+    </div> -->
+    <p>Currently active as <a href="https://github.com/c0deConstructor" target="_blank" rel="noopener">@c0deConstructor</a></p>
+    <p><a href="https://github.com/c0deConstructor/squimballstudios.com" target="_blank" rel="noopener">→ View profile on GitHub</a></p>
+  </div>
+</div>
+
+<!-- Ko-fi -->
+<div class="panel" id="kofi-panel">
+  <div class="panel-inner">
+    <h2>Support this work</h2>
+    <p>If anything here has been useful, consider buying me a coffee. It keeps me interested in making even more cool things for people.</p>
+    <p>No subscription, no account required — just a one-time tip.</p>
+    <a class="kofi-btn" href="https://ko-fi.com/squimball" target="_blank" rel="noopener">☕ Support me on Ko-fi</a>
+  </div>
+</div>
+
+<!-- Bitcoin -->
+<div class="panel" id="btc-panel">
+  <div class="panel-inner">
+    <h2>Bitcoin</h2>
+    <p>Send BTC donations directly to this address.  Help me continue to grow and create cool things for all to enjoy!</p>
+    <div class="addr-row">
+      <code id="btc-addr">1MKmJGv8M4suSFSyJiVrQjFhatP6gfdr1F</code>
+      <button class="copy-btn" onclick="copyAddr('btc-addr', this)">COPY</button>
+    </div>
+    <p class="panel-note">Network: Bitcoin mainnet · No memo required</p>
+  </div>
+</div>
+
+<!-- Ethereum -->
+<div class="panel" id="eth-panel">
+  <div class="panel-inner">
+    <h2>Ethereum</h2>
+    <p>Send ETH or any ERC-20 token to this address.  Help me continue to grow and create cool things for all to enjoy!</p>
+    <div class="addr-row">
+      <code id="eth-addr">0xd32b4c53329a45ed2d24E21C830779877F5E6eD1</code>
+      <button class="copy-btn" onclick="copyAddr('eth-addr', this)">COPY</button>
+    </div>
+    <p class="panel-note">Network: Ethereum mainnet · ERC-20 compatible</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     CONTENT PANE
+════════════════════════════════════════════════════════ -->
+<main id="content">
+  <div id="placeholder">select a page ↑</div>
+  <iframe class="page-frame active" id="frame-0" src="pages/gravity_simulator1.html"      title="Gravity Simulator 1"></iframe>
+  <iframe class="page-frame"        id="frame-1" src="pages/earthquake_animator.html"     title="Earthquake Animator"></iframe>
+</main>
+
+<script>
+  /* ── page switching ──────────────────────────────────── */
+  const pgBtns = document.querySelectorAll('.pg-btn');
+  const frames = document.querySelectorAll('.page-frame');
+  let current  = 0;
+
+  function show(idx) {
+    closeAllPanels();
+    pgBtns[current].classList.remove('active');
+    frames[current].classList.remove('active');
+    current = idx;
+    pgBtns[current].classList.add('active');
+    frames[current].classList.add('active');
+    document.getElementById('placeholder').style.display = 'none';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeAllPanels(); return; }
+    const n = parseInt(e.key);
+    if (!isNaN(n) && n >= 1 && n <= pgBtns.length) show(n - 1);
+  });
+
+  /* ── panel toggle ────────────────────────────────────── */
+  function togglePanel(panelId, btn) {
+    const panel  = document.getElementById(panelId);
+    const isOpen = panel.classList.contains('open');
+    closeAllPanels();
+    if (!isOpen) {
+      panel.classList.add('open');
+      btn.classList.add('panel-open');
+      document.getElementById('scrim').classList.add('active');
+    }
+  }
+
+  function closeAllPanels() {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('open'));
+    document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('panel-open'));
+    document.getElementById('scrim').classList.remove('active');
+  }
+
+  /* ── copy address ────────────────────────────────────── */
+  async function copyAddr(elemId, btn) {
+    const text = document.getElementById(elemId).textContent.trim();
+    try { await navigator.clipboard.writeText(text); }
+    catch { prompt('Copy this address:', text); return; }
+    btn.textContent = 'COPIED';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 2000);
+  }
+
+  show(0);
+</script>
 </body>
 </html>
