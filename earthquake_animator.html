@@ -525,6 +525,195 @@
     display: none;
   }
 
+  /* ── MINI MAP PICKER ── */
+  #map-picker-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5,7,15,0.82);
+    backdrop-filter: blur(4px);
+  }
+
+  #map-picker-modal.open { display: flex; }
+
+  #map-picker-box {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    box-shadow: 0 0 80px rgba(0,200,180,0.15);
+    display: flex;
+    flex-direction: column;
+    width: min(760px, 96vw);
+    max-height: 90vh;
+    position: relative;
+  }
+
+  #map-picker-box::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 40px;
+    width: 60px; height: 2px;
+    background: var(--accent2);
+  }
+
+  #map-picker-header {
+    padding: 16px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  #map-picker-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  #map-picker-hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+  }
+
+  #map-picker-close {
+    background: transparent;
+    border: 1px solid rgba(0,200,180,0.25);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: color 0.2s, border-color 0.2s;
+  }
+
+  #map-picker-close:hover { color: var(--accent2); border-color: var(--accent2); }
+
+  #map-picker-canvas-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    height: 420px;
+    overflow: hidden;
+  }
+
+  #map-picker-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+  }
+
+  #map-picker-canvas.map-panning { cursor: grabbing; }
+
+  #map-picker-footer {
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+
+  #map-picker-coords {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    flex: 1;
+  }
+
+  #map-picker-coords span { color: var(--accent3); }
+
+  #map-picker-zoom-btns {
+    display: flex;
+    gap: 4px;
+  }
+
+  .mp-zoom-btn {
+    width: 26px; height: 26px;
+    background: transparent;
+    border: 1px solid rgba(0,200,180,0.3);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    line-height: 1;
+  }
+
+  .mp-zoom-btn:hover { background: rgba(0,200,180,0.1); }
+
+  #map-picker-confirm {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 8px 20px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: color 0.2s;
+  }
+
+  #map-picker-confirm::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.2s ease;
+    z-index: -1;
+  }
+
+  #map-picker-confirm:hover { color: var(--bg); }
+  #map-picker-confirm:hover::before { transform: scaleX(1); }
+  #map-picker-confirm:disabled { opacity: 0.35; pointer-events: none; }
+
+  /* the map-pick button that sits in the form */
+  #btn-map-pick {
+    grid-column: 1 / -1;
+    background: transparent;
+    border: 1px solid rgba(0,200,180,0.3);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 9px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    margin-top: 2px;
+  }
+
+  #btn-map-pick:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,200,180,0.04);
+  }
+
+  #btn-map-pick svg { flex-shrink: 0; }
+
   * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 </style>
 </head>
@@ -550,6 +739,15 @@
       </div>
       <div class="q-divider"></div>
       <div class="q-section-label">// Search Center</div>
+      <button id="btn-map-pick">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.2"/>
+          <circle cx="7" cy="7" r="1.5" fill="currentColor"/>
+        </svg>
+        Pick on Map
+      </button>
       <div class="q-field">
         <label>Center Latitude</label>
         <input type="number" id="q-lat" value="20.799" step="0.001" min="-90" max="90">
@@ -575,6 +773,30 @@
     </div>
     <button id="fetch-btn">▶ Fetch &amp; Animate</button>
     <div id="fetch-error"></div>
+  </div>
+</div>
+
+<!-- MINI MAP PICKER MODAL -->
+<div id="map-picker-modal">
+  <div id="map-picker-box">
+    <div id="map-picker-header">
+      <div>
+        <div id="map-picker-title">⊕ Select Search Area</div>
+        <div id="map-picker-hint">Pan/zoom freely · Shift+drag to draw search circle</div>
+      </div>
+      <button id="map-picker-close">✕ Cancel</button>
+    </div>
+    <div id="map-picker-canvas-wrap">
+      <canvas id="map-picker-canvas"></canvas>
+    </div>
+    <div id="map-picker-footer">
+      <div id="map-picker-coords">No selection yet</div>
+      <div id="map-picker-zoom-btns">
+        <button class="mp-zoom-btn" id="mp-zoom-in">+</button>
+        <button class="mp-zoom-btn" id="mp-zoom-out">−</button>
+      </div>
+      <button id="map-picker-confirm" disabled>✔ Use Selection</button>
+    </div>
   </div>
 </div>
 
@@ -831,6 +1053,11 @@ async function loadWorldMap() {
     window._worldBorders = borders;
     worldGeoReady = true;
     statusEl.style.display = 'none';
+
+    // If the mini-map picker is open, rebuild its paths now
+    if (document.getElementById('map-picker-modal').classList.contains('open')) {
+      // mpRebuildPaths and mpDraw are in the picker IIFE scope; use the poll mechanism
+    }
 
     // If projection is already set up, pre-bake paths
     if (baseScale > 1) rebuildMapPaths();
@@ -1476,6 +1703,392 @@ canvas.addEventListener('mousemove', e => {
 });
 
 canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MINI MAP PICKER
+// ═══════════════════════════════════════════════════════════════════════════
+(function() {
+  const modal   = document.getElementById('map-picker-modal');
+  const mpCanvas = document.getElementById('map-picker-canvas');
+  const mpCtx    = mpCanvas.getContext('2d');
+  const coordsEl = document.getElementById('map-picker-coords');
+  const confirmBtn = document.getElementById('map-picker-confirm');
+
+  // Mini-map viewport state
+  let mpW = 0, mpH = 0;
+  let mpPanX = 0, mpPanY = 0;
+  let mpZoom = 1;
+
+  // Selection state
+  let selActive = false;    // currently drawing
+  let selLat = null, selLon = null, selRadiusKm = null;
+  let selStartX = 0, selStartY = 0;  // canvas pixel coords at drag start
+  let selCurX = 0, selCurY = 0;      // current mouse position
+
+  // Pan state (non-shift drag)
+  let mpDragging = false;
+  let mpDragStartX = 0, mpDragStartY = 0;
+  let mpDragPanX = 0, mpDragPanY = 0;
+
+  // Map paths for mini-map (separate from main canvas paths)
+  let mpLandPath = null, mpBordersPath = null;
+  let mpBaseScale = 1, mpBaseOffX = 0, mpBaseOffY = 0;
+
+  // ── Setup base equirectangular projection for the mini-map ──
+  // Fits the whole world (-180..180, -90..90) into the canvas
+  function mpSetupProjection() {
+    // Fit world into canvas with a little margin
+    const aspect = mpW / mpH;
+    const worldAspect = 360 / 180;
+    let sc;
+    if (aspect > worldAspect) {
+      sc = (mpH * 0.9) / 180;
+    } else {
+      sc = (mpW * 0.9) / 360;
+    }
+    mpBaseScale = sc;
+    // center: lon=0 -> mpW/2, lat=0 -> mpH/2
+    mpBaseOffX = mpW / 2;
+    mpBaseOffY = mpH / 2;
+  }
+
+  function mpProject(lat, lon) {
+    // base coords
+    const bx = lon * mpBaseScale + mpBaseOffX;
+    const by = mpBaseOffY - lat * mpBaseScale;
+    // apply zoom/pan
+    return { x: bx * mpZoom + mpPanX, y: by * mpZoom + mpPanY };
+  }
+
+  function mpUnproject(sx, sy) {
+    // screen → base
+    const bx = (sx - mpPanX) / mpZoom;
+    const by = (sy - mpPanY) / mpZoom;
+    const lon = (bx - mpBaseOffX) / mpBaseScale;
+    const lat = (mpBaseOffY - by) / mpBaseScale;
+    return { lat, lon };
+  }
+
+  function mpApplyZoom(factor, cx, cy) {
+    const newZoom = Math.max(0.4, Math.min(80, mpZoom * factor));
+    const s = newZoom / mpZoom;
+    mpPanX = cx - s * (cx - mpPanX);
+    mpPanY = cy - s * (cy - mpPanY);
+    mpZoom = newZoom;
+    mpRebuildPaths();
+    mpDraw();
+  }
+
+  function mpRebuildPaths() {
+    if (!worldGeoReady || !window._worldLand) return;
+
+    const proj = d3.geoTransform({
+      point: function(lon, lat) {
+        const bx = lon * mpBaseScale + mpBaseOffX;
+        const by = mpBaseOffY - lat * mpBaseScale;
+        this.stream.point(
+          bx * mpZoom + mpPanX,
+          by * mpZoom + mpPanY
+        );
+      }
+    });
+
+    const pathGen = d3.geoPath(proj);
+    mpLandPath    = new Path2D(pathGen(window._worldLand));
+    mpBordersPath = new Path2D(pathGen(window._worldBorders));
+  }
+
+  // ── Draw the mini-map ──
+  function mpDraw() {
+    mpCtx.clearRect(0, 0, mpW, mpH);
+
+    // Background
+    mpCtx.fillStyle = '#05070f';
+    mpCtx.fillRect(0, 0, mpW, mpH);
+
+    // Grid lines (lat/lon graticule-style)
+    mpCtx.save();
+    mpCtx.strokeStyle = 'rgba(0,200,180,0.06)';
+    mpCtx.lineWidth = 0.5;
+    for (let lon = -180; lon <= 180; lon += 30) {
+      const a = mpProject(-90, lon), b = mpProject(90, lon);
+      mpCtx.beginPath(); mpCtx.moveTo(a.x, a.y); mpCtx.lineTo(b.x, b.y); mpCtx.stroke();
+    }
+    for (let lat = -90; lat <= 90; lat += 30) {
+      const a = mpProject(lat, -180), b = mpProject(lat, 180);
+      mpCtx.beginPath(); mpCtx.moveTo(a.x, a.y); mpCtx.lineTo(b.x, b.y); mpCtx.stroke();
+    }
+    mpCtx.restore();
+
+    // Land + borders
+    if (mpLandPath) {
+      const bg = hexToRgb('#05070f');
+      mpCtx.save();
+      mpCtx.globalAlpha = 0.85;
+      mpCtx.fillStyle = `rgb(${bg.r+14},${bg.g+20},${bg.b+26})`;
+      mpCtx.fill(mpLandPath);
+      mpCtx.strokeStyle = '#1e3344';
+      mpCtx.lineWidth = 0.6;
+      mpCtx.stroke(mpBordersPath);
+      mpCtx.restore();
+    } else {
+      mpCtx.save();
+      mpCtx.fillStyle = 'rgba(0,200,180,0.06)';
+      mpCtx.fillRect(0, 0, mpW, mpH);
+      mpCtx.restore();
+    }
+
+    // Draw selection circle
+    if (selLat !== null && selLon !== null && selRadiusKm !== null && selRadiusKm > 0) {
+      const center = mpProject(selLat, selLon);
+      // Radius in pixels: radiusKm / 111.32 degrees * mpBaseScale * mpZoom
+      const rPx = (selRadiusKm / 111.32) * mpBaseScale * mpZoom;
+
+      // Filled translucent circle
+      mpCtx.save();
+      mpCtx.beginPath();
+      mpCtx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
+      mpCtx.fillStyle = 'rgba(0,200,180,0.12)';
+      mpCtx.fill();
+      // Dashed border
+      mpCtx.setLineDash([4, 3]);
+      mpCtx.strokeStyle = '#00c8b4';
+      mpCtx.lineWidth = 1.5;
+      mpCtx.stroke();
+      mpCtx.setLineDash([]);
+      // Center crosshair
+      mpCtx.strokeStyle = 'rgba(0,200,180,0.8)';
+      mpCtx.lineWidth = 1;
+      const cs = 6;
+      mpCtx.beginPath();
+      mpCtx.moveTo(center.x - cs, center.y); mpCtx.lineTo(center.x + cs, center.y);
+      mpCtx.moveTo(center.x, center.y - cs); mpCtx.lineTo(center.x, center.y + cs);
+      mpCtx.stroke();
+      mpCtx.restore();
+    }
+
+    // Live drag preview
+    if (selActive) {
+      const center = mpProject(selLat, selLon);
+      const rPx = Math.hypot(selCurX - center.x, selCurY - center.y);
+
+      mpCtx.save();
+      mpCtx.beginPath();
+      mpCtx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
+      mpCtx.fillStyle = 'rgba(255,209,102,0.10)';
+      mpCtx.fill();
+      mpCtx.setLineDash([5, 3]);
+      mpCtx.strokeStyle = '#ffd166';
+      mpCtx.lineWidth = 1.5;
+      mpCtx.stroke();
+      mpCtx.setLineDash([]);
+      mpCtx.restore();
+    }
+
+    // Hint overlay when map not yet loaded
+    if (!worldGeoReady) {
+      mpCtx.save();
+      mpCtx.fillStyle = 'rgba(0,200,180,0.5)';
+      mpCtx.font = `11px 'Share Tech Mono', monospace`;
+      mpCtx.textAlign = 'center';
+      mpCtx.textBaseline = 'middle';
+      mpCtx.fillText('Loading map data…', mpW / 2, mpH / 2);
+      mpCtx.restore();
+    }
+  }
+
+  // ── Resize mini-map canvas to match its CSS size ──
+  function mpResize() {
+    const rect = mpCanvas.parentElement.getBoundingClientRect();
+    mpW = mpCanvas.width  = Math.round(rect.width);
+    mpH = mpCanvas.height = Math.round(Math.max(340, rect.height));
+    mpCanvas.parentElement.style.height = mpH + 'px';
+    mpSetupProjection();
+    mpRebuildPaths();
+    mpDraw();
+  }
+
+  // ── Open the picker ──
+  window.openMapPicker = function() {
+    modal.classList.add('open');
+    // defer resize so the modal has rendered
+    requestAnimationFrame(() => {
+      mpResize();
+      // If worldGeoReady already, rebuild now
+      if (worldGeoReady) { mpRebuildPaths(); mpDraw(); }
+      // Restore previously entered values as a preview circle if valid
+      const lat = parseFloat(document.getElementById('q-lat').value);
+      const lon = parseFloat(document.getElementById('q-lon').value);
+      const rKm = parseFloat(document.getElementById('q-radius').value);
+      if (!isNaN(lat) && !isNaN(lon) && !isNaN(rKm) && rKm > 0) {
+        selLat = lat; selLon = lon; selRadiusKm = rKm;
+        confirmBtn.disabled = false;
+        updateCoordsDisplay();
+        // Pan to show the selection
+        mpCenterOn(lat, lon);
+      }
+      mpDraw();
+    });
+  };
+
+  function mpCenterOn(lat, lon) {
+    const bx = lon * mpBaseScale + mpBaseOffX;
+    const by = mpBaseOffY - lat * mpBaseScale;
+    mpPanX = mpW / 2 - bx * mpZoom;
+    mpPanY = mpH / 2 - by * mpZoom;
+    mpRebuildPaths();
+  }
+
+  function closePicker() {
+    modal.classList.remove('open');
+    selActive = false;
+  }
+
+  document.getElementById('map-picker-close').addEventListener('click', closePicker);
+
+  // Confirm selection
+  confirmBtn.addEventListener('click', () => {
+    if (selLat === null || selRadiusKm === null) return;
+    document.getElementById('q-lat').value    = selLat.toFixed(4);
+    document.getElementById('q-lon').value    = selLon.toFixed(4);
+    document.getElementById('q-radius').value = Math.round(selRadiusKm);
+    closePicker();
+  });
+
+  document.getElementById('btn-map-pick').addEventListener('click', () => {
+    window.openMapPicker();
+  });
+
+  // Zoom buttons
+  document.getElementById('mp-zoom-in').addEventListener('click', () =>
+    mpApplyZoom(1.5, mpW / 2, mpH / 2));
+  document.getElementById('mp-zoom-out').addEventListener('click', () =>
+    mpApplyZoom(1 / 1.5, mpW / 2, mpH / 2));
+
+  // ── Mouse wheel zoom ──
+  mpCanvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = mpCanvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    mpApplyZoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, cx, cy);
+  }, { passive: false });
+
+  // ── Mouse events ──
+  mpCanvas.addEventListener('mousedown', e => {
+    const rect = mpCanvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (e.shiftKey) {
+      // Start selection
+      e.preventDefault();
+      const geo = mpUnproject(mx, my);
+      selLat = Math.max(-90, Math.min(90, geo.lat));
+      selLon = geo.lon;
+      selCurX = mx; selCurY = my;
+      selActive = true;
+      selRadiusKm = 0;
+      confirmBtn.disabled = true;
+    } else {
+      // Start pan
+      mpDragging = true;
+      mpDragStartX = mx; mpDragStartY = my;
+      mpDragPanX = mpPanX; mpDragPanY = mpPanY;
+      mpCanvas.classList.add('map-panning');
+      e.preventDefault();
+    }
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!modal.classList.contains('open')) return;
+    const rect = mpCanvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (selActive) {
+      selCurX = mx; selCurY = my;
+      // Compute live radius in km
+      const center = mpProject(selLat, selLon);
+      const rPx = Math.hypot(mx - center.x, my - center.y);
+      const rDeg = rPx / (mpBaseScale * mpZoom);
+      selRadiusKm = Math.max(1, rDeg * 111.32);
+      updateCoordsDisplay();
+      mpDraw();
+    } else if (mpDragging) {
+      mpPanX = mpDragPanX + (mx - mpDragStartX);
+      mpPanY = mpDragPanY + (my - mpDragStartY);
+      mpRebuildPaths();
+      mpDraw();
+    } else {
+      // Just show hover coords
+      const geo = mpUnproject(mx, my);
+      const latStr = geo.lat.toFixed(3);
+      const lonStr = geo.lon.toFixed(3);
+      if (selLat !== null && selRadiusKm > 0) {
+        updateCoordsDisplay();
+      } else {
+        coordsEl.innerHTML = `Cursor: <span>${latStr}°, ${lonStr}°</span>`;
+      }
+    }
+  });
+
+  window.addEventListener('mouseup', e => {
+    if (!modal.classList.contains('open')) return;
+    if (selActive) {
+      selActive = false;
+      if (selRadiusKm > 1) {
+        confirmBtn.disabled = false;
+        updateCoordsDisplay();
+      } else {
+        selLat = null; selLon = null; selRadiusKm = null;
+        confirmBtn.disabled = true;
+        coordsEl.innerHTML = 'No selection yet';
+      }
+      mpDraw();
+    }
+    if (mpDragging) {
+      mpDragging = false;
+      mpCanvas.classList.remove('map-panning');
+    }
+  });
+
+  // Prevent the canvas from intercepting keyboard shortcuts while picker is open
+  mpCanvas.addEventListener('keydown', e => { e.stopPropagation(); });
+
+  function updateCoordsDisplay() {
+    if (selLat === null) { coordsEl.innerHTML = 'No selection yet'; return; }
+    const latD = Math.abs(selLat).toFixed(3) + (selLat >= 0 ? '°N' : '°S');
+    const lonD = Math.abs(selLon).toFixed(3) + (selLon >= 0 ? '°E' : '°W');
+    const rStr = selRadiusKm ? Math.round(selRadiusKm) + ' km' : '—';
+    coordsEl.innerHTML = `<span>${latD}, ${lonD}</span>  radius: <span>${rStr}</span>`;
+  }
+
+  // ── When world map loads, rebuild mini-map too ──
+  const origLoad = loadWorldMap;
+  // We patch via a post-load hook — after worldGeoReady is set we call mpRebuildPaths
+  // This is handled by polling below since loadWorldMap is async
+  const mpReadyPoll = setInterval(() => {
+    if (worldGeoReady && modal.classList.contains('open')) {
+      mpRebuildPaths();
+      mpDraw();
+      clearInterval(mpReadyPoll);
+    } else if (worldGeoReady) {
+      clearInterval(mpReadyPoll);
+    }
+  }, 200);
+
+  // Close on backdrop click
+  modal.addEventListener('click', e => {
+    if (e.target === modal) closePicker();
+  });
+
+  // Escape key
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && modal.classList.contains('open')) closePicker();
+  });
+
+})();
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 ctx.fillStyle = settings.colBg;
