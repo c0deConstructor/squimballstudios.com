@@ -11,9 +11,9 @@
     --bg: #05070f;
     --panel-bg: rgba(8, 12, 24, 0.97);
     --border: rgba(255,209,102,0.20);
-    --accent:  #ffd166;   /* C-class yellow / primary */
-    --accent2: #ff6b35;   /* M-class orange */
-    --accent3: #ff3860;   /* X-class red */
+    --accent:  #ffd166;
+    --accent2: #ff6b35;
+    --accent3: #ff3860;
     --text: #e8dec8;
     --text-dim: #8a7a5a;
     --mono: 'Share Tech Mono', monospace;
@@ -218,6 +218,7 @@
     flex: 1;
     margin: 0 8px;
     -webkit-appearance: none;
+    appearance: none;
     background: transparent;
     height: 14px;
   }
@@ -292,11 +293,10 @@
   #hud {
     position: fixed;
     bottom: 0; left: 0; right: 0;
-    z-index: 40;
+    z-index: 55;
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
+    flex-direction: column;
+    align-items: stretch;
     background: linear-gradient(to top, rgba(5,7,15,0.95), rgba(5,7,15,0.0));
     font-family: var(--mono);
     font-size: 11px;
@@ -304,6 +304,28 @@
     letter-spacing: 0.1em;
   }
   #hud.hidden { display: none; }
+
+  #progress-track {
+    width: 100%;
+    height: 3px;
+    background: rgba(255,209,102,0.1);
+    flex-shrink: 0;
+  }
+  #progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    transition: width 0.08s linear;
+  }
+
+  #hud-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+
   .hud-btn {
     background: var(--panel-bg);
     border: 1px solid var(--border);
@@ -313,10 +335,22 @@
     width: 32px; height: 28px;
     cursor: pointer;
     transition: all 0.12s;
+    flex-shrink: 0;
   }
   .hud-btn:hover { background: var(--accent); color: #0a0a0e; }
   .hud-spacer { flex: 1; }
-  .hud-readout { color: var(--text); margin: 0 8px; }
+  .hud-readout { color: var(--text); margin: 0 4px; }
+
+  #h-status {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid currentColor;
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
 
   /* ── LOADING ── */
   #loading {
@@ -427,7 +461,7 @@
 
   <div class="sec">
     <h3>Animation</h3>
-    <div class="row"><span class="label-min">Speed</span><input type="range" id="s-speed" min="0.1" max="5000" step="0.1" value="120"><span class="val" id="v-speed">120×</span></div>
+    <div class="row"><span class="label-min">Speed</span><input type="range" id="s-speed" min="0" max="100" step="1" value="35"><span class="val" id="v-speed">126×</span></div>
     <div class="row"><span class="label-min">Fade</span><input type="range" id="s-fade" min="0.3" max="15" step="0.1" value="3"><span class="val" id="v-fade">3.0s</span></div>
     <div class="row"><span class="label-min">Rings</span><input type="range" id="s-rings" min="0" max="5" step="1" value="2"><span class="val" id="v-rings">2</span></div>
   </div>
@@ -453,7 +487,6 @@
     <div class="row"><span>Glow</span><input type="checkbox" id="t-glow" checked></div>
     <div class="row"><span>Trails</span><input type="checkbox" id="t-trails"></div>
     <div class="row"><span>Graticule</span><input type="checkbox" id="t-grat" checked></div>
-    <div class="row"><span>Limb darkening</span><input type="checkbox" id="t-limb" checked></div>
     <div class="row"><span>Backside events</span><input type="checkbox" id="t-back" checked></div>
   </div>
 </aside>
@@ -461,16 +494,20 @@
 
 <!-- ── HUD ── -->
 <div id="hud" class="hidden">
-  <button class="hud-btn" id="h-play" title="Play / pause">▶</button>
-  <button class="hud-btn" id="h-restart" title="Restart">⟲</button>
-  <button class="hud-btn" id="h-rew" title="Rewind 1h">«</button>
-  <span class="hud-readout" id="h-time">—</span>
-  <span>Events: <span class="hud-readout" id="h-count">0</span> / <span id="h-total">0</span></span>
-  <span class="hud-spacer"></span>
-  <button class="hud-btn" id="h-zin" title="Zoom in">+</button>
-  <button class="hud-btn" id="h-zout" title="Zoom out">−</button>
-  <button class="hud-btn" id="h-reset" title="Reset view">⊙</button>
-  <span class="hud-readout" id="h-zoom">1.00×</span>
+  <div id="progress-track"><div id="progress-fill"></div></div>
+  <div id="hud-row">
+    <button class="hud-btn" id="h-play" title="Play / pause">▶</button>
+    <button class="hud-btn" id="h-restart" title="Restart">⟲</button>
+    <button class="hud-btn" id="h-rew" title="Rewind 1h">«</button>
+    <span class="hud-readout" id="h-time">—</span>
+    <span>Events: <span class="hud-readout" id="h-count">0</span> / <span id="h-total">0</span></span>
+    <span id="h-status">PLAYING</span>
+    <span class="hud-spacer"></span>
+    <button class="hud-btn" id="h-zin" title="Zoom in">+</button>
+    <button class="hud-btn" id="h-zout" title="Zoom out">−</button>
+    <button class="hud-btn" id="h-reset" title="Reset view">⊙</button>
+    <span class="hud-readout" id="h-zoom">1.00×</span>
+  </div>
 </div>
 
 <!-- ── Loading & tooltip ── -->
@@ -487,21 +524,24 @@ const ctx = canvas.getContext('2d');
 
 /* ───────── State ───────── */
 const settings = {
-  speed: 120, fade: 3, rings: 2,
+  speed: 126, fade: 3, rings: 2,
   base: 8, scale: 2.4, max: 120,
   cC: '#ffd166', cM: '#ff6b35', cX: '#ff3860',
   cSun: '#ffaa33', cGrid: '#5a4a2a',
-  glow: true, trails: false, grat: true, limb: true, back: true,
-  view: 'disk', // 'disk' | 'flat'
+  glow: true, trails: false, grat: true, back: true,
+  view: 'disk',
 };
 
-let flares = [];          // parsed events {peak,begin,end,classLetter,classMag,lat,lon,backside,raw}
-let activeCircles = [];   // currently animating ripples
-let simTime = 0;          // ms within the dataset
-let datasetStart = 0;     // ms
-let datasetEnd = 0;       // ms
+let flares = [];
+let activeCircles = [];
+let simTime = 0;
+let datasetStart = 0;
+let datasetEnd = 0;
 let firedCount = 0;
 let animPaused = false;
+let reachedEnd = false;
+let awaitingLoop = false;
+let loopTimerHandle = null;
 let lastFrame = performance.now();
 
 let panX = 0, panY = 0, zoom = 1;
@@ -525,7 +565,6 @@ function parseLocation(s) {
   const m = /^([NS])(\d{1,2})([EW])(\d{1,3})$/i.exec(s.trim());
   if (!m) return null;
   const lat = (m[1].toUpperCase() === 'N' ? 1 : -1) * parseInt(m[2], 10);
-  // Convention: W = positive (right of central meridian as seen from Earth), E = negative (left).
   const lon = (m[3].toUpperCase() === 'W' ? 1 : -1) * parseInt(m[4], 10);
   return { lat, lon };
 }
@@ -536,10 +575,7 @@ function parseClass(s) {
   if (!m) return null;
   const letter = m[1].toUpperCase();
   const mag = m[2] ? parseFloat(m[2]) : 1;
-  // Map to a single magnitude scale (log-ish).
-  const base = { A: -3, B: -2, C: -1, M: 0, X: 1 }[letter];
-  const score = base + Math.log10(Math.max(mag, 0.1)) * 0.4;
-  return { letter, mag, score };
+  return { letter, mag };
 }
 
 const CLASS_RANK = { A: 0, B: 1, C: 2, M: 3, X: 4 };
@@ -547,11 +583,10 @@ const CLASS_RANK = { A: 0, B: 1, C: 2, M: 3, X: 4 };
 function colorForClass(letter) {
   if (letter === 'X') return settings.cX;
   if (letter === 'M') return settings.cM;
-  return settings.cC; // A/B/C all use C color
+  return settings.cC;
 }
 
 function classRadiusMultiplier(letter, mag) {
-  // Bigger mults for stronger classes, with sub-class scaling.
   const k = { A: 0.5, B: 0.7, C: 1.0, M: 1.6, X: 2.6 }[letter] || 1.0;
   return k * (1 + Math.log10(Math.max(mag, 0.1)) * 0.25);
 }
@@ -567,13 +602,28 @@ function todayStr(offsetDays = 0) {
   return d.toISOString().slice(0, 10);
 }
 
+/* ───────── Speed scale (log) ───────── */
+function sliderToSpeed(v) { return Math.max(1, Math.round(Math.pow(10, v * 7 / 100))); }
+function speedToSlider(s) { return Math.min(100, Math.max(0, Math.round(Math.log10(Math.max(s, 1)) * 100 / 7))); }
+function speedLabel(s) {
+  if (s >= 1000000) return (s / 1000000).toFixed(1) + 'M×';
+  if (s >= 1000)    return (s / 1000).toFixed(1) + 'K×';
+  return s + '×';
+}
+
+function setSpeed(sliderVal) {
+  sliderVal = Math.min(100, Math.max(0, Math.round(sliderVal)));
+  settings.speed = sliderToSpeed(sliderVal);
+  $('s-speed').value = sliderVal;
+  $('v-speed').textContent = speedLabel(settings.speed);
+}
+
 /* ───────── Projection ───────── */
 function sunRadius() {
   return Math.min(window.innerWidth, window.innerHeight) * 0.36;
 }
 
 function projectDisk(lat, lon) {
-  // Orthographic (sun-as-disk view). lon: −180→+180; |lon|>90 = backside.
   const latR = lat * Math.PI / 180;
   const lonR = lon * Math.PI / 180;
   const R = sunRadius();
@@ -582,7 +632,6 @@ function projectDisk(lat, lon) {
   const x = R * Math.cos(latR) * Math.sin(lonR);
   const y = -R * Math.sin(latR);
   const visible = Math.abs(lon) <= 90;
-  // Apply pan/zoom transform.
   return {
     x: cx + (x * zoom) + panX,
     y: cy + (y * zoom) + panY,
@@ -592,7 +641,6 @@ function projectDisk(lat, lon) {
 }
 
 function projectDiskBackside(lat, lon) {
-  // Project a backside event onto the limb at the same latitude, on the appropriate side.
   const latR = lat * Math.PI / 180;
   const R = sunRadius();
   const cx = window.innerWidth / 2;
@@ -609,7 +657,6 @@ function projectDiskBackside(lat, lon) {
 }
 
 function projectFlat(lat, lon) {
-  // Equirectangular: full surface.
   const W = Math.min(window.innerWidth, window.innerHeight) * 1.6;
   const H = W * 0.5;
   const cx = window.innerWidth / 2;
@@ -649,29 +696,16 @@ function drawSunDisk() {
   const cx = window.innerWidth / 2 + panX;
   const cy = window.innerHeight / 2 + panY;
 
-  if (settings.limb) {
-    const grad = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, R);
-    grad.addColorStop(0,   settings.cSun);
-    grad.addColorStop(0.7, shadeColor(settings.cSun, -0.3));
-    grad.addColorStop(1,   shadeColor(settings.cSun, -0.7));
-    ctx.fillStyle = grad;
-  } else {
-    ctx.fillStyle = settings.cSun;
-  }
+  // Faint dark fill so disk shape reads against background
+  ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(18, 12, 4, 0.35)';
   ctx.fill();
-
-  // Outer glow / corona hint
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  const corona = ctx.createRadialGradient(cx, cy, R, cx, cy, R * 1.18);
-  corona.addColorStop(0, 'rgba(255,170,51,0.45)');
-  corona.addColorStop(1, 'rgba(255,170,51,0)');
-  ctx.fillStyle = corona;
-  ctx.beginPath();
-  ctx.arc(cx, cy, R * 1.18, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.strokeStyle = settings.cGrid;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.5;
+  ctx.stroke();
   ctx.restore();
 
   if (settings.grat) drawGraticuleDisk(cx, cy, R);
@@ -682,7 +716,6 @@ function drawGraticuleDisk(cx, cy, R) {
   ctx.strokeStyle = settings.cGrid;
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.6;
-  // Latitude lines
   for (let lat = -60; lat <= 60; lat += 30) {
     const latR = lat * Math.PI / 180;
     ctx.beginPath();
@@ -695,7 +728,6 @@ function drawGraticuleDisk(cx, cy, R) {
     }
     ctx.stroke();
   }
-  // Meridians
   for (let lon = -60; lon <= 60; lon += 30) {
     const lonR = lon * Math.PI / 180;
     ctx.beginPath();
@@ -708,7 +740,6 @@ function drawGraticuleDisk(cx, cy, R) {
     }
     ctx.stroke();
   }
-  // Equator emphasis
   ctx.globalAlpha = 0.85;
   ctx.beginPath();
   ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
@@ -724,61 +755,46 @@ function drawFlatMap() {
   const x0 = cx - W / 2;
   const y0 = cy - H / 2;
 
-  // Background rectangle of the surface
-  if (settings.limb) {
-    const grad = ctx.createLinearGradient(x0, y0, x0, y0 + H);
-    grad.addColorStop(0,   shadeColor(settings.cSun, -0.5));
-    grad.addColorStop(0.5, settings.cSun);
-    grad.addColorStop(1,   shadeColor(settings.cSun, -0.5));
-    ctx.fillStyle = grad;
-  } else {
-    ctx.fillStyle = settings.cSun;
-  }
-  ctx.fillRect(x0, y0, W, H);
-
-  if (settings.grat) {
+  if (!settings.grat) {
+    // No fill, no lines — just the bounding box
     ctx.save();
     ctx.strokeStyle = settings.cGrid;
-    ctx.globalAlpha = 0.6;
-    ctx.lineWidth = 1;
-    for (let lat = -60; lat <= 60; lat += 30) {
-      const y = cy - (lat / 90) * (H / 2);
-      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + W, y); ctx.stroke();
-    }
-    for (let lon = -150; lon <= 150; lon += 30) {
-      const x = cx + (lon / 180) * (W / 2);
-      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + H); ctx.stroke();
-    }
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath();
-    ctx.moveTo(x0, cy); ctx.lineTo(x0 + W, cy); ctx.stroke();
+    ctx.globalAlpha = 0.4;
+    ctx.strokeRect(x0, y0, W, H);
     ctx.restore();
+    return;
   }
 
-  // Border
+  ctx.save();
   ctx.strokeStyle = settings.cGrid;
-  ctx.globalAlpha = 0.7;
-  ctx.strokeRect(x0, y0, W, H);
-  ctx.globalAlpha = 1;
-}
+  ctx.lineWidth = 1;
 
-function shadeColor(hex, amt) {
-  // amt in [-1, 1]
-  const h = hex.replace('#','');
-  const r = parseInt(h.slice(0,2), 16);
-  const g = parseInt(h.slice(2,4), 16);
-  const b = parseInt(h.slice(4,6), 16);
-  const f = amt < 0 ? 1 + amt : 1 - amt;
-  const tgt = amt < 0 ? 0 : 255;
-  const nr = Math.round(r * f + tgt * (1 - f));
-  const ng = Math.round(g * f + tgt * (1 - f));
-  const nb = Math.round(b * f + tgt * (1 - f));
-  return `rgb(${nr},${ng},${nb})`;
+  // Latitude lines
+  ctx.globalAlpha = 0.5;
+  for (let lat = -60; lat <= 60; lat += 30) {
+    const y = cy - (lat / 90) * (H / 2);
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + W, y); ctx.stroke();
+  }
+  // Longitude lines
+  for (let lon = -150; lon <= 150; lon += 30) {
+    const x = cx + (lon / 180) * (W / 2);
+    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + H); ctx.stroke();
+  }
+  // Equator emphasis
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.moveTo(x0, cy); ctx.lineTo(x0 + W, cy); ctx.stroke();
+
+  // Bounding box
+  ctx.globalAlpha = 0.55;
+  ctx.strokeRect(x0, y0, W, H);
+  ctx.restore();
 }
 
 /* ───────── Pulse rendering ───────── */
-function drawCircle(c, t) {
-  const age = (t - c.startSim) / 1000; // seconds in sim time
+// Animation uses real wall-clock time so speed slider only affects timeline scrubbing
+function drawCircle(c, realNow) {
+  const age = (realNow - c.startReal) / 1000; // real seconds
   const life = settings.fade;
   if (age > life) { c.dead = true; return; }
   const norm = age / life;
@@ -798,7 +814,6 @@ function drawCircle(c, t) {
     ctx.shadowBlur = 18 * (1 - norm * 0.5);
   }
 
-  // Core
   ctx.globalAlpha = alpha * baseAlpha;
   ctx.fillStyle = c.color;
   const coreR = peakR * (0.35 + norm * 0.15);
@@ -806,7 +821,6 @@ function drawCircle(c, t) {
   ctx.arc(proj.x, proj.y, coreR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Rings
   for (let i = 0; i < settings.rings; i++) {
     const ringNorm = (norm + i * 0.18) % 1;
     const ringR = peakR * (0.5 + ringNorm * 1.4);
@@ -821,6 +835,30 @@ function drawCircle(c, t) {
   ctx.restore();
 }
 
+/* ───────── Loop / replay ───────── */
+function scheduleLoop() {
+  if (awaitingLoop) return;
+  awaitingLoop = true;
+  loopTimerHandle = setTimeout(() => {
+    awaitingLoop = false;
+    reachedEnd = false;
+    loopTimerHandle = null;
+    restartAnim();
+  }, 2500);
+}
+
+function cancelLoop() {
+  if (loopTimerHandle) { clearTimeout(loopTimerHandle); loopTimerHandle = null; }
+  awaitingLoop = false;
+}
+
+function restartAnim() {
+  simTime = 0; firedCount = 0; activeCircles = [];
+  animPaused = false;
+  reachedEnd = false;
+  $('h-play').textContent = '❚❚';
+}
+
 /* ───────── Main loop ───────── */
 function frame(now) {
   const dt = now - lastFrame;
@@ -831,9 +869,9 @@ function frame(now) {
     if (simTime > datasetEnd - datasetStart) {
       simTime = datasetEnd - datasetStart;
       animPaused = true;
+      reachedEnd = true;
       $('h-play').textContent = '▶';
     }
-    // Spawn events that have crossed simTime
     while (firedCount < flares.length && (flares[firedCount].peak - datasetStart) <= simTime) {
       const f = flares[firedCount];
       if (settings.back || !f.backside) {
@@ -843,6 +881,7 @@ function frame(now) {
           color: colorForClass(f.classLetter),
           radMult: classRadiusMultiplier(f.classLetter, f.classMag),
           startSim: simTime,
+          startReal: now,
           flare: f,
         });
       }
@@ -851,13 +890,33 @@ function frame(now) {
   }
 
   drawBackground();
-  for (const c of activeCircles) drawCircle(c, simTime);
+  for (const c of activeCircles) drawCircle(c, now);
   activeCircles = activeCircles.filter(c => !c.dead);
 
+  // Auto-loop: once timeline ends and all pulses have faded
+  if (reachedEnd && activeCircles.length === 0 && !awaitingLoop) {
+    scheduleLoop();
+  }
+
   // HUD readouts
+  const duration = datasetEnd - datasetStart;
+  const pct = duration > 0 ? (simTime / duration) * 100 : 0;
+  $('progress-fill').style.width = pct.toFixed(2) + '%';
   $('h-time').textContent = fmtDate(datasetStart + simTime);
   $('h-count').textContent = firedCount;
   $('h-zoom').textContent = zoom.toFixed(2) + '×';
+
+  const statusEl = $('h-status');
+  if (awaitingLoop) {
+    statusEl.textContent = 'LOOPING…';
+    statusEl.style.color = 'var(--accent2)';
+  } else if (animPaused) {
+    statusEl.textContent = 'PAUSED';
+    statusEl.style.color = 'var(--text-dim)';
+  } else {
+    statusEl.textContent = 'PLAYING';
+    statusEl.style.color = 'var(--accent)';
+  }
 
   requestAnimationFrame(frame);
 }
@@ -887,8 +946,6 @@ canvas.addEventListener('wheel', e => {
   const newZoom = Math.max(0.2, Math.min(20, zoom * factor));
   const realFactor = newZoom / zoom;
   if (realFactor === 1) return;
-  // Screen point P = center + sx*zoom + pan. Keep P fixed: pan' = P - center - sx*zoom'
-  // sx = (P - center - pan) / zoom, so pan' = pan + (P - center - pan)*(1 - realFactor)
   const cx = window.innerWidth / 2;
   const cy = window.innerHeight / 2;
   const mx = e.clientX, my = e.clientY;
@@ -897,7 +954,6 @@ canvas.addEventListener('wheel', e => {
   zoom = newZoom;
 }, { passive: false });
 
-// touch
 let pinchStart = null;
 canvas.addEventListener('touchstart', e => {
   if (e.touches.length === 1) {
@@ -925,19 +981,27 @@ canvas.addEventListener('touchend', () => { dragging = false; pinchStart = null;
 
 /* ───────── HUD buttons ───────── */
 $('h-play').onclick = () => {
+  cancelLoop();
+  reachedEnd = false;
   animPaused = !animPaused;
   $('h-play').textContent = animPaused ? '▶' : '❚❚';
 };
-$('h-restart').onclick = () => { simTime = 0; firedCount = 0; activeCircles = []; };
-$('h-rew').onclick = () => { simTime = Math.max(0, simTime - 3600 * 1000); recomputeFired(); };
+$('h-restart').onclick = () => {
+  cancelLoop();
+  restartAnim();
+};
+$('h-rew').onclick = () => {
+  cancelLoop();
+  reachedEnd = false;
+  simTime = Math.max(0, simTime - 3600 * 1000);
+  recomputeFired();
+  if (animPaused) { animPaused = false; $('h-play').textContent = '❚❚'; }
+};
 $('h-zin').onclick = () => zoomBy(1.25);
 $('h-zout').onclick = () => zoomBy(1 / 1.25);
 $('h-reset').onclick = () => { panX = 0; panY = 0; zoom = 1; };
 
 function zoomBy(factor) {
-  const cx = window.innerWidth / 2;
-  const cy = window.innerHeight / 2;
-  // Zoom toward screen center → pan offset unchanged.
   zoom = Math.max(0.2, Math.min(20, zoom * factor));
 }
 
@@ -959,7 +1023,13 @@ function bindRange(id, key, fmt) {
   });
   if (out) out.textContent = fmt(settings[key]);
 }
-bindRange('s-speed', 'speed', v => v + '×');
+
+// Speed uses log scale — wired separately
+{
+  const el = $('s-speed'), out = $('v-speed');
+  el.addEventListener('input', () => setSpeed(parseFloat(el.value)));
+  setSpeed(35); // initialize
+}
 bindRange('s-fade',  'fade',  v => v.toFixed(1) + 's');
 bindRange('s-rings', 'rings', v => v.toFixed(0));
 bindRange('s-base',  'base',  v => v.toFixed(0));
@@ -969,11 +1039,8 @@ bindRange('s-max',   'max',   v => v.toFixed(0));
 ['cC','cM','cX','cSun','cGrid'].forEach(k => {
   $('s-' + k).addEventListener('input', e => settings[k] = e.target.value);
 });
-['glow','trails','grat','limb','back'].forEach(k => {
-  $('t-' + k).addEventListener('change', e => {
-    const map = { grat:'grat', limb:'limb', back:'back', glow:'glow', trails:'trails' };
-    settings[k] = e.target.checked;
-  });
+['glow','trails','grat','back'].forEach(k => {
+  $('t-' + k).addEventListener('change', e => { settings[k] = e.target.checked; });
 });
 
 $('view-disk').onclick = () => setView('disk');
@@ -995,7 +1062,6 @@ $('btn-newquery').onclick = () => openQueryModal();
 
 /* ───────── Tooltip ───────── */
 function updateTooltip(mx, my) {
-  // Find nearest active circle within 20px
   let best = null, bestDist = 22;
   for (const c of activeCircles) {
     const p = project(c.lat, c.lon, c.backside);
@@ -1084,10 +1150,8 @@ async function doFetch() {
     return;
   }
 
-  // Parse
   const minRank = CLASS_RANK[minClass] || 0;
   const parsed = [];
-  let backsideCount = 0;
   for (const item of raw) {
     const cls = parseClass(item.classType);
     if (!cls) continue;
@@ -1099,7 +1163,7 @@ async function doFetch() {
     const loc = parseLocation(item.sourceLocation);
     let lat = 0, lon = 0, backside = false;
     if (loc) { lat = loc.lat; lon = loc.lon; }
-    else { backside = true; lat = (Math.random() * 60 - 30); lon = Math.random() < 0.5 ? -120 : 120; backsideCount++; }
+    else { backside = true; lat = (Math.random() * 60 - 30); lon = Math.random() < 0.5 ? -120 : 120; }
     parsed.push({
       peak,
       begin: Date.parse(item.beginTime) || peak,
@@ -1109,7 +1173,6 @@ async function doFetch() {
       lat, lon, backside,
       activeRegion: item.activeRegionNum || null,
       link: item.link || null,
-      raw: item,
     });
   }
   parsed.sort((a, b) => a.peak - b.peak);
@@ -1121,10 +1184,18 @@ async function doFetch() {
 
   flares = parsed;
   datasetStart = flares[0].peak;
-  datasetEnd = flares[flares.length - 1].peak + 60_000; // buffer
+  datasetEnd = flares[flares.length - 1].peak + 60_000;
+
+  // Auto-set speed so the entire dataset plays back in ~10 real seconds
+  const duration = datasetEnd - datasetStart;
+  const targetSpeed = duration / (10 * 1000);
+  setSpeed(speedToSlider(targetSpeed));
+
+  cancelLoop();
   simTime = 0;
   firedCount = 0;
   activeCircles = [];
+  reachedEnd = false;
   animPaused = false;
   $('h-play').textContent = '❚❚';
   $('h-total').textContent = flares.length;
