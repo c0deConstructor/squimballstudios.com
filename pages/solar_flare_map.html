@@ -462,14 +462,14 @@
   <div class="sec">
     <h3>Animation</h3>
     <div class="row"><span class="label-min">Speed</span><input type="range" id="s-speed" min="0" max="100" step="1" value="35"><span class="val" id="v-speed">126×</span></div>
-    <div class="row"><span class="label-min">Fade</span><input type="range" id="s-fade" min="0.3" max="15" step="0.1" value="3"><span class="val" id="v-fade">3.0s</span></div>
-    <div class="row"><span class="label-min">Rings</span><input type="range" id="s-rings" min="0" max="5" step="1" value="2"><span class="val" id="v-rings">2</span></div>
+    <div class="row"><span class="label-min">Fade</span><input type="range" id="s-fade" min="0.3" max="15" step="0.1" value="1"><span class="val" id="v-fade">1.0s</span></div>
+    <div class="row"><span class="label-min">Rings</span><input type="range" id="s-rings" min="0" max="5" step="1" value="1"><span class="val" id="v-rings">1</span></div>
   </div>
 
   <div class="sec">
     <h3>Pulse size</h3>
-    <div class="row"><span class="label-min">Base</span><input type="range" id="s-base" min="2" max="40" step="1" value="8"><span class="val" id="v-base">8</span></div>
-    <div class="row"><span class="label-min">Scale</span><input type="range" id="s-scale" min="0.5" max="6" step="0.1" value="2.4"><span class="val" id="v-scale">2.4</span></div>
+    <div class="row"><span class="label-min">Base</span><input type="range" id="s-base" min="2" max="40" step="1" value="5"><span class="val" id="v-base">5</span></div>
+    <div class="row"><span class="label-min">Scale</span><input type="range" id="s-scale" min="0.5" max="6" step="0.1" value="3"><span class="val" id="v-scale">3.0</span></div>
     <div class="row"><span class="label-min">Max</span><input type="range" id="s-max" min="20" max="300" step="5" value="120"><span class="val" id="v-max">120</span></div>
   </div>
 
@@ -488,6 +488,7 @@
     <div class="row"><span>Trails</span><input type="checkbox" id="t-trails"></div>
     <div class="row"><span>Graticule</span><input type="checkbox" id="t-grat" checked></div>
     <div class="row"><span>Backside events</span><input type="checkbox" id="t-back" checked></div>
+    <div class="row"><span>Rotate Sun</span><input type="checkbox" id="t-rotate" checked></div>
   </div>
 </aside>
 <button id="panel-toggle" title="Toggle panel">‹</button>
@@ -524,11 +525,11 @@ const ctx = canvas.getContext('2d');
 
 /* ───────── State ───────── */
 const settings = {
-  speed: 126, fade: 3, rings: 2,
-  base: 8, scale: 2.4, max: 120,
+  speed: 126, fade: 1, rings: 1,
+  base: 5, scale: 3, max: 120,
   cC: '#ffd166', cM: '#ff6b35', cX: '#ff3860',
   cSun: '#ffaa33', cGrid: '#5a4a2a',
-  glow: true, trails: false, grat: true, back: true,
+  glow: true, trails: false, grat: true, back: true, rotate: true,
   view: 'disk',
 };
 
@@ -543,6 +544,10 @@ let reachedEnd = false;
 let awaitingLoop = false;
 let loopTimerHandle = null;
 let lastFrame = performance.now();
+
+// Solar synodic equatorial rotation: 360° per 27.27 days
+const SUN_ROT_RATE = 360 / (27.27 * 24 * 3600 * 1000); // °/ms of sim time
+let simRotAngle = 0; // degrees — derived from simTime each frame
 
 let panX = 0, panY = 0, zoom = 1;
 let dragging = false, dragStart = null;
@@ -603,8 +608,10 @@ function todayStr(offsetDays = 0) {
 }
 
 /* ───────── Speed scale (log) ───────── */
-function sliderToSpeed(v) { return Math.max(1, Math.round(Math.pow(10, v * 7 / 100))); }
-function speedToSlider(s) { return Math.min(100, Math.max(0, Math.round(Math.log10(Math.max(s, 1)) * 100 / 7))); }
+const SPEED_LO = Math.log10(1e3); // slider 0  → 1 000×
+const SPEED_HI = Math.log10(2e6); // slider 100 → 2 000 000×
+function sliderToSpeed(v) { return Math.round(Math.pow(10, SPEED_LO + v * (SPEED_HI - SPEED_LO) / 100)); }
+function speedToSlider(s) { return Math.min(100, Math.max(0, Math.round((Math.log10(Math.max(s, 1e3)) - SPEED_LO) * 100 / (SPEED_HI - SPEED_LO)))); }
 function speedLabel(s) {
   if (s >= 1000000) return (s / 1000000).toFixed(1) + 'M×';
   if (s >= 1000)    return (s / 1000).toFixed(1) + 'K×';
@@ -687,6 +694,7 @@ function drawBackground() {
     ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
   }
 
+  simRotAngle = settings.rotate ? simTime * SUN_ROT_RATE : 0;
   if (settings.view === 'disk') drawSunDisk();
   else drawFlatMap();
 }
@@ -708,14 +716,16 @@ function drawSunDisk() {
   ctx.stroke();
   ctx.restore();
 
-  if (settings.grat) drawGraticuleDisk(cx, cy, R);
+  if (settings.grat) drawGraticuleDisk(cx, cy, R, simRotAngle);
 }
 
-function drawGraticuleDisk(cx, cy, R) {
+function drawGraticuleDisk(cx, cy, R, rotAngle) {
   ctx.save();
   ctx.strokeStyle = settings.cGrid;
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.6;
+
+  // Latitude lines — fixed in the viewer frame, unaffected by rotation
   for (let lat = -60; lat <= 60; lat += 30) {
     const latR = lat * Math.PI / 180;
     ctx.beginPath();
@@ -728,8 +738,16 @@ function drawGraticuleDisk(cx, cy, R) {
     }
     ctx.stroke();
   }
-  for (let lon = -60; lon <= 60; lon += 30) {
-    const lonR = lon * Math.PI / 180;
+
+  // Meridians — surface-fixed, so they rotate with the Sun.
+  // A meridian painted at surface longitude 30k appears at viewer longitude 30k + rotAngle.
+  // Visible when |viewer lon| ≤ 90, so k ∈ [⌈(-90−rotAngle)/30⌉, ⌊(90−rotAngle)/30⌋].
+  const kMin = Math.ceil((-90 - rotAngle) / 30);
+  const kMax = Math.floor((90 - rotAngle) / 30);
+  for (let k = kMin; k <= kMax; k++) {
+    const viewerLon = 30 * k + rotAngle;
+    if (viewerLon < -90 || viewerLon > 90) continue;
+    const lonR = viewerLon * Math.PI / 180;
     ctx.beginPath();
     let first = true;
     for (let lat = -90; lat <= 90; lat += 3) {
@@ -740,6 +758,8 @@ function drawGraticuleDisk(cx, cy, R) {
     }
     ctx.stroke();
   }
+
+  // Equator — fixed in viewer frame
   ctx.globalAlpha = 0.85;
   ctx.beginPath();
   ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
@@ -755,44 +775,49 @@ function drawFlatMap() {
   const x0 = cx - W / 2;
   const y0 = cy - H / 2;
 
-  if (!settings.grat) {
-    // No fill, no lines — just the bounding box
-    ctx.save();
-    ctx.strokeStyle = settings.cGrid;
-    ctx.globalAlpha = 0.4;
-    ctx.strokeRect(x0, y0, W, H);
-    ctx.restore();
-    return;
-  }
+  // Bounding box always visible
+  ctx.save();
+  ctx.strokeStyle = settings.cGrid;
+  ctx.globalAlpha = 0.55;
+  ctx.strokeRect(x0, y0, W, H);
+  ctx.restore();
+
+  if (!settings.grat) return;
 
   ctx.save();
+  // Clip all graticule drawing to the map rectangle
+  ctx.beginPath();
+  ctx.rect(x0, y0, W, H);
+  ctx.clip();
+
   ctx.strokeStyle = settings.cGrid;
   ctx.lineWidth = 1;
 
-  // Latitude lines
+  // Latitude lines — fixed, unaffected by rotation
   ctx.globalAlpha = 0.5;
   for (let lat = -60; lat <= 60; lat += 30) {
     const y = cy - (lat / 90) * (H / 2);
     ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + W, y); ctx.stroke();
-  }
-  // Longitude lines
-  for (let lon = -150; lon <= 150; lon += 30) {
-    const x = cx + (lon / 180) * (W / 2);
-    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + H); ctx.stroke();
   }
   // Equator emphasis
   ctx.globalAlpha = 0.85;
   ctx.beginPath();
   ctx.moveTo(x0, cy); ctx.lineTo(x0 + W, cy); ctx.stroke();
 
-  // Bounding box
-  ctx.globalAlpha = 0.55;
-  ctx.strokeRect(x0, y0, W, H);
+  // Longitude lines — surface-fixed, scroll with solar rotation.
+  // phase is the sub-pixel offset within one 30° tile; lines tile across the full ±180° map.
+  const phase = ((simRotAngle % 30) + 30) % 30; // [0, 30)
+  ctx.globalAlpha = 0.5;
+  for (let vLon = -180 + phase; vLon <= 180 + 30; vLon += 30) {
+    const x = cx + (vLon / 180) * (W / 2);
+    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + H); ctx.stroke();
+  }
+
   ctx.restore();
 }
 
 /* ───────── Pulse rendering ───────── */
-// Animation uses real wall-clock time so speed slider only affects timeline scrubbing
+// Fade uses real wall-clock time; position uses simRotAngle when rotation is enabled.
 function drawCircle(c, realNow) {
   const age = (realNow - c.startReal) / 1000; // real seconds
   const life = settings.fade;
@@ -800,13 +825,37 @@ function drawCircle(c, realNow) {
   const norm = age / life;
   const alpha = 1 - norm;
 
-  const proj = project(c.lat, c.lon, c.backside);
-  const baseAlpha = c.backside ? 0.4 : 1.0;
+  // Compute current viewer longitude, optionally drifted by solar rotation
+  let currentLon = c.lon;
+  let isBackside = c.backside;
+  let sizeFactor = 1.0;
 
-  const peakR = Math.min(
-    settings.max,
-    settings.base + settings.base * settings.scale * c.radMult
-  );
+  if (settings.rotate) {
+    // rotDelta: how much the Sun has rotated since this flare's peak time
+    const rotDelta = simRotAngle - c.flareRotAngle;
+    currentLon = c.lon + rotDelta;
+  }
+
+  if (settings.view === 'disk') {
+    // Normalise to [-180, 180] then decide visibility
+    currentLon = ((currentLon + 180) % 360 + 360) % 360 - 180;
+    isBackside = Math.abs(currentLon) > 90;
+    if (isBackside && !settings.back) return; // skip this frame but keep circle alive
+    if (!isBackside && settings.rotate) {
+      // Foreshortening: apparent size tracks cos(lon) — full at disk centre, ~25% at limb
+      sizeFactor = Math.cos(currentLon * Math.PI / 180) * 0.75 + 0.25;
+    }
+  } else {
+    // Flat map: just wrap longitude, no size change
+    currentLon = ((currentLon + 180) % 360 + 360) % 360 - 180;
+    isBackside = false;
+  }
+
+  const proj = project(c.lat, currentLon, isBackside);
+  const baseAlpha = isBackside ? 0.4 : 1.0;
+
+  const rawR = settings.base + settings.base * settings.scale * c.radMult;
+  const peakR = Math.min(settings.max, rawR) * sizeFactor;
 
   ctx.save();
   if (settings.glow) {
@@ -882,6 +931,8 @@ function frame(now) {
           radMult: classRadiusMultiplier(f.classLetter, f.classMag),
           startSim: simTime,
           startReal: now,
+          // rotation angle of the Sun at the moment this flare peaked
+          flareRotAngle: (f.peak - datasetStart) * SUN_ROT_RATE,
           flare: f,
         });
       }
@@ -1039,7 +1090,7 @@ bindRange('s-max',   'max',   v => v.toFixed(0));
 ['cC','cM','cX','cSun','cGrid'].forEach(k => {
   $('s-' + k).addEventListener('input', e => settings[k] = e.target.value);
 });
-['glow','trails','grat','back'].forEach(k => {
+['glow','trails','grat','back','rotate'].forEach(k => {
   $('t-' + k).addEventListener('change', e => { settings[k] = e.target.checked; });
 });
 
@@ -1188,7 +1239,7 @@ async function doFetch() {
 
   // Auto-set speed so the entire dataset plays back in ~10 real seconds
   const duration = datasetEnd - datasetStart;
-  const targetSpeed = duration / (10 * 1000);
+  const targetSpeed = duration / (20 * 1000);
   setSpeed(speedToSlider(targetSpeed));
 
   cancelLoop();
