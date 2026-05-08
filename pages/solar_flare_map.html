@@ -399,6 +399,44 @@
   #tooltip .tt-class { color: var(--accent); font-weight: bold; }
   #tooltip .tt-dim { color: var(--text-dim); }
   #tooltip a { color: var(--accent); pointer-events: auto; }
+
+  /* ── API KEY INFO BUTTON ── */
+  .q-key-row { display: flex; gap: 6px; align-items: center; }
+  .q-key-row input { flex: 1; min-width: 0; }
+  .q-info-btn {
+    flex-shrink: 0;
+    position: relative;
+    width: 24px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 13px; font-weight: bold;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .q-info-btn:hover { background: var(--accent); color: #0a0a0e; }
+  .q-info-tip {
+    display: none;
+    position: absolute;
+    right: 30px; top: 50%;
+    transform: translateY(-50%);
+    width: 210px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px; line-height: 1.55;
+    padding: 8px 10px;
+    z-index: 200;
+    pointer-events: none;
+    white-space: normal;
+  }
+  .q-info-btn:hover .q-info-tip { display: block; }
 </style>
 </head>
 <body>
@@ -436,7 +474,12 @@
 
     <div class="q-row">
       <label>NASA API key (optional)</label>
-      <input type="text" id="q-apikey" placeholder="DEMO_KEY (rate limited ~30/hr)" value="DEMO_KEY">
+      <div class="q-key-row">
+        <input type="text" id="q-apikey" placeholder="DEMO_KEY (rate limited ~30/hr)" value="DEMO_KEY">
+        <a class="q-info-btn" href="https://api.nasa.gov" target="_blank" rel="noopener">!
+          <span class="q-info-tip">The default DEMO_KEY allows only 30 requests/hr shared across all visitors — get a free personal key at api.nasa.gov to raise that to 1,000/hr.</span>
+        </a>
+      </div>
     </div>
 
     <div class="q-actions">
