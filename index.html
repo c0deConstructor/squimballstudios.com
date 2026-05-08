@@ -163,6 +163,14 @@
     line-height: 1.6; letter-spacing: .03em;
   }
 
+  #visitor-label {
+    font-size: 9px;
+    letter-spacing: .08em;
+    color: var(--muted);
+    white-space: nowrap;
+    padding: 0 6px;
+  }
+
   /* invisible scrim to catch outside clicks */
   #scrim { display: none; position: fixed; inset: 0; z-index: 150; }
   #scrim.active { display: block; }
@@ -192,6 +200,8 @@
   <button class="pg-btn"        data-tip="Solar Flare Map"           onclick="show(2)">3</button>
 
   <div class="spacer"></div>
+
+  <span id="visitor-label"></span>
 
   <!-- GitHub -->
   <button class="icon-btn" data-tip-rtl="GitHub" onclick="togglePanel('gh-panel', this)">
@@ -336,6 +346,15 @@
   }
 
   show(0);
+
+  /* ── visitor counter ─────────────────────────────────── */
+  fetch('counter.php')
+    .then(r => r.json())
+    .then(d => {
+      if (d.n) document.getElementById('visitor-label').textContent =
+        'unique visitor #' + d.n.toLocaleString();
+    })
+    .catch(() => {}); // silently fail if PHP isn't available (e.g. local file browsing)
 </script>
 </body>
 </html>
