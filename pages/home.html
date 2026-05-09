@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squimball Studios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:     #0e0e10;
+    --surf:   #13131a;
+    --border: #2a2a30;
+    --accent: #e8ff47;
+    --text:   #c8c8d4;
+    --muted:  #555560;
+    --font:   'JetBrains Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* ── Canvas background ── */
+  #bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ── Layout ── */
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 72px 28px 100px;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 48px 0 80px;
+    animation: fadeUp .6s ease both;
+  }
+
+  .studio-name {
+    font-size: clamp(32px, 6vw, 58px);
+    font-weight: 700;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    line-height: 1.1;
+    text-shadow: 0 0 60px rgba(232,255,71,.25);
+    margin-bottom: 6px;
+  }
+  .studio-name .dim { color: rgba(232,255,71,.35); }
+
+  .hero-rule {
+    width: 60px;
+    height: 1px;
+    background: var(--accent);
+    margin: 20px auto;
+    opacity: .4;
+  }
+
+  .tagline {
+    font-size: 11px;
+    letter-spacing: .22em;
+    color: var(--muted);
+    text-transform: uppercase;
+    min-height: 16px;
+  }
+  .tagline .cursor {
+    display: inline-block;
+    width: 7px; height: 12px;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: middle;
+    animation: blink .9s step-end infinite;
+    opacity: .7;
+  }
+
+  /* ── Section ── */
+  .sec-head {
+    font-size: 9px;
+    letter-spacing: .28em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    animation: fadeUp .6s .4s ease both;
+  }
+  .sec-head::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Cards ── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .card {
+    background: var(--surf);
+    border: 1px solid var(--border);
+    padding: 22px 22px 18px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s, transform .2s;
+    animation: fadeUp .6s ease both;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform .25s ease;
+  }
+  .card:not(.soon):hover {
+    border-color: rgba(232,255,71,.25);
+    box-shadow: 0 0 32px rgba(232,255,71,.06);
+    transform: translateY(-3px);
+  }
+  .card:not(.soon):hover::before { transform: scaleX(1); }
+
+  .card.soon { opacity: .45; cursor: default; }
+
+  .card-id {
+    font-size: 8px;
+    letter-spacing: .22em;
+    color: var(--muted);
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: .06em;
+    margin-bottom: 10px;
+  }
+  .card-desc {
+    font-size: 10px;
+    line-height: 1.9;
+    color: var(--muted);
+    margin-bottom: 22px;
+  }
+  .card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .badge {
+    font-size: 8px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border: 1px solid;
+  }
+  .badge-live  { color: var(--accent); border-color: rgba(232,255,71,.3); background: rgba(232,255,71,.07); }
+  .badge-soon  { color: var(--muted);  border-color: var(--border);       background: transparent; }
+
+  .launch {
+    font-family: var(--font);
+    font-size: 9px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: letter-spacing .2s;
+  }
+  .launch:hover { letter-spacing: .32em; }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes blink {
+    0%, 100% { opacity: .7; }
+    50%       { opacity: 0;  }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="studio-name">Squimball<span class="dim"> / </span>Studios</div>
+    <div class="hero-rule"></div>
+    <p class="tagline"><span id="tgt"></span><span class="cursor"></span></p>
+  </section>
+
+  <div class="sec-head">// active projects</div>
+  <div class="cards">
+
+    <div class="card" style="animation-delay:.05s" onclick="launch(1)">
+      <div class="card-id">SIM · 001</div>
+      <div class="card-title">Gravity Simulator</div>
+      <div class="card-desc">N-body gravitational simulation. Place stars, planets, and moons and watch real Newtonian physics unfold in real time.</div>
+      <div class="card-foot">
+        <span class="badge badge-live">Live</span>
+        <button class="launch">Launch →</button>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:.12s" onclick="launch(2)">
+      <div class="card-id">SIM · 002</div>
+      <div class="card-title">Earthquake Animator</div>
+      <div class="card-desc">USGS seismic data visualized on an interactive globe. Replay decades of tectonic activity and feel the pulse of the planet.</div>
+      <div class="card-foot">
+        <span class="badge badge-live">Live</span>
+        <button class="launch">Launch →</button>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:.19s" onclick="launch(3)">
+      <div class="card-id">SIM · 003</div>
+      <div class="card-title">Solar Pulse</div>
+      <div class="card-desc">NASA DONKI solar flare catalog animated across the Sun's rotating disk. Track C, M, and X class eruptions through time.</div>
+      <div class="card-foot">
+        <span class="badge badge-live">Live</span>
+        <button class="launch">Launch →</button>
+      </div>
+    </div>
+
+    <div class="card soon" style="animation-delay:.26s">
+      <div class="card-id">SIM · 004</div>
+      <div class="card-title">[ CLASSIFIED ]</div>
+      <div class="card-desc">// data stream unavailable<br>// check back soon</div>
+      <div class="card-foot">
+        <span class="badge badge-soon">Coming soon</span>
+      </div>
+    </div>
+
+    <div class="card soon" style="animation-delay:.33s">
+      <div class="card-id">SIM · 005</div>
+      <div class="card-title">[ CLASSIFIED ]</div>
+      <div class="card-desc">// access restricted<br>// clearance level insufficient</div>
+      <div class="card-foot">
+        <span class="badge badge-soon">Coming soon</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ── Typewriter ── */
+const TAGLINE = '// interactive simulations & data visualizations';
+let ti = 0;
+const tgt = document.getElementById('tgt');
+(function type() {
+  if (ti <= TAGLINE.length) {
+    tgt.textContent = TAGLINE.slice(0, ti++);
+    setTimeout(type, ti === 1 ? 600 : 38 + Math.random() * 22);
+  }
+})();
+
+/* ── Particle network ── */
+const canvas = document.getElementById('bg');
+const ctx    = canvas.getContext('2d');
+let W, H, pts;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+
+function mkPts(n) {
+  return Array.from({ length: n }, () => ({
+    x:  Math.random() * W,
+    y:  Math.random() * H,
+    vx: (Math.random() - .5) * .45,
+    vy: (Math.random() - .5) * .45,
+    r:  Math.random() * 1.5 + .6,
+  }));
+}
+
+const LINK = 145;
+const MOUSE = { x: -999, y: -999 };
+window.addEventListener('mousemove', e => { MOUSE.x = e.clientX; MOUSE.y = e.clientY; });
+
+function frame() {
+  ctx.clearRect(0, 0, W, H);
+
+  for (const p of pts) {
+    // Mouse repulsion
+    const mx = p.x - MOUSE.x, my = p.y - MOUSE.y;
+    const md = Math.hypot(mx, my);
+    if (md < 110 && md > 0) {
+      const f = ((110 - md) / 110) * .35;
+      p.vx += (mx / md) * f;
+      p.vy += (my / md) * f;
+    }
+    // Speed cap + damping
+    const spd = Math.hypot(p.vx, p.vy);
+    if (spd > 1.8) { p.vx = p.vx / spd * 1.8; p.vy = p.vy / spd * 1.8; }
+    p.vx *= .992; p.vy *= .992;
+
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) { p.x = 0; p.vx *= -1; }
+    if (p.x > W) { p.x = W; p.vx *= -1; }
+    if (p.y < 0) { p.y = 0; p.vy *= -1; }
+    if (p.y > H) { p.y = H; p.vy *= -1; }
+  }
+
+  // Connections
+  ctx.lineWidth = .7;
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+      const d  = Math.hypot(dx, dy);
+      if (d < LINK) {
+        ctx.globalAlpha = (1 - d / LINK) * .22;
+        ctx.strokeStyle = '#e8ff47';
+        ctx.beginPath();
+        ctx.moveTo(pts[i].x, pts[i].y);
+        ctx.lineTo(pts[j].x, pts[j].y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Dots
+  ctx.fillStyle = '#e8ff47';
+  for (const p of pts) {
+    ctx.globalAlpha = .55;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  requestAnimationFrame(frame);
+}
+
+resize();
+pts = mkPts(72);
+frame();
+window.addEventListener('resize', () => { resize(); pts = mkPts(72); });
+
+/* ── Launch ── */
+function launch(idx) {
+  window.parent.postMessage({ sq: 'show', page: idx }, '*');
+}
+</script>
+</body>
+</html>

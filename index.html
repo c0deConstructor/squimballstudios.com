@@ -195,9 +195,11 @@
 ════════════════════════════════════════════════════════ -->
 <nav id="topbar">
 
-  <button class="pg-btn active" data-tip="Garvity Simulator 1"       onclick="show(0)">1</button>
-  <button class="pg-btn"        data-tip="Earthquake Animator"       onclick="show(1)">2</button>
-  <button class="pg-btn"        data-tip="Solar Flare Map"           onclick="show(2)">3</button>
+  <button class="pg-btn" data-tip="Home"                onclick="show(0)">⌂</button>
+  <div class="sep"></div>
+  <button class="pg-btn" data-tip="Gravity Simulator"   onclick="show(1)">1</button>
+  <button class="pg-btn" data-tip="Earthquake Animator" onclick="show(2)">2</button>
+  <button class="pg-btn" data-tip="Solar Flare Map"     onclick="show(3)">3</button>
 
   <div class="spacer"></div>
 
@@ -304,9 +306,10 @@
 ════════════════════════════════════════════════════════ -->
 <main id="content">
   <div id="placeholder">select a page ↑</div>
-  <iframe class="page-frame active" id="frame-0" src="pages/gravity_simulator1.html"      title="Gravity Simulator 1"></iframe>
-  <iframe class="page-frame"        id="frame-1" src="pages/earthquake_animator.html"     title="Earthquake Animator"></iframe>
-  <iframe class="page-frame"        id="frame-2" src="pages/solar_flare_map.html"         title="Solar Flare Map"></iframe>
+  <iframe class="page-frame active" id="frame-0" src="pages/home.html"                                    title="Home"></iframe>
+  <iframe class="page-frame"        id="frame-1" data-src="pages/gravity_simulator1.html"  src=""          title="Gravity Simulator 1"></iframe>
+  <iframe class="page-frame"        id="frame-2" data-src="pages/earthquake_animator.html" src=""          title="Earthquake Animator"></iframe>
+  <iframe class="page-frame"        id="frame-3" data-src="pages/solar_flare_map.html"     src=""          title="Solar Flare Map"></iframe>
 </main>
 
 <script>
@@ -316,19 +319,33 @@
   let current  = 0;
 
   function show(idx) {
+    idx = Math.max(0, Math.min(pgBtns.length - 1, idx));
     closeAllPanels();
     pgBtns[current].classList.remove('active');
     frames[current].classList.remove('active');
     current = idx;
+    // Lazy-load frames that start with data-src so they initialize with real dimensions
+    const f = frames[current];
+    if (f.dataset.src && !f.dataset.loaded) {
+      f.src = f.dataset.src;
+      f.dataset.loaded = '1';
+    }
     pgBtns[current].classList.add('active');
-    frames[current].classList.add('active');
+    f.classList.add('active');
     document.getElementById('placeholder').style.display = 'none';
+    history.replaceState(null, '', idx === 0 ? location.pathname : '?p=' + idx);
   }
+
+  // Receive navigation requests from child iframes (home page cards)
+  window.addEventListener('message', e => {
+    if (e.data && e.data.sq === 'show') show(e.data.page);
+  });
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { closeAllPanels(); return; }
     const n = parseInt(e.key);
-    if (!isNaN(n) && n >= 1 && n <= pgBtns.length) show(n - 1);
+    // Keys 1-3 map to pages 1-3; key 0 goes home
+    if (!isNaN(n) && n >= 0 && n <= pgBtns.length - 1) show(n);
   });
 
   /* ── panel toggle ────────────────────────────────────── */
@@ -359,7 +376,9 @@
     setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 2000);
   }
 
-  show(0);
+  // Read ?p= from URL on load, default to home (0)
+  const _urlP = parseInt(new URLSearchParams(location.search).get('p'));
+  show(!isNaN(_urlP) && _urlP >= 0 && _urlP < pgBtns.length ? _urlP : 0);
 
   /* ── visitor counter ─────────────────────────────────── */
   fetch('counter.php')
