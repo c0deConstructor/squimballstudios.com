@@ -464,8 +464,6 @@
     <div class="q-row">
       <label>Minimum class</label>
       <select id="q-minclass">
-        <option value="A">A — faintest</option>
-        <option value="B">B</option>
         <option value="C" selected>C</option>
         <option value="M">M — moderate</option>
         <option value="X">X — strongest</option>
@@ -527,8 +525,10 @@
 
   <div class="sec">
     <h3>Toggles</h3>
-    <div class="row"><span>Glow</span><input type="checkbox" id="t-glow" checked></div>
-    <div class="row"><span>Trails</span><input type="checkbox" id="t-trails"></div>
+    <div class="row" id="row-showC"><span>Show C flares</span><input type="checkbox" id="t-showC" checked></div>
+    <div class="row" id="row-showM"><span>Show M flares</span><input type="checkbox" id="t-showM" checked></div>
+    <div class="row" id="row-showX"><span>Show X flares</span><input type="checkbox" id="t-showX" checked></div>
+
     <div class="row"><span>Graticule</span><input type="checkbox" id="t-grat" checked></div>
     <div class="row"><span>Backside events</span><input type="checkbox" id="t-back" checked></div>
     <div class="row"><span>Rotate Sun</span><input type="checkbox" id="t-rotate" checked></div>
@@ -572,11 +572,13 @@ const settings = {
   base: 5, scale: 3, max: 120,
   cC: '#ffd166', cM: '#ff6b35', cX: '#ff3860',
   cSun: '#ffaa33', cGrid: '#5a4a2a',
-  glow: true, trails: false, grat: true, back: true, rotate: true,
+  glow: true, grat: true, back: true, rotate: true,
+  showC: true, showM: true, showX: true,
   view: 'disk',
 };
 
 let flares = [];
+let hasQueried = false; // preserve user's dates after first successful fetch
 let activeCircles = [];
 let simTime = 0;
 let datasetStart = 0;
@@ -626,16 +628,17 @@ function parseClass(s) {
   return { letter, mag };
 }
 
-const CLASS_RANK = { A: 0, B: 1, C: 2, M: 3, X: 4 };
+const CLASS_RANK = { C: 0, M: 1, X: 2 };
 
 function colorForClass(letter) {
   if (letter === 'X') return settings.cX;
   if (letter === 'M') return settings.cM;
-  return settings.cC;
+  if (letter === 'C') return settings.cC;
+  return settings.cC; // C, B, A all use C color
 }
 
 function classRadiusMultiplier(letter, mag) {
-  const k = { A: 0.5, B: 0.7, C: 1.0, M: 1.6, X: 2.6 }[letter] || 1.0;
+  const k = { C: 1.0, M: 1.6, X: 2.6 }[letter] || 1.0;
   return k * (1 + Math.log10(Math.max(mag, 0.1)) * 0.25);
 }
 
@@ -728,14 +731,9 @@ function project(lat, lon, isBackside) {
 
 /* ───────── Background draw ───────── */
 function drawBackground() {
-  if (settings.trails) {
-    ctx.fillStyle = 'rgba(5,7,15,0.12)';
-    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-  } else {
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    ctx.fillStyle = '#05070f';
-    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-  }
+  ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  ctx.fillStyle = '#05070f';
+  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
   simRotAngle = settings.rotate ? simTime * SUN_ROT_RATE : 0;
   if (settings.view === 'disk') drawSunDisk();
@@ -864,7 +862,8 @@ function drawFlatMap() {
 function drawCircle(c, realNow) {
   const age = (realNow - c.startReal) / 1000; // real seconds
   const life = settings.fade;
-  if (age > life) { c.dead = true; return; }
+  if (age > life) { c.dead = true; return; } // always expire, even when class is hidden
+  if (!settings['show' + c.classLetter]) return; // skip drawing but keep alive until natural expiry
   const norm = age / life;
   const alpha = 1 - norm;
 
@@ -970,6 +969,7 @@ function frame(now) {
         activeCircles.push({
           lat: f.lat, lon: f.lon,
           backside: f.backside,
+          classLetter: f.classLetter,
           color: colorForClass(f.classLetter),
           radMult: classRadiusMultiplier(f.classLetter, f.classMag),
           startSim: simTime,
@@ -1133,9 +1133,27 @@ bindRange('s-max',   'max',   v => v.toFixed(0));
 ['cC','cM','cX','cSun','cGrid'].forEach(k => {
   $('s-' + k).addEventListener('input', e => settings[k] = e.target.value);
 });
-['glow','trails','grat','back','rotate'].forEach(k => {
+['grat','back','rotate'].forEach(k => {
   $('t-' + k).addEventListener('change', e => { settings[k] = e.target.checked; });
 });
+
+['C','M','X'].forEach(cls => {
+  $('t-show' + cls).addEventListener('change', e => { settings['show' + cls] = e.target.checked; });
+});
+
+function updateClassToggles(minClass) {
+  const minRank = CLASS_RANK[minClass] ?? 0;
+  ['C','M','X'].forEach(cls => {
+    const cb  = $('t-show' + cls);
+    const row = $('row-show' + cls);
+    const available = (CLASS_RANK[cls] ?? -1) >= minRank;
+    cb.disabled = !available;
+    row.style.opacity = available ? '' : '0.4';
+    // Force-uncheck classes that are below the query minimum; restore when available
+    cb.checked = available;
+    settings['show' + cls] = available;
+  });
+}
 
 $('view-disk').onclick = () => setView('disk');
 $('view-flat').onclick = () => setView('flat');
@@ -1182,8 +1200,11 @@ function updateTooltip(mx, my) {
 function openQueryModal() {
   $('query-modal').classList.remove('hidden');
   $('hud').classList.add('hidden');
-  $('q-end').value = todayStr(0);
-  $('q-start').value = todayStr(-30);
+  // Only default dates on the very first open; after that preserve the user's range
+  if (!hasQueried) {
+    $('q-end').value = todayStr(0);
+    $('q-start').value = todayStr(-30);
+  }
   $('q-err').textContent = '';
   $('q-warn').textContent = '';
 }
@@ -1218,7 +1239,10 @@ async function doFetch() {
   if (!start || !end) { $('q-err').textContent = 'Pick a start and end date.'; return; }
   if (new Date(start) >= new Date(end)) { $('q-err').textContent = 'End must be after start.'; return; }
 
-  const cacheKey = `donki:${start}:${end}:${minClass}`;
+  // Key on dates + apiKey only — class filtering is client-side, so minClass must NOT be
+  // part of the key, otherwise switching class forces a new API request that can 429-fail
+  // and leave the old flares array on screen.
+  const cacheKey = `donki:${start}:${end}:${apiKey}`;
   let raw = null;
   try { raw = JSON.parse(sessionStorage.getItem(cacheKey) || 'null'); } catch (e) {}
 
@@ -1228,12 +1252,15 @@ async function doFetch() {
     try {
       const url = `https://api.nasa.gov/DONKI/FLR?startDate=${start}&endDate=${end}&api_key=${encodeURIComponent(apiKey)}`;
       const resp = await fetch(url);
+      if (resp.status === 429) throw new Error('429');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       raw = await resp.json();
       try { sessionStorage.setItem(cacheKey, JSON.stringify(raw)); } catch(e) {}
     } catch (err) {
       $('loading').classList.remove('show');
-      $('q-err').textContent = 'Fetch failed: ' + err.message;
+      $('q-err').textContent = err.message === '429'
+        ? 'Rate limit hit (429) — DEMO_KEY allows ~30 requests/hr shared across all visitors. Get a free personal key at api.nasa.gov to raise this to 1,000/hr.'
+        : 'Fetch failed: ' + err.message;
       return;
     }
     $('loading').classList.remove('show');
@@ -1293,6 +1320,8 @@ async function doFetch() {
   animPaused = false;
   $('h-play').textContent = '❚❚';
   $('h-total').textContent = flares.length;
+  hasQueried = true;
+  updateClassToggles(minClass);
 
   closeQueryModal();
 }
