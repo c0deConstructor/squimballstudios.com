@@ -16,6 +16,10 @@ function clientIP(): string {
     return '0.0.0.0';
 }
 
+function makeToken(): string {
+    return bin2hex(random_bytes(16));
+}
+
 // Create data dir + block direct HTTP access on first run
 if (!is_dir($dataDir)) {
     mkdir($dataDir, 0755, true);
@@ -29,14 +33,35 @@ flock($fp, LOCK_EX);
 
 $raw = stream_get_contents($fp);
 $db  = ($raw !== '') ? json_decode($raw, true) : null;
-if (!is_array($db)) $db = ['seq' => 0, 'v' => []];
+if (!is_array($db)) $db = ['seq' => 0, 'v' => [], 't' => []];
+if (!isset($db['t'])) $db['t'] = []; // migrate older files that lack token table
 
-// Store SHA-256 hash of IP — never the raw address
-$key = hash('sha256', clientIP());
-if (!isset($db['v'][$key])) {
-    $db['v'][$key] = ++$db['seq'];
+$clientToken = $_GET['tok'] ?? '';
+$ipKey       = hash('sha256', clientIP());
+$n           = null;
+$retToken    = null;
+
+// 1. Token lookup — returning visitor regardless of IP change
+if ($clientToken !== '' && isset($db['t'][$clientToken])) {
+    $n        = $db['t'][$clientToken];
+    $retToken = $clientToken; // same token, no need to issue a new one
 }
-$n = $db['v'][$key];
+
+// 2. IP hash lookup — same IP, no token yet (or token not found)
+if ($n === null && isset($db['v'][$ipKey])) {
+    $n = $db['v'][$ipKey];
+    // Issue a token now so future IP-change visits still resolve to this number
+    $retToken       = makeToken();
+    $db['t'][$retToken] = $n;
+}
+
+// 3. Brand new visitor
+if ($n === null) {
+    $n              = ++$db['seq'];
+    $db['v'][$ipKey] = $n;
+    $retToken        = makeToken();
+    $db['t'][$retToken] = $n;
+}
 
 rewind($fp);
 ftruncate($fp, 0);
@@ -44,4 +69,4 @@ fwrite($fp, json_encode($db));
 flock($fp, LOCK_UN);
 fclose($fp);
 
-echo json_encode(['n' => $n]);
+echo json_encode(['n' => $n, 'tok' => $retToken]);

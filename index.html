@@ -381,13 +381,19 @@
   show(!isNaN(_urlP) && _urlP >= 0 && _urlP < pgBtns.length ? _urlP : 0);
 
   /* ── visitor counter ─────────────────────────────────── */
-  fetch('counter.php')
-    .then(r => r.json())
-    .then(d => {
-      if (d.n) document.getElementById('visitor-label').textContent =
-        'unique visitor #' + d.n.toLocaleString();
-    })
-    .catch(() => {}); // silently fail if PHP isn't available (e.g. local file browsing)
+  {
+    const _tok = localStorage.getItem('sq_vt') || '';
+    fetch('counter.php' + (_tok ? '?tok=' + encodeURIComponent(_tok) : ''))
+      .then(r => r.json())
+      .then(d => {
+        if (d.n) {
+          document.getElementById('visitor-label').textContent =
+            'unique visitor #' + d.n.toLocaleString();
+          if (d.tok) localStorage.setItem('sq_vt', d.tok);
+        }
+      })
+      .catch(() => {}); // silently fail if PHP isn't available (e.g. local file browsing)
+  }
 </script>
 </body>
 </html>
