@@ -306,7 +306,7 @@
 ════════════════════════════════════════════════════════ -->
 <main id="content">
   <div id="placeholder">select a page ↑</div>
-  <iframe class="page-frame active" id="frame-0" src="pages/home.html"                                    title="Home"></iframe>
+  <iframe class="page-frame active" id="frame-0" data-src="pages/home.html" src=""                         title="Home"></iframe>
   <iframe class="page-frame"        id="frame-1" data-src="pages/gravity_simulator1.html"  src=""          title="Gravity Simulator 1"></iframe>
   <iframe class="page-frame"        id="frame-2" data-src="pages/earthquake_animator.html" src=""          title="Earthquake Animator"></iframe>
   <iframe class="page-frame"        id="frame-3" data-src="pages/solar_flare_map.html"     src=""          title="Solar Flare Map"></iframe>
@@ -320,16 +320,20 @@
 
   function show(idx) {
     idx = Math.max(0, Math.min(pgBtns.length - 1, idx));
+    if (idx === current && frames[current].src && frames[current].src !== 'about:blank') return;
     closeAllPanels();
+
+    // Unload the leaving frame so its RAF / physics loops fully terminate
+    const leaving = frames[current];
+    if (leaving.src && leaving.src !== 'about:blank') leaving.src = 'about:blank';
     pgBtns[current].classList.remove('active');
-    frames[current].classList.remove('active');
+    leaving.classList.remove('active');
+
     current = idx;
-    // Lazy-load frames that start with data-src so they initialize with real dimensions
+
+    // Load (or reload) the arriving frame fresh — correct dimensions guaranteed
     const f = frames[current];
-    if (f.dataset.src && !f.dataset.loaded) {
-      f.src = f.dataset.src;
-      f.dataset.loaded = '1';
-    }
+    f.src = f.dataset.src;
     pgBtns[current].classList.add('active');
     f.classList.add('active');
     document.getElementById('placeholder').style.display = 'none';
