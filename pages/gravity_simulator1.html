@@ -1,660 +1,693 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Squimball Studios - Gravity Sim 1</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gravity Simulator — WebGL</title>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}
+</script>
+
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap" rel="stylesheet">
+
 <style>
-  *, *::before, *::after { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow: hidden; background: #000; height: 100%; font-family: 'Share Tech Mono', monospace; }
 
-  html, body {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    background: #000;
-    height: 100%;
-    font-family: 'Share Tech Mono', monospace;
-  }
+  #gl-container { position: fixed; inset: 0; z-index: 0; cursor: none; }
 
-  canvas {
-    display: block;
-    cursor: none;
-    position: fixed;
-    top: 0; left: 0;
-  }
-
-  /* ---- CONTROL PANEL ---- */
+  /* ── PANEL ── */
   #panel {
-    position: fixed;
-    top: 0; left: 0;
-    height: 100vh;
-    width: 230px;
-    background: rgba(0,0,0,0.72);
-    border-right: 1px solid rgba(255,255,255,0.07);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    z-index: 20;
-    display: flex;
-    flex-direction: column;
-    padding: 18px 16px 16px;
-    gap: 0;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.12) transparent;
+    position: fixed; top: 0; left: 0; height: 100vh; width: 240px;
+    background: rgba(0,0,0,0.76); border-right: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(14px); z-index: 20;
+    display: flex; flex-direction: column;
+    padding: 18px 16px 16px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
     transition: transform 0.35s cubic-bezier(.77,0,.175,1);
   }
-
-  #panel.hidden {
-    transform: translateX(-230px);
-  }
+  #panel.hidden { transform: translateX(-240px); }
 
   #panel-title {
-    font-family: 'Exo 2', sans-serif;
-    font-weight: 600;
-    font-size: 11px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.35);
-    margin-bottom: 16px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
+    font-family: 'Exo 2', sans-serif; font-weight: 600;
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: rgba(255,255,255,0.32); margin-bottom: 16px;
+    padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.07);
   }
 
-  .section-label {
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.22);
-    margin: 14px 0 8px;
+  .sec-label {
+    font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: rgba(255,255,255,0.2); margin: 14px 0 8px;
   }
 
-  .control-row {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin-bottom: 10px;
-  }
-
-  .ctrl-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-
-  .ctrl-label {
-    font-size: 10.5px;
-    color: rgba(255,255,255,0.55);
-    letter-spacing: 0.04em;
-  }
-
-  .ctrl-value {
-    font-size: 10px;
-    color: rgba(120,220,255,0.85);
-    min-width: 40px;
-    text-align: right;
-  }
+  .ctrl-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+  .ctrl-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .ctrl-lbl { font-size: 10.5px; color: rgba(255,255,255,0.5); letter-spacing: 0.04em; }
+  .ctrl-val { font-size: 10px; color: rgba(120,220,255,0.85); min-width: 44px; text-align: right; }
 
   input[type=range] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 3px;
-    background: rgba(255,255,255,0.1);
-    border-radius: 2px;
-    outline: none;
-    cursor: pointer;
-    transition: background 0.2s;
+    -webkit-appearance: none; width: 100%; height: 3px;
+    background: rgba(255,255,255,0.1); border-radius: 2px; outline: none; cursor: pointer;
   }
-
-  input[type=range]:hover {
-    background: rgba(255,255,255,0.17);
-  }
-
   input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    background: rgba(120,220,255,0.9);
-    box-shadow: 0 0 8px rgba(120,220,255,0.5);
-    cursor: pointer;
-    transition: box-shadow 0.15s, transform 0.15s;
+    -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
+    background: rgba(120,220,255,0.9); box-shadow: 0 0 8px rgba(120,220,255,0.5); cursor: pointer;
   }
-
-  input[type=range]::-webkit-slider-thumb:hover {
-    box-shadow: 0 0 14px rgba(120,220,255,0.8);
-    transform: scale(1.2);
-  }
-
   input[type=range]::-moz-range-thumb {
-    width: 13px;
-    height: 13px;
-    border: none;
-    border-radius: 50%;
+    width: 13px; height: 13px; border: none; border-radius: 50%;
     background: rgba(120,220,255,0.9);
-    box-shadow: 0 0 8px rgba(120,220,255,0.5);
-    cursor: pointer;
   }
 
-  /* ---- RESET BUTTON ---- */
-  #resetBtn {
-    margin-top: auto;
-    padding-top: 14px;
-    border-top: 1px solid rgba(255,255,255,0.07);
-    width: 100%;
-    padding-bottom: 2px;
-  }
+  .divider { height: 1px; background: rgba(255,255,255,0.06); margin: 4px 0 2px; }
 
+  /* theme buttons */
+  .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 10px; }
+  .theme-btn {
+    padding: 6px 4px; background: transparent; border: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.45); font-family: 'Share Tech Mono', monospace;
+    font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
+    border-radius: 2px; transition: all 0.15s;
+  }
+  .theme-btn:hover { border-color: rgba(255,255,255,0.35); color: rgba(255,255,255,0.8); }
+  .theme-btn.active { border-color: rgba(120,220,255,0.7); color: rgba(120,220,255,0.9); background: rgba(120,220,255,0.06); }
+
+  /* mode buttons */
+  .mode-row { display: flex; gap: 5px; margin-bottom: 10px; }
+  .mode-btn {
+    flex: 1; padding: 7px 4px; background: transparent;
+    border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.45);
+    font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+    text-transform: uppercase; cursor: pointer; border-radius: 2px; transition: all 0.15s;
+  }
+  .mode-btn:hover { border-color: rgba(255,255,255,0.35); color: rgba(255,255,255,0.8); }
+  .mode-btn.active { border-color: rgba(255,80,80,0.7); color: rgba(255,120,120,0.9); background: rgba(255,80,80,0.06); }
+
+  /* hint text */
+  .hint { font-size: 9px; color: rgba(255,255,255,0.2); letter-spacing: 0.06em; line-height: 1.7; margin-bottom: 8px; }
+  .hint b { color: rgba(120,220,255,0.5); }
+
+  #resetBtn { margin-top: auto; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.07); }
   #resetBtn button {
-    width: 100%;
-    padding: 9px 0;
-    background: transparent;
-    border: 1px solid rgba(255,80,80,0.4);
-    color: rgba(255,110,110,0.85);
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10.5px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    cursor: pointer;
-    border-radius: 3px;
+    width: 100%; padding: 9px 0; background: transparent;
+    border: 1px solid rgba(255,80,80,0.4); color: rgba(255,110,110,0.8);
+    font-family: 'Share Tech Mono', monospace; font-size: 10.5px;
+    letter-spacing: 0.15em; text-transform: uppercase; cursor: pointer; border-radius: 3px;
     transition: all 0.2s;
   }
+  #resetBtn button:hover { background: rgba(255,60,60,0.12); border-color: rgba(255,80,80,0.75); color: rgba(255,150,150,1); }
 
-  #resetBtn button:hover {
-    background: rgba(255,60,60,0.12);
-    border-color: rgba(255,80,80,0.75);
-    color: rgba(255,140,140,1);
-    box-shadow: 0 0 14px rgba(255,60,60,0.2);
-  }
-
-  #resetBtn button:active {
-    transform: scale(0.97);
-  }
-
-  /* ---- TOGGLE TAB ---- */
+  /* toggle tab */
   #toggleBtn {
-    position: fixed;
-    top: 50%;
-    left: 230px;
-    transform: translateY(-50%);
-    z-index: 25;
-    background: rgba(0,0,0,0.65);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-left: none;
-    color: rgba(255,255,255,0.4);
-    font-size: 11px;
-    padding: 10px 5px;
-    cursor: pointer;
-    writing-mode: vertical-rl;
-    letter-spacing: 0.12em;
-    font-family: 'Share Tech Mono', monospace;
-    text-transform: uppercase;
-    border-radius: 0 4px 4px 0;
+    position: fixed; top: 50%; left: 240px; transform: translateY(-50%); z-index: 25;
+    background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.1); border-left: none;
+    color: rgba(255,255,255,0.35); font-size: 11px; padding: 10px 5px; cursor: pointer;
+    writing-mode: vertical-rl; letter-spacing: 0.12em; font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase; border-radius: 0 4px 4px 0;
     transition: left 0.35s cubic-bezier(.77,0,.175,1), color 0.2s;
-    backdrop-filter: blur(8px);
-    user-select: none;
+    backdrop-filter: blur(8px); user-select: none;
+  }
+  #toggleBtn:hover { color: rgba(255,255,255,0.7); }
+  #toggleBtn.panel-hidden { left: 0; }
+
+  /* attractor counter */
+  #attr-counter {
+    position: fixed; bottom: 14px; right: 16px; z-index: 20;
+    font-size: 9px; letter-spacing: 0.14em; color: rgba(255,255,255,0.2);
+    text-transform: uppercase; pointer-events: none;
   }
 
-  #toggleBtn:hover {
-    color: rgba(255,255,255,0.75);
+  /* start overlay */
+  #startOverlay {
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.92); color: #fff; cursor: pointer; gap: 12px;
   }
-
-  #toggleBtn.panel-hidden {
-    left: 0;
-  }
-
-  /* ---- START OVERLAY ---- */
-  #startButton {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    background: rgba(0,0,0,0.88);
-    color: white;
-    font-family: 'Exo 2', sans-serif;
-    font-weight: 300;
-    font-size: 22px;
-    cursor: pointer;
-    z-index: 30;
-    letter-spacing: 0.08em;
-    gap: 10px;
-  }
-
-  #startButton span {
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    color: rgba(255,255,255,0.38);
-    text-transform: uppercase;
-  }
-
-  .divider {
-    height: 1px;
-    background: rgba(255,255,255,0.06);
-    margin: 4px 0 2px;
-  } 
+  #startOverlay h1 { font-family: 'Exo 2', sans-serif; font-weight: 300; font-size: 26px; letter-spacing: 0.1em; }
+  #startOverlay .sub { font-size: 11px; letter-spacing: 0.2em; color: rgba(255,255,255,0.3); text-transform: uppercase; text-align: center; line-height: 2; }
+  #startOverlay .key { color: rgba(120,220,255,0.6); }
 </style>
 </head>
 <body>
 
-<div id="startButton">
-  Click to Start
-  <span>Hold Mouse to Attract</span>
+<div id="gl-container"></div>
+
+<div id="startOverlay">
+  <h1>Gravity Simulator</h1>
+  <div class="sub">
+    <span class="key">Left-hold</span> to attract &nbsp;·&nbsp; <span class="key">Space</span> to repel<br>
+    <span class="key">Right-click</span> to plant attractors &nbsp;·&nbsp; <span class="key">Click attractor</span> to toggle repulsion<br>
+    Click anywhere to begin
+  </div>
 </div>
 
-<!-- CONTROL PANEL -->
+<!-- PANEL -->
 <div id="panel">
   <div id="panel-title">⟁ Gravity Controls</div>
 
-  <div class="section-label">Simulation</div>
+  <div class="sec-label">Simulation</div>
 
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Particle Count</span>
-      <span class="ctrl-value" id="val-PARTICLE_COUNT">20000</span>
-    </div>
-    <input type="range" id="sl-PARTICLE_COUNT" min="1000" max="80000" step="1000" value="20000">
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Particle Count</span><span class="ctrl-val" id="val-COUNT">50 000</span></div>
+    <input type="range" id="sl-COUNT" min="5000" max="150000" step="5000" value="50000">
   </div>
-
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Base Gravity</span>
-      <span class="ctrl-value" id="val-BASE_GRAVITY">0.020</span>
-    </div>
-    <input type="range" id="sl-BASE_GRAVITY" min="0" max="0.15" step="0.001" value="0.02">
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Base Gravity</span><span class="ctrl-val" id="val-GRAV">0.020</span></div>
+    <input type="range" id="sl-GRAV" min="0" max="0.15" step="0.001" value="0.02">
   </div>
-
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Max Gravity</span>
-      <span class="ctrl-value" id="val-MAX_GRAVITY">0.350</span>
-    </div>
-    <input type="range" id="sl-MAX_GRAVITY" min="0.05" max="1.0" step="0.005" value="0.35">
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Max Gravity</span><span class="ctrl-val" id="val-MAXG">0.350</span></div>
+    <input type="range" id="sl-MAXG" min="0.05" max="1.0" step="0.005" value="0.35">
   </div>
-
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Stillness Rate</span>
-      <span class="ctrl-value" id="val-STILLNESS_RATE">0.0008</span>
-    </div>
-    <input type="range" id="sl-STILLNESS_RATE" min="0.0001" max="0.005" step="0.0001" value="0.0008">
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Stillness Rate</span><span class="ctrl-val" id="val-STILL">0.0008</span></div>
+    <input type="range" id="sl-STILL" min="0.0001" max="0.005" step="0.0001" value="0.0008">
   </div>
-
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Damping</span>
-      <span class="ctrl-value" id="val-DAMPING">0.9950</span>
-    </div>
-    <input type="range" id="sl-DAMPING" min="0.95" max="1.0" step="0.0001" value="0.995">
-  </div>
-
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Particle Size</span>
-      <span class="ctrl-value" id="val-PARTICLE_SIZE">1.00</span>
-    </div>
-    <input type="range" id="sl-PARTICLE_SIZE" min="0.1" max="2" step="0.01" value="1">
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Damping</span><span class="ctrl-val" id="val-DAMP">0.9950</span></div>
+    <input type="range" id="sl-DAMP" min="0.95" max="1.0" step="0.0001" value="0.995">
   </div>
 
   <div class="divider"></div>
-  <div class="section-label">Audio</div>
+  <div class="sec-label">Visuals</div>
 
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Min Frequency</span>
-      <span class="ctrl-value" id="val-MIN_FREQ">15 Hz</span>
-    </div>
-    <input type="range" id="sl-MIN_FREQ" min="10" max="200" step="1" value="15">
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Particle Size</span><span class="ctrl-val" id="val-SIZE">1.5</span></div>
+    <input type="range" id="sl-SIZE" min="0.5" max="5" step="0.1" value="2">
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Trail Length</span><span class="ctrl-val" id="val-TRAIL">0.50</span></div>
+    <input type="range" id="sl-TRAIL" min="0" max="0.995" step="0.005" value="0.5">
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Speed Sensitivity</span><span class="ctrl-val" id="val-SENS">4.0</span></div>
+    <input type="range" id="sl-SENS" min="0.5" max="20" step="0.5" value="4">
   </div>
 
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Max Frequency</span>
-      <span class="ctrl-value" id="val-MAX_FREQ">750 Hz</span>
-    </div>
-    <input type="range" id="sl-MAX_FREQ" min="50" max="1000" step="5" value="750">
+  <div class="sec-label">Color Theme</div>
+  <div class="theme-grid">
+    <button class="theme-btn active" data-theme="electric">Electric</button>
+    <button class="theme-btn" data-theme="fire">Fire</button>
+    <button class="theme-btn" data-theme="plasma">Plasma</button>
+    <button class="theme-btn" data-theme="emerald">Emerald</button>
   </div>
 
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Volume</span>
-      <span class="ctrl-value" id="val-VOLUME">0.00</span>
-    </div>
-    <input type="range" id="sl-VOLUME" min="0" max="0.01" step="0.0001" value="0">
+  <div class="sec-label">Attractor Mode</div>
+  <div class="mode-row">
+    <button class="mode-btn active" id="mode-attract">Attract</button>
+    <button class="mode-btn" id="mode-repel">Repel</button>
+  </div>
+  <div class="hint">
+    <b>Right-click</b> canvas to plant/remove anchors (max 5)<br>
+    <b>Click anchor</b> to toggle attract/repel<br>
+    <b>Space</b> to temporarily repel mouse
   </div>
 
   <div class="divider"></div>
-  <div class="section-label">Cursor Glow</div>
+  <div class="sec-label">Audio</div>
 
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Core (Idle)</span>
-      <span class="ctrl-value" id="val-CORE_RADIUS_IDLE">3</span>
-    </div>
-    <input type="range" id="sl-CORE_RADIUS_IDLE" min="1" max="20" step="0.5" value="3">
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Volume</span><span class="ctrl-val" id="val-VOL">0.00</span></div>
+    <input type="range" id="sl-VOL" min="0" max="0.01" step="0.0001" value="0">
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Min Frequency</span><span class="ctrl-val" id="val-FMIN">15 Hz</span></div>
+    <input type="range" id="sl-FMIN" min="10" max="200" step="1" value="15">
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-head"><span class="ctrl-lbl">Max Frequency</span><span class="ctrl-val" id="val-FMAX">750 Hz</span></div>
+    <input type="range" id="sl-FMAX" min="50" max="1000" step="5" value="750">
   </div>
 
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Field (Idle)</span>
-      <span class="ctrl-value" id="val-FIELD_RADIUS_IDLE">18</span>
-    </div>
-    <input type="range" id="sl-FIELD_RADIUS_IDLE" min="5" max="80" step="1" value="18">
-  </div>
-
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Core (Active)</span>
-      <span class="ctrl-value" id="val-CORE_RADIUS_ACTIVE">6</span>
-    </div>
-    <input type="range" id="sl-CORE_RADIUS_ACTIVE" min="1" max="30" step="0.5" value="6">
-  </div>
-
-  <div class="control-row">
-    <div class="ctrl-header">
-      <span class="ctrl-label">Field (Active)</span>
-      <span class="ctrl-value" id="val-FIELD_RADIUS_ACTIVE">45</span>
-    </div>
-    <input type="range" id="sl-FIELD_RADIUS_ACTIVE" min="10" max="150" step="1" value="45">
-  </div>
-
-  <div id="resetBtn">
-    <button id="resetSimBtn">⟳ Reset Simulation</button>
-  </div>
+  <div id="resetBtn"><button id="resetSimBtn">⟳ Reset Simulation</button></div>
 </div>
 
-<!-- PANEL TOGGLE TAB -->
 <div id="toggleBtn">Controls</div>
+<div id="attr-counter"></div>
 
-<canvas id="canvas"></canvas>
+<script type="module">
+'use strict';
+import * as THREE from 'three';
 
-<script>
-/* =======================
-   LIVE VARIABLES (defaults)
-   ======================= */
-let cfg = {
-  PARTICLE_COUNT:      20000,
-  BASE_GRAVITY:        0.02,
-  MAX_GRAVITY:         0.35,
-  STILLNESS_RATE:      0.0008,
-  DAMPING:             0.995,
-  MIN_FREQ:            15,
-  MAX_FREQ:            700,
-  VOLUME:              0.0,
-  CORE_RADIUS_IDLE:    3,
-  FIELD_RADIUS_IDLE:   18,
-  CORE_RADIUS_ACTIVE:  6,
-  FIELD_RADIUS_ACTIVE: 45,
-  PARTICLE_SIZE:       1.0,
+/* ── DPR ── */
+const DPR = Math.min(window.devicePixelRatio, 2);
+
+/* ── Config ── */
+const cfg = {
+  COUNT: 50000, GRAV: 0.02, MAXG: 0.35, STILL: 0.0008, DAMP: 0.995,
+  SIZE: 2.0, TRAIL: 0.5, SENS: 4.0,
+  VOL: 0, FMIN: 15, FMAX: 750,
+  repelMouse: false,  // space bar
+  attractorSign: 1,   // default placed attractors attract
 };
 
-/* =======================
-   SLIDER WIRING
-   ======================= */
-const formatters = {
-  PARTICLE_COUNT:      v => Math.round(v).toLocaleString(),
-  BASE_GRAVITY:        v => parseFloat(v).toFixed(3),
-  MAX_GRAVITY:         v => parseFloat(v).toFixed(3),
-  STILLNESS_RATE:      v => parseFloat(v).toFixed(4),
-  DAMPING:             v => parseFloat(v).toFixed(4),
-  MIN_FREQ:            v => `${Math.round(v)} Hz`,
-  MAX_FREQ:            v => `${Math.round(v)} Hz`,
-  VOLUME:              v => parseFloat(v).toFixed(2),
-  CORE_RADIUS_IDLE:    v => parseFloat(v).toFixed(1),
-  FIELD_RADIUS_IDLE:   v => Math.round(v),
-  CORE_RADIUS_ACTIVE:  v => parseFloat(v).toFixed(1),
-  FIELD_RADIUS_ACTIVE: v => Math.round(v),
-  PARTICLE_SIZE:       v => parseFloat(v).toFixed(2),
+/* ── Color themes ── */
+const THEMES = {
+  electric: { low: [0.01, 0.05, 0.35], mid: [0.0,  0.78, 1.0 ], high: [1.0, 1.0, 1.0 ] },
+  fire:     { low: [0.30, 0.01, 0.00], mid: [1.0,  0.38, 0.0 ], high: [1.0, 1.0, 0.55] },
+  plasma:   { low: [0.25, 0.00, 0.45], mid: [0.95, 0.00, 0.85], high: [1.0, 0.8, 1.0 ] },
+  emerald:  { low: [0.00, 0.12, 0.08], mid: [0.00, 0.80, 0.38], high: [0.75,1.0, 0.55] },
 };
+let activeTheme = 'electric';
 
-for (const key of Object.keys(cfg)) {
-  const slider = document.getElementById(`sl-${key}`);
-  const valEl  = document.getElementById(`val-${key}`);
-  if (!slider) continue;
+/* ── Three.js renderer ── */
+const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, preserveDrawingBuffer: true });
+renderer.setPixelRatio(DPR);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.autoClear = false;
+document.getElementById('gl-container').appendChild(renderer.domElement);
 
-  slider.addEventListener('input', () => {
-    cfg[key] = parseFloat(slider.value);
-    valEl.textContent = formatters[key](slider.value);
+let W = window.innerWidth, H = window.innerHeight;
+let W2 = W / 2, H2 = H / 2;
 
-    // Live-update audio if running
-    if (key === 'VOLUME' && gain) {
-      gain.gain.setTargetAtTime(cfg.VOLUME, audioCtx.currentTime, 0.05);
+/* ── Orthographic camera (screen-space coords) ── */
+const camera = new THREE.OrthographicCamera(-W2, W2, H2, -H2, -1, 1);
+const scene   = new THREE.Scene();
+
+/* ── Fade quad (trails) ── */
+const fadeGeo  = new THREE.PlaneGeometry(1, 1);
+const fadeMat  = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.03 });
+const fadeQuad = new THREE.Mesh(fadeGeo, fadeMat);
+fadeQuad.scale.set(W, H, 1);
+fadeQuad.renderOrder = 0;
+scene.add(fadeQuad);
+
+/* ── Particle typed arrays ── */
+const MAX     = 150000;
+const posArr  = new Float32Array(MAX * 2); // world x,y
+const velArr  = new Float32Array(MAX * 2);
+const pos3Buf = new Float32Array(MAX * 3); // Three.js position
+const spdBuf  = new Float32Array(MAX);
+
+/* ── Particle geometry ── */
+const geom = new THREE.BufferGeometry();
+const posAttr = new THREE.BufferAttribute(pos3Buf, 3); posAttr.setUsage(THREE.DynamicDrawUsage);
+const spdAttr = new THREE.BufferAttribute(spdBuf,  1); spdAttr.setUsage(THREE.DynamicDrawUsage);
+geom.setAttribute('position', posAttr);
+geom.setAttribute('aSpeed',   spdAttr);
+geom.setDrawRange(0, cfg.COUNT);
+
+/* ── Particle shader ── */
+const VERT = /* glsl */`
+  attribute float aSpeed;
+  uniform float uSens;
+  uniform float uSize;
+  varying float vT;
+  void main() {
+    vT = clamp(aSpeed / uSens, 0.0, 1.0);
+    gl_Position   = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize  = uSize;
+  }
+`;
+const FRAG = /* glsl */`
+  uniform vec3 uColLow;
+  uniform vec3 uColMid;
+  uniform vec3 uColHigh;
+  varying float vT;
+  void main() {
+    vec2 uv  = gl_PointCoord * 2.0 - 1.0;
+    float d  = length(uv);
+    float a  = exp(-d * d * 4.5);
+    if (a < 0.008) discard;
+    vec3 col = vT < 0.5
+      ? mix(uColLow, uColMid,  vT * 2.0)
+      : mix(uColMid, uColHigh, (vT - 0.5) * 2.0);
+    gl_FragColor = vec4(col * a, a);
+  }
+`;
+
+const partMat = new THREE.ShaderMaterial({
+  vertexShader:   VERT,
+  fragmentShader: FRAG,
+  uniforms: {
+    uSens:    { value: cfg.SENS * DPR },
+    uSize:    { value: cfg.SIZE * DPR },
+    uColLow:  { value: new THREE.Vector3(...THEMES.electric.low)  },
+    uColMid:  { value: new THREE.Vector3(...THEMES.electric.mid)  },
+    uColHigh: { value: new THREE.Vector3(...THEMES.electric.high) },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthTest: false,
+  depthWrite: false,
+});
+const points = new THREE.Points(geom, partMat);
+points.renderOrder = 2;
+scene.add(points);
+
+/* ── Cursor glow ── */
+function makeGlowTex(inner, outer) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const cx = cv.getContext('2d');
+  const g  = cx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0,    inner);
+  g.addColorStop(0.18, outer);
+  g.addColorStop(1,    'rgba(0,0,0,0)');
+  cx.fillStyle = g; cx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(cv);
+}
+const cursorCoreTex  = makeGlowTex('rgba(255,255,255,1)',   'rgba(180,230,255,0.6)');
+const cursorGlowTex  = makeGlowTex('rgba(80,180,255,0.35)', 'rgba(30,100,200,0.08)');
+const mkSprite = (tex, sz) => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
+  s.scale.set(sz, sz, 1); s.renderOrder = 4; scene.add(s); return s;
+};
+const cursorCore = mkSprite(cursorCoreTex, 12);
+const cursorGlow = mkSprite(cursorGlowTex, 80);
+// repulsion ring texture
+const repulseGlowTex = makeGlowTex('rgba(255,100,100,0.5)', 'rgba(200,40,40,0.1)');
+const repulseCore    = mkSprite(new THREE.CanvasTexture((() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const cx = cv.getContext('2d');
+  const g = cx.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,'rgba(255,120,120,1)'); g.addColorStop(0.2,'rgba(220,60,60,0.5)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  cx.fillStyle=g; cx.fillRect(0,0,128,128); return cv;
+})()), 14);
+repulseCore.visible = false;
+const repulseGlow = mkSprite(repulseGlowTex, 100);
+repulseGlow.visible = false;
+
+/* ── Attractor anchor helpers ── */
+const anchors = []; // { wx, wy, sign, mesh }
+const MAX_ANCHORS = 5;
+
+function makeAnchorRing(sign) {
+  const segs = 64, pts = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a), Math.sin(a), 0));
+  }
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  const col = sign > 0 ? 0x00ccff : 0xff4040;
+  const m = new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 }));
+  m.renderOrder = 1;
+  return m;
+}
+
+function addAnchor(wx, wy, sign) {
+  if (anchors.length >= MAX_ANCHORS) return;
+  const mesh = makeAnchorRing(sign);
+  mesh.position.set(wx, wy, 0);
+  mesh.scale.setScalar(22);
+  scene.add(mesh);
+  anchors.push({ wx, wy, sign, mesh });
+  updateAttrCounter();
+}
+
+function removeAnchorAt(wx, wy) {
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i];
+    if (Math.hypot(wx - a.wx, wy - a.wy) < 28) {
+      scene.remove(a.mesh); a.mesh.geometry.dispose(); a.mesh.material.dispose();
+      anchors.splice(i, 1);
+      updateAttrCounter();
+      return true;
     }
-  });
+  }
+  return false;
 }
 
-/* =======================
-   PANEL TOGGLE
-   ======================= */
-const panel     = document.getElementById('panel');
-const toggleBtn = document.getElementById('toggleBtn');
-let panelOpen   = true;
-
-toggleBtn.addEventListener('click', () => {
-  panelOpen = !panelOpen;
-  panel.classList.toggle('hidden', !panelOpen);
-  toggleBtn.classList.toggle('panel-hidden', !panelOpen);
-  toggleBtn.textContent = panelOpen ? 'Controls' : 'Controls';
-});
-
-/* =======================
-   CANVAS
-   ======================= */
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-
-function resize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
+function toggleAnchorAt(wx, wy) {
+  for (const a of anchors) {
+    if (Math.hypot(wx - a.wx, wy - a.wy) < 28) {
+      a.sign = -a.sign;
+      a.mesh.material.color.set(a.sign > 0 ? 0x00ccff : 0xff4040);
+      return true;
+    }
+  }
+  return false;
 }
-window.addEventListener("resize", resize);
-resize();
 
-/* =======================
-   MOUSE
-   ======================= */
-let mouse = {
-  x: canvas.width / 2,
-  y: canvas.height / 2,
-  lastX: null,
-  lastY: null,
-  stillTime: 0,
-  down: false
-};
+function updateAttrCounter() {
+  const el = document.getElementById('attr-counter');
+  el.textContent = anchors.length > 0 ? `anchors: ${anchors.length} / ${MAX_ANCHORS}` : '';
+}
 
-window.addEventListener("mousemove", e => {
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
+/* ── Screen ↔ world ── */
+function screenToWorld(sx, sy) { return { wx: sx - W2, wy: -(sy - H2) }; }
+
+/* ── Mouse state ── */
+const mouse = { wx: 0, wy: 0, down: false, stillTime: 0, lastWx: null, lastWy: null };
+let repelKey = false; // space bar
+
+renderer.domElement.addEventListener('mousemove', e => {
+  const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+  mouse.wx = wx; mouse.wy = wy;
 });
-window.addEventListener("mousedown", e => {
-  if (e.button === 0 && !e.target.closest('#panel') && !e.target.closest('#toggleBtn')) {
-    mouse.down = true;
+renderer.domElement.addEventListener('mousedown', e => {
+  if (e.button === 0) mouse.down = true;
+  if (e.button === 2) {
+    e.preventDefault();
+    const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+    if (!toggleAnchorAt(wx, wy)) {
+      if (!removeAnchorAt(wx, wy)) addAnchor(wx, wy, cfg.attractorSign);
+    }
   }
 });
-window.addEventListener("mouseup", e => {
-  if (e.button === 0) mouse.down = false;
-});
+renderer.domElement.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
-/* =======================
-   AUDIO
-   ======================= */
+window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); repelKey = true; } });
+window.addEventListener('keyup',   e => { if (e.code === 'Space') repelKey = false; });
+
+/* ── Particles ── */
+function initParticles() {
+  const count = Math.round(cfg.COUNT);
+  for (let i = 0; i < MAX; i++) {
+    posArr[i*2]   = (Math.random() - 0.5) * W;
+    posArr[i*2+1] = (Math.random() - 0.5) * H;
+    velArr[i*2]   = (Math.random() - 0.5) * 1.5;
+    velArr[i*2+1] = (Math.random() - 0.5) * 1.5;
+  }
+  geom.setDrawRange(0, count);
+  renderer.clear();
+}
+initParticles();
+
+/* ── Physics ── */
+function physics() {
+  const count = Math.round(cfg.COUNT);
+  const damp  = cfg.DAMP;
+
+  // Stillness tracking
+  if (mouse.down) {
+    if (mouse.lastWx !== null) {
+      const dx = mouse.wx - mouse.lastWx, dy = mouse.wy - mouse.lastWy;
+      mouse.stillTime = Math.sqrt(dx*dx + dy*dy) < 0.5
+        ? Math.min(1, mouse.stillTime + cfg.STILL) : 0;
+    }
+  } else {
+    mouse.stillTime = 0;
+  }
+  mouse.lastWx = mouse.wx; mouse.lastWy = mouse.wy;
+
+  const mouseGrav = mouse.down
+    ? cfg.GRAV + mouse.stillTime * (cfg.MAXG - cfg.GRAV)
+    : 0;
+  const mouseSign = (repelKey || cfg.repelMouse) ? -1 : 1;
+
+  for (let i = 0; i < count; i++) {
+    const i2 = i * 2, i3 = i * 3;
+    let ax = 0, ay = 0;
+
+    // Mouse attractor
+    if (mouseGrav > 0) {
+      const dx = mouse.wx - posArr[i2];
+      const dy = mouse.wy - posArr[i2+1];
+      const d  = Math.sqrt(dx*dx + dy*dy) + 0.001;
+      const f  = mouseSign * mouseGrav / d;
+      ax += dx * f; ay += dy * f;
+    }
+
+    // Planted anchors
+    for (const a of anchors) {
+      const dx = a.wx - posArr[i2];
+      const dy = a.wy - posArr[i2+1];
+      const d  = Math.sqrt(dx*dx + dy*dy) + 0.001;
+      const f  = a.sign * 0.08 / d;
+      ax += dx * f; ay += dy * f;
+    }
+
+    velArr[i2]   = velArr[i2]   * damp + ax;
+    velArr[i2+1] = velArr[i2+1] * damp + ay;
+    posArr[i2]   += velArr[i2];
+    posArr[i2+1] += velArr[i2+1];
+
+    const vx = velArr[i2], vy = velArr[i2+1];
+    spdBuf[i] = Math.sqrt(vx*vx + vy*vy);
+
+    pos3Buf[i3]   = posArr[i2];
+    pos3Buf[i3+1] = posArr[i2+1];
+    // pos3Buf[i3+2] = 0; // stays 0
+  }
+
+  posAttr.needsUpdate = true;
+  spdAttr.needsUpdate = true;
+
+  // Update shader uniforms
+  partMat.uniforms.uSens.value = cfg.SENS  * DPR;
+  partMat.uniforms.uSize.value = cfg.SIZE  * DPR;
+
+  // Fade quad opacity
+  fadeMat.opacity = 1 - cfg.TRAIL;
+
+  // Cursor glow
+  const active = mouse.down;
+  const repel  = active && (repelKey || cfg.repelMouse);
+  cursorCore.position.set(mouse.wx, mouse.wy, 0);
+  cursorGlow.position.set(mouse.wx, mouse.wy, 0);
+  repulseCore.position.set(mouse.wx, mouse.wy, 0);
+  repulseGlow.position.set(mouse.wx, mouse.wy, 0);
+
+  if (repel) {
+    cursorCore.visible = false; cursorGlow.visible = false;
+    repulseCore.visible = true; repulseGlow.visible = true;
+    const pulse = 1 + mouse.stillTime * 0.5;
+    repulseCore.scale.setScalar(18 * pulse);
+    repulseGlow.scale.setScalar(120 * pulse);
+  } else {
+    repulseCore.visible = false; repulseGlow.visible = false;
+    cursorCore.visible = true;  cursorGlow.visible = true;
+    const pulse = active ? 1 + mouse.stillTime * 0.8 : 1;
+    cursorCore.scale.setScalar(active ? 18 * pulse : 10);
+    cursorGlow.scale.setScalar(active ? 140 * pulse : 60);
+  }
+
+  // Pulse anchor rings
+  for (const a of anchors) {
+    const pulseFactor = 1 + Math.sin(performance.now() * 0.002) * 0.08;
+    a.mesh.scale.setScalar(22 * pulseFactor);
+  }
+}
+
+/* ── Audio ── */
 let audioCtx, osc, gain;
 let audioReady = false;
 let currentFreq = 20;
 
-const startButton = document.getElementById("startButton");
-
-startButton.addEventListener("click", () => {
+function initAudio() {
+  if (audioReady) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  osc  = audioCtx.createOscillator();
+  osc = audioCtx.createOscillator();
   gain = audioCtx.createGain();
-
-  osc.type = "sawtooth";
-  osc.frequency.value = cfg.MIN_FREQ;
-  gain.gain.value = cfg.VOLUME;
-
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
+  osc.type = 'sawtooth';
+  osc.frequency.value = cfg.FMIN;
+  gain.gain.value = cfg.VOL;
+  osc.connect(gain); gain.connect(audioCtx.destination);
   osc.start();
-
   audioReady = true;
-  startButton.remove();
+}
+
+function updateAudio() {
+  if (!audioReady) return;
+  const count = Math.round(cfg.COUNT);
+  let cx = 0, cy = 0;
+  for (let i = 0; i < count; i++) { cx += posArr[i*2]; cy += posArr[i*2+1]; }
+  cx /= count; cy /= count;
+  let spread = 0;
+  for (let i = 0; i < count; i++) {
+    const dx = posArr[i*2] - cx, dy = posArr[i*2+1] - cy;
+    spread += Math.sqrt(dx*dx + dy*dy);
+  }
+  spread /= count;
+  const maxSp = Math.sqrt(W*W + H*H) * 0.25;
+  const norm  = Math.max(0, Math.min(1, 1 - spread / maxSp));
+  const target = cfg.FMIN + norm * (cfg.FMAX - cfg.FMIN);
+  currentFreq += (target - currentFreq) * 0.05;
+  osc.frequency.setValueAtTime(currentFreq, audioCtx.currentTime);
+  gain.gain.setValueAtTime(cfg.VOL, audioCtx.currentTime);
+}
+
+/* ── Render loop ── */
+function loop() {
+  requestAnimationFrame(loop);
+  physics();
+  updateAudio();
+  renderer.render(scene, camera);
+}
+
+/* ── Resize ── */
+window.addEventListener('resize', () => {
+  W = window.innerWidth; H = window.innerHeight;
+  W2 = W/2; H2 = H/2;
+  renderer.setSize(W, H);
+  camera.left = -W2; camera.right = W2; camera.top = H2; camera.bottom = -H2;
+  camera.updateProjectionMatrix();
+  fadeQuad.scale.set(W, H, 1);
 });
 
-/* =======================
-   PARTICLES
-   ======================= */
-class Particle {
-  constructor() { this.init(); }
+/* ── Panel ── */
+const panel     = document.getElementById('panel');
+const toggleBtn = document.getElementById('toggleBtn');
+let panelOpen = true;
+toggleBtn.addEventListener('click', () => {
+  panelOpen = !panelOpen;
+  panel.classList.toggle('hidden', !panelOpen);
+  toggleBtn.classList.toggle('panel-hidden', !panelOpen);
+});
 
-  init() {
-    this.x  = Math.random() * canvas.width;
-    this.y  = Math.random() * canvas.height;
-    this.vx = (Math.random() - 0.5) * 0.5;
-    this.vy = (Math.random() - 0.5) * 0.5;
-  }
-
-  update(g) {
-    if (g > 0) {
-      const dx = mouse.x - this.x;
-      const dy = mouse.y - this.y;
-      const d  = Math.sqrt(dx*dx + dy*dy) + 0.001;
-      const f  = g / d;
-      this.vx += dx * f;
-      this.vy += dy * f;
-    }
-    this.vx *= cfg.DAMPING;
-    this.vy *= cfg.DAMPING;
-    this.x  += this.vx;
-    this.y  += this.vy;
-  }
-
-  draw() {
-    ctx.fillRect(this.x, this.y, cfg.PARTICLE_SIZE, cfg.PARTICLE_SIZE);
-  }
+/* ── Sliders ── */
+function bindSlider(id, key, fmt, onChange) {
+  const sl = document.getElementById('sl-' + id);
+  const vl = document.getElementById('val-' + id);
+  sl.addEventListener('input', () => {
+    cfg[key] = parseFloat(sl.value);
+    vl.textContent = fmt(cfg[key]);
+    if (onChange) onChange();
+  });
+  vl.textContent = fmt(cfg[key]);
 }
+bindSlider('COUNT', 'COUNT', v => Math.round(v).toLocaleString() , () => { geom.setDrawRange(0, Math.round(cfg.COUNT)); });
+bindSlider('GRAV',  'GRAV',  v => v.toFixed(3));
+bindSlider('MAXG',  'MAXG',  v => v.toFixed(3));
+bindSlider('STILL', 'STILL', v => v.toFixed(4));
+bindSlider('DAMP',  'DAMP',  v => v.toFixed(4));
+bindSlider('SIZE',  'SIZE',  v => v.toFixed(1));
+bindSlider('TRAIL', 'TRAIL', v => v.toFixed(3));
+bindSlider('SENS',  'SENS',  v => v.toFixed(1));
+bindSlider('VOL',   'VOL',   v => v.toFixed(2), () => { if (gain) gain.gain.setTargetAtTime(cfg.VOL, audioCtx.currentTime, 0.05); });
+bindSlider('FMIN',  'FMIN',  v => Math.round(v) + ' Hz');
+bindSlider('FMAX',  'FMAX',  v => Math.round(v) + ' Hz');
 
-let particles = [];
-
-function initParticles() {
-  particles = Array.from({ length: Math.round(cfg.PARTICLE_COUNT) }, () => new Particle());
+/* ── Themes ── */
+function applyTheme(name) {
+  const t = THEMES[name]; if (!t) return;
+  activeTheme = name;
+  partMat.uniforms.uColLow.value.set(...t.low);
+  partMat.uniforms.uColMid.value.set(...t.mid);
+  partMat.uniforms.uColHigh.value.set(...t.high);
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === name));
 }
-initParticles();
+document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
 
-/* =======================
-   RESET BUTTON
-   ======================= */
+/* ── Attractor mode buttons ── */
+document.getElementById('mode-attract').addEventListener('click', () => {
+  cfg.attractorSign = 1;
+  document.getElementById('mode-attract').classList.add('active');
+  document.getElementById('mode-repel').classList.remove('active');
+});
+document.getElementById('mode-repel').addEventListener('click', () => {
+  cfg.attractorSign = -1;
+  document.getElementById('mode-repel').classList.add('active');
+  document.getElementById('mode-attract').classList.remove('active');
+});
+
+/* ── Reset ── */
 document.getElementById('resetSimBtn').addEventListener('click', () => {
-  mouse.stillTime = 0;
-  mouse.lastX = null;
-  mouse.lastY = null;
-  currentFreq = cfg.MIN_FREQ;
+  anchors.forEach(a => { scene.remove(a.mesh); a.mesh.geometry.dispose(); a.mesh.material.dispose(); });
+  anchors.length = 0;
+  updateAttrCounter();
+  mouse.stillTime = 0; mouse.lastWx = null; mouse.lastWy = null;
+  currentFreq = cfg.FMIN;
   initParticles();
 });
 
-/* =======================
-   GLOWING CURSOR
-   ======================= */
-function drawGravitySource(g) {
-  const active = mouse.down;
-  const core   = active ? cfg.CORE_RADIUS_ACTIVE : cfg.CORE_RADIUS_IDLE;
-  const field  = active ? cfg.FIELD_RADIUS_ACTIVE : cfg.FIELD_RADIUS_IDLE;
-  const alpha  = active ? 0.25 : 0.12;
-  const pulse  = active ? 1 + g * 10 : 1;
-
-  const grad = ctx.createRadialGradient(
-    mouse.x, mouse.y, 0,
-    mouse.x, mouse.y, field * pulse
-  );
-  grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
-  grad.addColorStop(1, "rgba(255,255,255,0)");
-
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(mouse.x, mouse.y, field * pulse, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.arc(mouse.x, mouse.y, core, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-/* =======================
-   SOUND
-   ======================= */
-function updateSound() {
-  if (!audioReady) return;
-
-  let cx = 0, cy = 0;
-  for (const p of particles) { cx += p.x; cy += p.y; }
-  cx /= particles.length;
-  cy /= particles.length;
-
-  let spread = 0;
-  for (const p of particles) {
-    const dx = p.x - cx, dy = p.y - cy;
-    spread += Math.sqrt(dx*dx + dy*dy);
-  }
-  spread /= particles.length;
-
-  const maxSpread = Math.sqrt(canvas.width**2 + canvas.height**2) * 0.25;
-  const norm   = Math.max(0, Math.min(1, 1 - spread / maxSpread));
-  const target = cfg.MIN_FREQ + norm * (cfg.MAX_FREQ - cfg.MIN_FREQ);
-  currentFreq += (target - currentFreq) * 0.05;
-
-  osc.frequency.setValueAtTime(currentFreq, audioCtx.currentTime);
-  gain.gain.setValueAtTime(cfg.VOLUME, audioCtx.currentTime);
-}
-
-/* =======================
-   STILLNESS
-   ======================= */
-function updateMouseStillness() {
-  if (!mouse.down) {
-    mouse.stillTime = 0;
-    mouse.lastX = mouse.x;
-    mouse.lastY = mouse.y;
-    return;
-  }
-  if (mouse.lastX !== null) {
-    const dx = mouse.x - mouse.lastX;
-    const dy = mouse.y - mouse.lastY;
-    mouse.stillTime = Math.sqrt(dx*dx + dy*dy) < 0.5
-      ? Math.min(1, mouse.stillTime + cfg.STILLNESS_RATE)
-      : 0;
-  }
-  mouse.lastX = mouse.x;
-  mouse.lastY = mouse.y;
-}
-
-/* =======================
-   LOOP
-   ======================= */
-function animate() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  updateMouseStillness();
-
-  const gravity = mouse.down
-    ? cfg.BASE_GRAVITY + mouse.stillTime * (cfg.MAX_GRAVITY - cfg.BASE_GRAVITY)
-    : 0;
-
-  ctx.fillStyle = "#fff";
-  for (const p of particles) {
-    p.update(gravity);
-    p.draw();
-  }
-
-  drawGravitySource(gravity);
-  updateSound();
-
-  requestAnimationFrame(animate);
-}
-
-animate();
+/* ── Start overlay ── */
+document.getElementById('startOverlay').addEventListener('click', () => {
+  initAudio();
+  document.getElementById('startOverlay').remove();
+  loop();
+});
 </script>
 </body>
 </html>
