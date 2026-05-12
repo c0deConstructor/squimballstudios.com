@@ -320,7 +320,7 @@
 
   function show(idx) {
     idx = Math.max(0, Math.min(pgBtns.length - 1, idx));
-    if (idx === current && frames[current].src.endsWith(frames[current].dataset.src || '')) return;
+    if (idx === current && frames[current].src.includes(frames[current].dataset.src || '')) return;
     closeAllPanels();
 
     // Unload the leaving frame so its RAF / physics loops fully terminate
@@ -331,9 +331,9 @@
 
     current = idx;
 
-    // Load (or reload) the arriving frame fresh — correct dimensions guaranteed
+    // Load (or reload) the arriving frame fresh with cache-bust timestamp
     const f = frames[current];
-    f.src = f.dataset.src;
+    f.src = f.dataset.src + '?v=' + Date.now();
     pgBtns[current].classList.add('active');
     f.classList.add('active');
     document.getElementById('placeholder').style.display = 'none';
