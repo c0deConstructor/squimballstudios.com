@@ -136,7 +136,8 @@
   <h1>Gravity Simulator</h1>
   <div class="sub">
     <span class="key">Left-hold</span> to attract &nbsp;·&nbsp; <span class="key">Space + Left-hold</span> to repel<br>
-    <span class="key">Right-click</span> to plant attractors &nbsp;·&nbsp; <span class="key">Right-click attractor</span> to toggle repulsion<br>
+    <span class="key">Right-click</span> to plant attractors &nbsp;·&nbsp; <span class="key">Right-click attractor</span> to cycle modes<br>
+    <span class="key">Left-drag attractor</span> to move it &nbsp;·&nbsp; <span class="key">Middle-click attractor</span> to remove it<br>
     Click anywhere to begin
   </div>
 </div>
@@ -198,8 +199,10 @@
     <button class="mode-btn" id="mode-repel">Repel</button>
   </div>
   <div class="hint">
-    <b>Right-click</b> canvas to plant/remove anchors (max 5)<br>
-    <b>Right-click anchor</b> to toggle attract/repel<br>
+    <b>Right-click</b> canvas to plant anchors (max 5)<br>
+    <b>Right-click anchor</b> cycle: attract → repel → off<br>
+    <b>Left-drag anchor</b> to move it<br>
+    <b>Middle-click anchor</b> to remove it<br>
     <b>Space + Left-click</b> to temporarily repel mouse
   </div>
 
@@ -370,6 +373,7 @@ repulseGlow.visible = false;
 /* ── Attractor anchor helpers ── */
 const anchors = []; // { wx, wy, sign, mesh }
 const MAX_ANCHORS = 5;
+let draggingAnchor = null;
 
 function makeAnchorRing(sign) {
   const segs = 64, pts = [];
@@ -378,8 +382,9 @@ function makeAnchorRing(sign) {
     pts.push(new THREE.Vector3(Math.cos(a), Math.sin(a), 0));
   }
   const g = new THREE.BufferGeometry().setFromPoints(pts);
-  const col = sign > 0 ? 0x00ccff : 0xff4040;
-  const m = new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 }));
+  const col = sign > 0 ? 0x00ccff : sign < 0 ? 0xff4040 : 0x888888;
+  const opacity = sign === 0 ? 0.25 : 0.55;
+  const m = new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity }));
   m.renderOrder = 1;
   return m;
 }
@@ -394,6 +399,24 @@ function addAnchor(wx, wy, sign) {
   updateAttrCounter();
 }
 
+function findAnchorAt(wx, wy) {
+  for (const a of anchors) {
+    if (Math.hypot(wx - a.wx, wy - a.wy) < 28) return a;
+  }
+  return null;
+}
+
+function cycleAnchorAt(wx, wy) {
+  const a = findAnchorAt(wx, wy);
+  if (!a) return false;
+  // cycle: attract(1) → repel(-1) → disabled(0) → attract(1)
+  a.sign = a.sign === 1 ? -1 : a.sign === -1 ? 0 : 1;
+  const col = a.sign === 1 ? 0x00ccff : a.sign === -1 ? 0xff4040 : 0x888888;
+  a.mesh.material.color.set(col);
+  a.mesh.material.opacity = a.sign === 0 ? 0.25 : 0.55;
+  return true;
+}
+
 function removeAnchorAt(wx, wy) {
   for (let i = 0; i < anchors.length; i++) {
     const a = anchors[i];
@@ -401,17 +424,6 @@ function removeAnchorAt(wx, wy) {
       scene.remove(a.mesh); a.mesh.geometry.dispose(); a.mesh.material.dispose();
       anchors.splice(i, 1);
       updateAttrCounter();
-      return true;
-    }
-  }
-  return false;
-}
-
-function toggleAnchorAt(wx, wy) {
-  for (const a of anchors) {
-    if (Math.hypot(wx - a.wx, wy - a.wy) < 28) {
-      a.sign = -a.sign;
-      a.mesh.material.color.set(a.sign > 0 ? 0x00ccff : 0xff4040);
       return true;
     }
   }
@@ -433,19 +445,38 @@ let repelKey = false; // space bar
 renderer.domElement.addEventListener('mousemove', e => {
   const { wx, wy } = screenToWorld(e.clientX, e.clientY);
   mouse.wx = wx; mouse.wy = wy;
+  if (draggingAnchor) {
+    draggingAnchor.wx = wx;
+    draggingAnchor.wy = wy;
+    draggingAnchor.mesh.position.set(wx, wy, 0);
+  }
 });
 renderer.domElement.addEventListener('mousedown', e => {
-  if (e.button === 0) mouse.down = true;
+  if (e.button === 0) {
+    const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+    const hit = findAnchorAt(wx, wy);
+    if (hit) {
+      draggingAnchor = hit;
+    } else {
+      mouse.down = true;
+    }
+  }
+  if (e.button === 1) {
+    e.preventDefault();
+    const { wx, wy } = screenToWorld(e.clientX, e.clientY);
+    removeAnchorAt(wx, wy);
+  }
   if (e.button === 2) {
     e.preventDefault();
     const { wx, wy } = screenToWorld(e.clientX, e.clientY);
-    if (!toggleAnchorAt(wx, wy)) {
-      if (!removeAnchorAt(wx, wy)) addAnchor(wx, wy, cfg.attractorSign);
-    }
+    if (!cycleAnchorAt(wx, wy)) addAnchor(wx, wy, cfg.attractorSign);
   }
 });
-renderer.domElement.addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
+renderer.domElement.addEventListener('mouseup', e => {
+  if (e.button === 0) { draggingAnchor = null; mouse.down = false; }
+});
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+renderer.domElement.addEventListener('auxclick', e => e.preventDefault());
 
 window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); repelKey = true; } });
 window.addEventListener('keyup',   e => { if (e.code === 'Space') repelKey = false; });
@@ -501,6 +532,7 @@ function physics() {
 
     // Planted anchors
     for (const a of anchors) {
+      if (a.sign === 0) continue;
       const dx = a.wx - posArr[i2];
       const dy = a.wy - posArr[i2+1];
       const d  = Math.sqrt(dx*dx + dy*dy) + 0.001;
