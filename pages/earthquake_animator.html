@@ -3,371 +3,97 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seismic Pulse — Earthquake Animator</title>
-<!-- d3 for geo projection & TopoJSON rendering -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap');
+<title>Seismic Pulse GL — Earthquake Globe</title>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
   :root {
-    --bg: #05070f;
-    --panel-bg: rgba(8, 12, 24, 0.97);
+    --bg: #020610;
+    --panel-bg: rgba(4, 8, 22, 0.97);
     --border: rgba(0,200,180,0.18);
     --accent: #00c8b4;
     --accent2: #ff6b35;
     --accent3: #ffd166;
-    --text: #c8dde8;
-    --text-dim: #5a7a8a;
+    --text: #c0d8e0;
+    --text-dim: #4a6a7a;
     --mono: 'Share Tech Mono', monospace;
     --sans: 'Rajdhani', sans-serif;
     --panel-w: 300px;
   }
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); overflow: hidden; height: 100vh; width: 100vw; user-select: none; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    overflow: hidden;
-    height: 100vh;
-    width: 100vw;
-    user-select: none;
-  }
+  #gl-container { position: fixed; inset: 0; z-index: 0; }
+  #gl-container canvas { display: block; }
 
-  /* ── CANVAS ── */
-  #canvas {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    z-index: 0;
-    cursor: grab;
-  }
-  #canvas.dragging { cursor: grabbing; }
-
-  /* ── GRID OVERLAY ── */
   #grid-overlay {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    pointer-events: none;
-    z-index: 1;
-    background-image:
-      linear-gradient(rgba(0,200,180,0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,200,180,0.04) 1px, transparent 1px);
+    position: fixed; inset: 0; pointer-events: none; z-index: 1;
+    background-image: linear-gradient(rgba(0,200,180,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0,200,180,0.03) 1px, transparent 1px);
     background-size: 40px 40px;
   }
+  #gl-badge { position: fixed; top: 12px; right: 12px; z-index: 60; font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; color: var(--accent); border: 1px solid rgba(0,200,180,0.3); padding: 3px 8px; background: rgba(2,6,16,0.7); pointer-events: none; text-transform: uppercase; }
 
-  /* ── QUERY PANEL (center modal) ── */
-  #query-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(ellipse at 50% 40%, rgba(0,200,180,0.07) 0%, rgba(5,7,15,0.97) 70%);
-  }
-
-  #query-box {
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    border-top: 2px solid var(--accent);
-    padding: 36px 40px 32px;
-    width: min(600px, 92vw);
-    max-height: 92vh;
-    overflow-y: auto;
-    box-shadow: 0 0 60px rgba(0,200,180,0.12), 0 0 0 1px rgba(0,200,180,0.06);
-    position: relative;
-  }
-
-  #query-box::before {
-    content: '';
-    position: absolute;
-    top: -1px; left: 40px;
-    width: 60px; height: 2px;
-    background: var(--accent2);
-  }
-
-  .q-title {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.25em;
-    color: var(--accent);
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-
-  .q-heading {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: #fff;
-    margin-bottom: 28px;
-    text-transform: uppercase;
-  }
-
-  .q-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px 20px;
-  }
-
+  /* ── QUERY MODAL ── */
+  #query-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 40%, rgba(0,200,180,0.07) 0%, rgba(2,6,16,0.97) 70%); }
+  #query-box { background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent); padding: 36px 40px 32px; width: min(600px, 92vw); max-height: 92vh; overflow-y: auto; box-shadow: 0 0 80px rgba(0,200,180,0.12); position: relative; }
+  #query-box::before { content: ''; position: absolute; top: -1px; left: 40px; width: 60px; height: 2px; background: var(--accent2); }
+  .q-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.25em; color: var(--accent); text-transform: uppercase; margin-bottom: 4px; }
+  .q-heading { font-size: 28px; font-weight: 700; letter-spacing: 0.04em; color: #fff; margin-bottom: 28px; text-transform: uppercase; }
+  .q-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; }
   .q-field { display: flex; flex-direction: column; gap: 6px; }
   .q-field.full { grid-column: 1 / -1; }
-
-  .q-field label {
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    font-family: var(--mono);
-  }
-
-  .q-field input {
-    background: rgba(0,200,180,0.04);
-    border: 1px solid rgba(0,200,180,0.2);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 14px;
-    padding: 9px 12px;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    -webkit-appearance: none;
-  }
-
-  .q-field input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(0,200,180,0.1);
-  }
-
-  .q-divider { grid-column: 1 / -1; height: 1px; background: var(--border); margin: 4px 0; }
-
-  .q-section-label {
-    grid-column: 1 / -1;
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    color: var(--accent2);
-    text-transform: uppercase;
-    padding-top: 4px;
-  }
-
-  #fetch-btn {
-    margin-top: 24px;
-    width: 100%;
-    background: transparent;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 13px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    padding: 14px;
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-    transition: color 0.2s, background 0.2s;
-  }
-
-  #fetch-btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--accent);
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.25s ease;
-    z-index: -1;
-  }
-
+  .q-field label { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); font-family: var(--mono); }
+  .q-field input { background: rgba(0,200,180,0.04); border: 1px solid rgba(0,200,180,0.2); color: var(--text); font-family: var(--mono); font-size: 14px; padding: 9px 12px; outline: none; transition: border-color 0.2s; -webkit-appearance: none; }
+  .q-field input:focus { border-color: var(--accent); }
+  .q-divider { grid-column: 1/-1; height: 1px; background: var(--border); margin: 4px 0; }
+  .q-section-label { grid-column: 1/-1; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--accent2); text-transform: uppercase; padding-top: 4px; }
+  #fetch-btn { margin-top: 24px; width: 100%; background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; padding: 14px; cursor: pointer; position: relative; overflow: hidden; transition: color 0.2s, background 0.2s; }
+  #fetch-btn::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform 0.25s ease; z-index: -1; }
   #fetch-btn:hover { color: var(--bg); }
   #fetch-btn:hover::before { transform: scaleX(1); }
+  #fetch-error { margin-top: 12px; font-family: var(--mono); font-size: 12px; color: var(--accent2); min-height: 16px; }
+  #btn-map-pick { grid-column: 1/-1; background: transparent; border: 1px solid rgba(0,200,180,0.3); color: var(--text-dim); font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; padding: 9px 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: border-color 0.2s, color 0.2s; margin-top: 2px; }
+  #btn-map-pick:hover { border-color: var(--accent); color: var(--accent); }
 
-  #fetch-error {
-    margin-top: 12px;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--accent2);
-    min-height: 16px;
-  }
-
-  /* ── LEFT SETTINGS PANEL ── */
-  #settings-panel {
-    position: fixed;
-    top: 0; left: 0;
-    width: var(--panel-w);
-    height: 100vh;
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    pointer-events: none;
-    transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
-  }
-
-  #settings-panel.collapsed {
-    transform: translateX(calc(-1 * var(--panel-w)));
-  }
-
-  #panel-inner {
-    background: var(--panel-bg);
-    border-right: 1px solid var(--border);
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 24px 20px 24px;
-    pointer-events: all;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-  }
-
+  /* ── SETTINGS PANEL ── */
+  #settings-panel { position: fixed; top: 0; left: 0; width: var(--panel-w); height: 100vh; z-index: 50; display: flex; flex-direction: column; pointer-events: none; transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); }
+  #settings-panel.collapsed { transform: translateX(calc(-1 * var(--panel-w))); }
+  #panel-inner { background: var(--panel-bg); border-right: 1px solid var(--border); flex: 1; overflow-y: auto; padding: 24px 20px 40px; pointer-events: all; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   #panel-inner::-webkit-scrollbar { width: 4px; }
   #panel-inner::-webkit-scrollbar-thumb { background: var(--border); }
-
-  #panel-toggle {
-    position: absolute;
-    right: -36px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 36px;
-    height: 80px;
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    border-left: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    pointer-events: all;
-    color: var(--accent);
-    transition: background 0.2s;
-    writing-mode: vertical-lr;
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.15em;
-  }
-
+  #panel-toggle { position: absolute; right: -36px; top: 50%; transform: translateY(-50%); width: 36px; height: 80px; background: var(--panel-bg); border: 1px solid var(--border); border-left: none; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: all; color: var(--accent); transition: background 0.2s; writing-mode: vertical-lr; font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; }
   #panel-toggle:hover { background: rgba(0,200,180,0.1); }
-
   .panel-section { margin-bottom: 24px; }
-
-  .panel-section-title {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 14px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border);
-  }
-
+  .panel-section-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
   .slider-row { margin-bottom: 14px; }
-
-  .slider-label {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 6px;
-  }
-
-  .slider-label span:first-child {
-    font-size: 12px;
-    color: var(--text);
-    font-weight: 600;
-    letter-spacing: 0.06em;
-  }
-
-  .slider-label span:last-child {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--accent);
-  }
-
-  input[type=range] {
-    -webkit-appearance: none;
-    width: 100%;
-    height: 3px;
-    background: rgba(0,200,180,0.15);
-    outline: none;
-    cursor: pointer;
-  }
-
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 2px solid var(--bg);
-    box-shadow: 0 0 6px rgba(0,200,180,0.5);
-    transition: transform 0.15s;
-  }
-
+  .slider-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .slider-label span:first-child { font-size: 12px; color: var(--text); font-weight: 600; letter-spacing: 0.06em; }
+  .slider-label span:last-child { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+  input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: rgba(0,200,180,0.15); outline: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 6px rgba(0,200,180,0.5); transition: transform 0.15s; }
   input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.3); }
-
-  input[type=range]::-moz-range-thumb {
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 2px solid var(--bg);
-  }
-
-  .color-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
+  input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+  .color-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .color-row label { font-size: 12px; font-weight: 600; flex: 1; letter-spacing: 0.06em; }
-
-  .color-row input[type=color] {
-    width: 36px; height: 24px;
-    border: 1px solid var(--border);
-    background: transparent;
-    cursor: pointer;
-    padding: 1px;
-  }
-
-  .checkbox-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-    cursor: pointer;
-  }
-
+  .color-row input[type=color] { width: 36px; height: 24px; border: 1px solid var(--border); background: transparent; cursor: pointer; padding: 1px; }
+  .checkbox-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer; }
   .checkbox-row input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
   .checkbox-row label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; }
-
-  .panel-btn {
-    width: 100%;
-    background: transparent;
-    border: 1px solid rgba(0,200,180,0.3);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    padding: 9px;
-    cursor: pointer;
-    margin-bottom: 8px;
-    transition: border-color 0.2s, color 0.2s, background 0.2s;
-  }
-
+  .panel-btn { width: 100%; background: transparent; border: 1px solid rgba(0,200,180,0.3); color: var(--text); font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; padding: 9px; cursor: pointer; margin-bottom: 8px; transition: border-color 0.2s, color 0.2s, background 0.2s; }
   .panel-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,200,180,0.05); }
-  .panel-btn.danger:hover { border-color: var(--accent2); color: var(--accent2); }
 
   /* ── HUD ── */
-  #hud {
-    position: fixed;
-    top: 20px; right: 20px;
-    z-index: 40;
-    text-align: right;
-    pointer-events: none;
-  }
-
+  #hud { position: fixed; top: 20px; right: 20px; z-index: 40; text-align: right; pointer-events: none; }
   #hud-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 4px; }
   #hud-count { font-family: var(--mono); font-size: 32px; color: var(--accent); line-height: 1; }
   #hud-label { font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
@@ -375,551 +101,165 @@
   #hud-current-time { font-family: var(--mono); font-size: 13px; color: var(--accent3); margin-top: 2px; }
   #hud-zoom { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
 
-  /* ── ZOOM CONTROLS ── */
-  #zoom-controls {
-    position: fixed;
-    bottom: 70px; left: 20px;
-    z-index: 40;
-    display: none;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .zoom-btn {
-    width: 32px; height: 32px;
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s, border-color 0.2s;
-    line-height: 1;
-  }
-
-  .zoom-btn:hover { background: rgba(0,200,180,0.12); border-color: var(--accent); }
-
   /* ── PROGRESS BAR ── */
-  #progress-bar-wrap {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 3px;
-    z-index: 40;
-    background: rgba(0,200,180,0.08);
-    pointer-events: none;
-  }
-
-  #progress-bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, var(--accent), var(--accent3));
-    transition: width 0.1s linear;
-    box-shadow: 0 0 8px var(--accent);
-  }
+  #progress-bar-wrap { position: fixed; bottom: 0; left: 0; right: 0; height: 3px; z-index: 40; background: rgba(0,200,180,0.07); pointer-events: none; }
+  #progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent3)); box-shadow: 0 0 8px var(--accent); transition: width 0.1s linear; }
 
   /* ── CONTROLS BAR ── */
-  #controls-bar {
-    position: fixed;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 40;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    padding: 10px 16px;
-  }
-
-  .ctrl-btn {
-    background: transparent;
-    border: 1px solid rgba(0,200,180,0.25);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    padding: 7px 14px;
-    cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-  }
-
+  #controls-bar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 40; display: flex; gap: 8px; align-items: center; background: var(--panel-bg); border: 1px solid var(--border); padding: 10px 16px; }
+  .ctrl-btn { background: transparent; border: 1px solid rgba(0,200,180,0.25); color: var(--text); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; padding: 7px 14px; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
   .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
   .ctrl-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,200,180,0.08); }
 
+  /* ── ZOOM BUTTONS ── */
+  #zoom-controls { position: fixed; bottom: 70px; left: 20px; z-index: 40; display: none; flex-direction: column; gap: 4px; }
+  .zoom-btn { width: 32px; height: 32px; background: var(--panel-bg); border: 1px solid var(--border); color: var(--accent); font-family: var(--mono); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, border-color 0.2s; line-height: 1; }
+  .zoom-btn:hover { background: rgba(0,200,180,0.12); border-color: var(--accent); }
+
   /* ── LEGEND ── */
-  #legend {
-    position: fixed;
-    bottom: 70px; right: 20px;
-    z-index: 40;
-    text-align: right;
-    pointer-events: none;
-  }
-
+  #legend { position: fixed; bottom: 70px; right: 20px; z-index: 40; text-align: right; pointer-events: none; }
   .legend-title { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; }
-
   .legend-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 5px; }
   .legend-circle { border-radius: 50%; opacity: 0.75; flex-shrink: 0; }
   .legend-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
 
-  /* ── LOADING OVERLAY ── */
-  #loading-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    background: var(--bg);
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-  }
-
-  .loader-ring {
-    width: 60px; height: 60px;
-    border: 2px solid rgba(0,200,180,0.1);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.9s linear infinite;
-  }
-
+  /* ── LOADING ── */
+  #loading-overlay { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+  .loader-ring { width: 60px; height: 60px; border: 2px solid rgba(0,200,180,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-
   .loader-text { font-family: var(--mono); font-size: 12px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; }
   #loader-count { font-family: var(--mono); font-size: 11px; color: var(--accent); }
 
   /* ── TOOLTIP ── */
-  #tooltip {
-    position: fixed;
-    z-index: 60;
-    pointer-events: none;
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    border-top: 1px solid var(--accent);
-    padding: 10px 14px;
-    font-family: var(--mono);
-    font-size: 11px;
-    line-height: 1.8;
-    color: var(--text);
-    max-width: 240px;
-    display: none;
-  }
-
+  #tooltip { position: fixed; z-index: 60; pointer-events: none; background: var(--panel-bg); border: 1px solid var(--border); border-top: 1px solid var(--accent); padding: 10px 14px; font-family: var(--mono); font-size: 11px; line-height: 1.8; color: var(--text); max-width: 240px; display: none; }
   #tooltip b { color: var(--accent); font-size: 13px; }
 
-  /* ── MAP STATUS ── */
-  #map-status {
-    position: fixed;
-    bottom: 70px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 40;
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 0.1em;
-    pointer-events: none;
-    display: none;
-  }
-
-  /* ── MINI MAP PICKER ── */
-  #map-picker-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 110;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    background: rgba(5,7,15,0.82);
-    backdrop-filter: blur(4px);
-  }
-
+  /* ── MAP PICKER MODAL ── */
+  #map-picker-modal { position: fixed; inset: 0; z-index: 110; display: none; align-items: center; justify-content: center; background: rgba(2,6,16,0.82); backdrop-filter: blur(4px); }
   #map-picker-modal.open { display: flex; }
-
-  #map-picker-box {
-    background: var(--panel-bg);
-    border: 1px solid var(--border);
-    border-top: 2px solid var(--accent);
-    box-shadow: 0 0 80px rgba(0,200,180,0.15);
-    display: flex;
-    flex-direction: column;
-    width: min(760px, 96vw);
-    max-height: 90vh;
-    position: relative;
-  }
-
-  #map-picker-box::before {
-    content: '';
-    position: absolute;
-    top: -1px; left: 40px;
-    width: 60px; height: 2px;
-    background: var(--accent2);
-  }
-
-  #map-picker-header {
-    padding: 16px 20px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  #map-picker-title {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    color: var(--accent);
-    text-transform: uppercase;
-  }
-
-  #map-picker-hint {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 0.08em;
-  }
-
-  #map-picker-close {
-    background: transparent;
-    border: 1px solid rgba(0,200,180,0.25);
-    color: var(--text-dim);
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 4px 10px;
-    cursor: pointer;
-    letter-spacing: 0.1em;
-    transition: color 0.2s, border-color 0.2s;
-  }
-
+  #map-picker-box { background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent); box-shadow: 0 0 80px rgba(0,200,180,0.15); display: flex; flex-direction: column; width: min(760px, 96vw); max-height: 90vh; position: relative; }
+  #map-picker-box::before { content: ''; position: absolute; top: -1px; left: 40px; width: 60px; height: 2px; background: var(--accent2); }
+  #map-picker-header { padding: 16px 20px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  #map-picker-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; }
+  #map-picker-hint { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; }
+  #map-picker-close { background: transparent; border: 1px solid rgba(0,200,180,0.25); color: var(--text-dim); font-family: var(--mono); font-size: 11px; padding: 4px 10px; cursor: pointer; letter-spacing: 0.1em; transition: color 0.2s, border-color 0.2s; }
   #map-picker-close:hover { color: var(--accent2); border-color: var(--accent2); }
-
-  #map-picker-canvas-wrap {
-    position: relative;
-    flex: 1;
-    min-height: 0;
-    height: 420px;
-    overflow: hidden;
-  }
-
-  #map-picker-canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    cursor: crosshair;
-  }
-
+  #map-picker-canvas-wrap { position: relative; flex: 1; min-height: 0; height: 420px; overflow: hidden; }
+  #map-picker-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   #map-picker-canvas.map-panning { cursor: grabbing; }
-
-  #map-picker-footer {
-    padding: 10px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-    gap: 12px;
-  }
-
-  #map-picker-coords {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-dim);
-    letter-spacing: 0.08em;
-    flex: 1;
-  }
-
+  #map-picker-footer { padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); flex-shrink: 0; gap: 12px; }
+  #map-picker-coords { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em; flex: 1; }
   #map-picker-coords span { color: var(--accent3); }
-
-  #map-picker-zoom-btns {
-    display: flex;
-    gap: 4px;
-  }
-
-  .mp-zoom-btn {
-    width: 26px; height: 26px;
-    background: transparent;
-    border: 1px solid rgba(0,200,180,0.3);
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s;
-    line-height: 1;
-  }
-
+  #map-picker-zoom-btns { display: flex; gap: 4px; }
+  .mp-zoom-btn { width: 26px; height: 26px; background: transparent; border: 1px solid rgba(0,200,180,0.3); color: var(--accent); font-family: var(--mono); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
   .mp-zoom-btn:hover { background: rgba(0,200,180,0.1); }
-
-  #map-picker-confirm {
-    background: transparent;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    padding: 8px 20px;
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-    transition: color 0.2s;
-  }
-
-  #map-picker-confirm::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--accent);
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.2s ease;
-    z-index: -1;
-  }
-
+  #map-picker-confirm { background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; padding: 8px 20px; cursor: pointer; position: relative; overflow: hidden; transition: color 0.2s; }
+  #map-picker-confirm::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform 0.2s ease; z-index: -1; }
   #map-picker-confirm:hover { color: var(--bg); }
   #map-picker-confirm:hover::before { transform: scaleX(1); }
   #map-picker-confirm:disabled { opacity: 0.35; pointer-events: none; }
-
-  /* the map-pick button that sits in the form */
-  #btn-map-pick {
-    grid-column: 1 / -1;
-    background: transparent;
-    border: 1px solid rgba(0,200,180,0.3);
-    color: var(--text-dim);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    padding: 9px 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    transition: border-color 0.2s, color 0.2s, background 0.2s;
-    margin-top: 2px;
-  }
-
-  #btn-map-pick:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: rgba(0,200,180,0.04);
-  }
-
-  #btn-map-pick svg { flex-shrink: 0; }
-
-  * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 </style>
 </head>
 <body>
 
-<canvas id="canvas"></canvas>
+<div id="gl-container"></div>
 <div id="grid-overlay"></div>
+<div id="gl-badge">WebGL · 3D Globe</div>
 
-<!-- QUERY MODAL -->
+<!-- ── Query Modal ── -->
 <div id="query-modal">
   <div id="query-box">
     <div class="q-title">USGS Earthquake Catalog</div>
     <div class="q-heading">Seismic Pulse</div>
     <div class="q-grid">
       <div class="q-section-label">// Time Range</div>
-      <div class="q-field">
-        <label>Start Date</label>
-        <input type="date" id="q-start" value="2026-01-01">
-      </div>
-      <div class="q-field">
-        <label>End Date</label>
-        <input type="date" id="q-end" value="2026-12-31">
-      </div>
+      <div class="q-field"><label>Start Date</label><input type="date" id="q-start" value="2026-01-01"></div>
+      <div class="q-field"><label>End Date</label><input type="date" id="q-end" value="2026-12-31"></div>
       <div class="q-divider"></div>
       <div class="q-section-label">// Search Center</div>
       <button id="btn-map-pick">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/>
-          <line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" stroke-width="1.2"/>
-          <line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.2"/>
-          <circle cx="7" cy="7" r="1.5" fill="currentColor"/>
-        </svg>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" stroke-width="1.2"/><line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.2"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>
         Pick on Map
       </button>
-      <div class="q-field">
-        <label>Center Latitude</label>
-        <input type="number" id="q-lat" value="20.799" step="0.001" min="-90" max="90">
-      </div>
-      <div class="q-field">
-        <label>Center Longitude</label>
-        <input type="number" id="q-lon" value="-61.98" step="0.001" min="-180" max="180">
-      </div>
-      <div class="q-field full">
-        <label>Search Radius (km)</label>
-        <input type="number" id="q-radius" value="400" min="1" max="20000">
-      </div>
+      <div class="q-field"><label>Center Latitude</label><input type="number" id="q-lat" value="-19.3066" step="0.001" min="-90" max="90"></div>
+      <div class="q-field"><label>Center Longitude</label><input type="number" id="q-lon" value="151.2126" step="0.001" min="-180" max="180"></div>
+      <div class="q-field full"><label>Search Radius (km)</label><input type="number" id="q-radius" value="4781" min="1" max="20000"></div>
       <div class="q-divider"></div>
       <div class="q-section-label">// Magnitude Filter</div>
-      <div class="q-field">
-        <label>Min Magnitude</label>
-        <input type="number" id="q-minmag" value="1.0" step="0.1" min="0" max="10">
-      </div>
-      <div class="q-field">
-        <label>Max Magnitude</label>
-        <input type="number" id="q-maxmag" value="9.5" step="0.1" min="0" max="10">
-      </div>
+      <div class="q-field"><label>Min Magnitude</label><input type="number" id="q-minmag" value="1.0" step="0.1" min="0" max="10"></div>
+      <div class="q-field"><label>Max Magnitude</label><input type="number" id="q-maxmag" value="9.5" step="0.1" min="0" max="10"></div>
     </div>
     <button id="fetch-btn">▶ Fetch &amp; Animate</button>
     <div id="fetch-error"></div>
   </div>
 </div>
 
-<!-- MINI MAP PICKER MODAL -->
+<!-- ── Mini Map Picker ── -->
 <div id="map-picker-modal">
   <div id="map-picker-box">
     <div id="map-picker-header">
-      <div>
-        <div id="map-picker-title">⊕ Select Search Area</div>
-        <div id="map-picker-hint">Pan/zoom freely · Shift+drag to draw search circle</div>
-      </div>
+      <div><div id="map-picker-title">⊕ Select Search Area</div><div id="map-picker-hint">Pan/zoom freely · Shift+drag to draw search circle</div></div>
       <button id="map-picker-close">✕ Cancel</button>
     </div>
-    <div id="map-picker-canvas-wrap">
-      <canvas id="map-picker-canvas"></canvas>
-    </div>
+    <div id="map-picker-canvas-wrap"><canvas id="map-picker-canvas"></canvas></div>
     <div id="map-picker-footer">
       <div id="map-picker-coords">No selection yet</div>
-      <div id="map-picker-zoom-btns">
-        <button class="mp-zoom-btn" id="mp-zoom-in">+</button>
-        <button class="mp-zoom-btn" id="mp-zoom-out">−</button>
-      </div>
+      <div id="map-picker-zoom-btns"><button class="mp-zoom-btn" id="mp-zoom-in">+</button><button class="mp-zoom-btn" id="mp-zoom-out">−</button></div>
       <button id="map-picker-confirm" disabled>✔ Use Selection</button>
     </div>
   </div>
 </div>
 
-<!-- LOADING OVERLAY -->
-<div id="loading-overlay">
-  <div class="loader-ring"></div>
-  <div class="loader-text">Querying USGS Catalog</div>
-  <div id="loader-count"></div>
-</div>
+<!-- ── Loading ── -->
+<div id="loading-overlay"><div class="loader-ring"></div><div class="loader-text">Querying USGS Catalog</div><div id="loader-count"></div></div>
 
-<!-- LEFT SETTINGS PANEL -->
+<!-- ── Settings Panel ── -->
 <div id="settings-panel" class="collapsed">
   <div id="panel-inner">
     <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.25em;color:var(--accent);text-transform:uppercase;margin-bottom:20px;">⚙ Settings</div>
-
     <div class="panel-section">
       <div class="panel-section-title">Animation</div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Speed Multiplier</span><span id="lbl-speed">200×</span></div>
-        <input type="range" id="sl-speed" min="0.1" max="5000" step="0.1" value="100">
-      </div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Fade Out Time (s)</span><span id="lbl-fade">2s</span></div>
-        <input type="range" id="sl-fade" min="0.3" max="15" step="0.1" value="2">
-      </div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">1</span></div>
-        <input type="range" id="sl-rings" min="0" max="5" step="1" value="1">
-      </div>
+      <div class="slider-row"><div class="slider-label"><span>Speed Multiplier</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="1" max="5000000" step="1" value="100000"></div>
+      <div class="slider-row"><div class="slider-label"><span>Fade Out (s)</span><span id="lbl-fade">2s</span></div><input type="range" id="sl-fade" min="0.3" max="15" step="0.1" value="2"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">1</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ripple Line Width</span><span id="lbl-ringWidth">0.10</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.1"></div>
     </div>
-
     <div class="panel-section">
-      <div class="panel-section-title">Circle Size</div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Base Radius (px)</span><span id="lbl-baseR">10</span></div>
-        <input type="range" id="sl-baseR" min="1" max="100" step="0.5" value="10">
-      </div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Mag Scale Factor</span><span id="lbl-magScale">2.0</span></div>
-        <input type="range" id="sl-magScale" min="0.5" max="8" step="0.1" value="2.0">
-      </div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Max Radius Cap (px)</span><span id="lbl-maxR">200</span></div>
-        <input type="range" id="sl-maxR" min="10" max="200" step="2" value="200">
-      </div>
+      <div class="panel-section-title">Pulse Size</div>
+      <div class="slider-row"><div class="slider-label"><span>Base Radius</span><span id="lbl-baseR">1.0</span></div><input type="range" id="sl-baseR" min="0.1" max="10" step="0.1" value="1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Mag Scale</span><span id="lbl-magScale">2.0</span></div><input type="range" id="sl-magScale" min="0.1" max="4" step="0.1" value="2.0"></div>
+      <div class="slider-row"><div class="slider-label"><span>Max Radius Cap</span><span id="lbl-maxR">50</span></div><input type="range" id="sl-maxR" min="10" max="100" step="1" value="50"></div>
+      <div class="slider-row"><div class="slider-label"><span>Depth Scale</span><span id="lbl-depthScale">0.50</span></div><input type="range" id="sl-depthScale" min="0" max="1" step="0.01" value="0.5"></div>
+      <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">0.40</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="0.4"></div>
     </div>
-
     <div class="panel-section">
       <div class="panel-section-title">Colors</div>
-      <div class="color-row">
-        <label>Low Mag (≤4)</label>
-        <input type="color" id="col-low" value="#00c8b4">
-      </div>
-      <div class="color-row">
-        <label>Mid Mag (4–6)</label>
-        <input type="color" id="col-mid" value="#ffd166">
-      </div>
-      <div class="color-row">
-        <label>High Mag (≥6)</label>
-        <input type="color" id="col-high" value="#ff6b35">
-      </div>
-      <div class="color-row">
-        <label>Background</label>
-        <input type="color" id="col-bg" value="#05070f">
-      </div>
-      <div class="color-row">
-        <label>Map Lines</label>
-        <input type="color" id="col-map" value="#1a2a3a">
-      </div>
+      <div class="color-row"><label>Low Mag (≤4)</label><input type="color" id="col-low" value="#00c8b4"></div>
+      <div class="color-row"><label>Mid Mag (4–6)</label><input type="color" id="col-mid" value="#ffd166"></div>
+      <div class="color-row"><label>High Mag (≥6)</label><input type="color" id="col-high" value="#ff6b35"></div>
+      <div class="color-row"><label>Border Lines</label><input type="color" id="col-borders" value="#00c8b4"></div>
     </div>
-
     <div class="panel-section">
       <div class="panel-section-title">Visual Options</div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="chk-glow" checked>
-        <label for="chk-glow">Glow Effect</label>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="chk-depth" checked>
-        <label for="chk-depth">Depth Shading</label>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="chk-trail" checked>
-        <label for="chk-trail">Afterglow Trail</label>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="chk-grid" checked>
-        <label for="chk-grid">Grid Overlay</label>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="chk-labels" checked>
-        <label for="chk-labels">Magnitude Labels</label>
-      </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="chk-map" checked>
-        <label for="chk-map">Map Background</label>
-      </div>
-      <div class="slider-row" style="margin-top:8px">
-        <div class="slider-label"><span>Trail Opacity</span><span id="lbl-trail">0.15</span></div>
-        <input type="range" id="sl-trail" min="0" max="0.3" step="0.005" value="0.15">
-      </div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Map Line Width</span><span id="lbl-mapW">0.6</span></div>
-        <input type="range" id="sl-mapW" min="0.2" max="3" step="0.1" value="0.6">
-      </div>
-      <div class="slider-row">
-        <div class="slider-label"><span>Map Opacity</span><span id="lbl-mapOpacity">0.75</span></div>
-        <input type="range" id="sl-mapOpacity" min="0.05" max="1" step="0.05" value="0.75">
-      </div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-glow" checked><label for="chk-glow">Glow Effect</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-depth" checked><label for="chk-depth">Depth Tinting</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-atmos" checked><label for="chk-atmos">Atmosphere</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-grat" checked><label for="chk-grat">Globe Grid</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-borders" checked><label for="chk-borders">Country Borders</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-autorot"><label for="chk-autorot">Auto-Rotate Globe</label></div>
     </div>
-
     <div class="panel-section">
       <div class="panel-section-title">Controls</div>
       <button class="panel-btn" id="btn-restart">↺ Restart Animation</button>
       <button class="panel-btn" id="btn-reset-view">⊕ Reset View</button>
       <button class="panel-btn" id="btn-new-query">✦ New Query</button>
-      <button class="panel-btn danger" id="btn-pause-panel">⏸ Pause / Resume</button>
+      <button class="panel-btn" id="btn-pause-panel">⏸ Pause / Resume</button>
     </div>
   </div>
   <button id="panel-toggle">SETTINGS</button>
 </div>
 
-<!-- HUD -->
+<!-- ── HUD ── -->
 <div id="hud">
   <div id="hud-title">Earthquakes</div>
   <div id="hud-count">0</div>
@@ -929,13 +269,13 @@
   <div id="hud-zoom"></div>
 </div>
 
-<!-- ZOOM CONTROLS -->
+<!-- ── Zoom Controls ── -->
 <div id="zoom-controls">
-  <button class="zoom-btn" id="btn-zoom-in" title="Zoom In">+</button>
-  <button class="zoom-btn" id="btn-zoom-out" title="Zoom Out">−</button>
+  <button class="zoom-btn" id="btn-zoom-in">+</button>
+  <button class="zoom-btn" id="btn-zoom-out">−</button>
 </div>
 
-<!-- CONTROLS BAR -->
+<!-- ── Controls Bar ── -->
 <div id="controls-bar" style="display:none">
   <button class="ctrl-btn" id="btn-play">▶ Play</button>
   <button class="ctrl-btn" id="btn-pause">⏸ Pause</button>
@@ -943,346 +283,496 @@
   <button class="ctrl-btn" id="btn-query">✦ New Query</button>
 </div>
 
-<!-- LEGEND -->
+<!-- ── Legend ── -->
 <div id="legend" style="display:none">
   <div class="legend-title">Magnitude</div>
-  <div class="legend-row">
-    <span class="legend-label">≥ 7</span>
-    <div class="legend-circle" style="width:22px;height:22px;background:#ff6b35;"></div>
-  </div>
-  <div class="legend-row">
-    <span class="legend-label">5 – 7</span>
-    <div class="legend-circle" style="width:14px;height:14px;background:#ffd166;"></div>
-  </div>
-  <div class="legend-row">
-    <span class="legend-label">3 – 5</span>
-    <div class="legend-circle" style="width:8px;height:8px;background:#00c8b4;"></div>
-  </div>
+  <div class="legend-row"><span class="legend-label">≥ 7</span><div class="legend-circle" style="width:22px;height:22px;background:#ff6b35;"></div></div>
+  <div class="legend-row"><span class="legend-label">5 – 7</span><div class="legend-circle" style="width:14px;height:14px;background:#ffd166;"></div></div>
+  <div class="legend-row"><span class="legend-label">3 – 5</span><div class="legend-circle" style="width:8px;height:8px;background:#00c8b4;"></div></div>
 </div>
 
-<!-- MAP STATUS -->
-<div id="map-status">Loading world map…</div>
-
-<!-- PROGRESS BAR -->
-<div id="progress-bar-wrap">
-  <div id="progress-bar"></div>
-</div>
-
-<!-- TOOLTIP -->
+<div id="progress-bar-wrap"><div id="progress-bar"></div></div>
 <div id="tooltip"></div>
 
-<script>
-// ═══════════════════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════════════════
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-let W, H;
+<script type="module">
+'use strict';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-let earthquakes = [];
-let animActive = false;
-let animPaused = false;
-let animFrame = null;
-let lastRealTs = null;
-let simTime = 0;
-let activeCircles = [];
-let queryParams = {};
+/* ── Constants ── */
+const EARTH_R    = 2.0;
+const INIT_DIST  = EARTH_R * 3.3;
+const WORLD_SCALE = EARTH_R * 0.45 / 200;
+const MAX_RINGS  = 5;
+const UP_Z = new THREE.Vector3(0, 0, 1);
 
-// ── Pan / Zoom state ──
-// All drawing goes through a viewport transform: translate(panX, panY) scale(zoom)
-// The base projection is computed at zoom=1, pan=0,0
-let panX = 0, panY = 0;
-let zoom = 0.75;
-let isDragging = false;
-let dragStartX = 0, dragStartY = 0;
-let dragPanX = 0, dragPanY = 0;
-
-// ── Base projection (zoom=1, no pan) ──
-let baseScale = 1;
-let baseOffX = 0, baseOffY = 0;
-
-// ── World map geo data ──
-let worldGeoReady = false;
-let worldLandPaths = [];   // array of Path2D
-let worldBorderPaths = []; // country borders
-
-// ─── SETTINGS ───────────────────────────────────────────────────────────────
+/* ── Settings ── */
 const settings = {
-  speed: 200,
-  fadeTime: 2,
-  rings: 1,
-  baseR: 10,
-  magScale: 2.0,
-  maxR: 200,
-  glow: true,
-  depth: true,
-  trail: true,
-  trailAlpha: 0.15,
-  grid: true,
-  labels: true,
-  map: true,
-  mapColor: '#1a2a3a',
-  mapLineWidth: 0.6,
-  mapOpacity: 0.75,
-  colLow: '#00c8b4',
-  colMid: '#ffd166',
-  colHigh: '#ff6b35',
-  colBg: '#05070f',
+  speed: 100000, fadeTime: 2, rings: 1, ringWidth: 0.1, pulseOpacity: 0.4,
+  baseR: 1, magScale: 2.0, maxR: 50, depthScale: 0.5,
+  glow: true, depth: true, atmos: true, grat: true, borders: true, autorot: false,
+  colLow: '#00c8b4', colMid: '#ffd166', colHigh: '#ff6b35', colBorders: '#00c8b4',
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// WORLD MAP — fetch Natural Earth 110m via CDN (TopoJSON)
-// ═══════════════════════════════════════════════════════════════════════════
+/* ── Sim state ── */
+let earthquakes = [], activeCircles = [];
+let animActive = false, animPaused = false;
+let lastRealTs = null, simTime = 0, eqIndex = 0, totalSimDuration = 0;
+let queryParams = {};
+let worldGeoReady = false;
+
+/* ── Three.js setup ── */
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.getElementById('gl-container').appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 2000);
+camera.position.set(0, 0.8, INIT_DIST);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.07;
+controls.minDistance    = EARTH_R * 1.2;
+controls.maxDistance    = EARTH_R * 20;
+controls.autoRotate     = false;
+controls.autoRotateSpeed = 0.4;
+controls.rotateSpeed    = 0.45;
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+controls.saveState();
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+/* ── Stars ── */
+{
+  const n = 4000;
+  const pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const phi = Math.acos(2 * Math.random() - 1);
+    const theta = Math.random() * Math.PI * 2;
+    const r = 400 + Math.random() * 300;
+    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i*3+2] = r * Math.cos(phi);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, transparent: true, opacity: 0.55, sizeAttenuation: true })));
+}
+
+/* ── Globe shader ── */
+const globeVert = /* glsl */`
+  varying vec3 vLocalPos;
+  varying vec3 vViewNormal;
+  void main() {
+    vLocalPos   = position;
+    vViewNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const globeFrag = /* glsl */`
+  uniform vec3  uGridColor;
+  uniform float uGridAlpha;
+  varying vec3 vLocalPos;
+  varying vec3 vViewNormal;
+  #define PI 3.14159265358979
+  void main() {
+    vec3  n    = normalize(vLocalPos);
+    float lat  = asin(clamp(n.y, -1.0, 1.0));
+    float lon  = atan(n.x, n.z);
+    float latD = lat * (180.0 / PI);
+    float lonD = lon * (180.0 / PI);
+    float lw   = 0.28;
+    float lDist = abs(mod(latD + 15.0, 30.0) - 15.0);
+    float lnDist= abs(mod(lonD + 15.0, 30.0) - 15.0);
+    float latL  = 1.0 - smoothstep(lw * 0.5, lw * 1.5, lDist);
+    float lonL  = 1.0 - smoothstep(lw * 0.5, lw * 1.5, lnDist);
+    float eqL   = 1.0 - smoothstep(0.15, 0.55, abs(latD));
+    float gridA = clamp(latL * 0.45 + lonL * 0.45 + eqL * 0.4, 0.0, 1.0) * uGridAlpha;
+    float facing= max(0.0, vViewNormal.z);
+    // Ocean body: deep navy
+    vec3 body = vec3(0.012, 0.03, 0.07) * (0.3 + 0.7 * facing);
+    // Subtle polar brightening
+    float pole = abs(n.y);
+    body += vec3(0.0, 0.04, 0.08) * pole * 0.25;
+    vec3 col = mix(body, uGridColor * 0.55, gridA);
+    // Cyan atmospheric rim
+    float rim = pow(1.0 - facing, 2.6);
+    col += vec3(0.04, 0.55, 0.95) * rim * 0.45;
+    // Subtle terminator-like equatorial glow
+    float eq2 = 1.0 - smoothstep(0.0, 12.0, abs(latD));
+    col += vec3(0.0, 0.35, 0.6) * eq2 * 0.04;
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+const globeMat = new THREE.ShaderMaterial({
+  vertexShader: globeVert, fragmentShader: globeFrag,
+  uniforms: {
+    uGridColor: { value: new THREE.Color(0x00c8b4) },
+    uGridAlpha: { value: 0.55 },
+  },
+});
+const globe = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 128, 64), globeMat);
+scene.add(globe);
+
+/* ── Atmosphere layers ── */
+const mkAtmos = (scale, color, opacity) => {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(EARTH_R * scale, 32, 32),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  m.name = 'atmos'; scene.add(m); return m;
+};
+const atmosLayers = [
+  mkAtmos(1.015, 0x00aaff, 0.16),
+  mkAtmos(1.06,  0x0066cc, 0.07),
+  mkAtmos(1.18,  0x003388, 0.035),
+  mkAtmos(1.45,  0x001155, 0.015),
+];
+
+/* ── Country borders (loaded async) ── */
+let borderLines = null;
+function geo3D(lat, lon, r = EARTH_R) {
+  const phi   = (90 - lat)  * Math.PI / 180;
+  const theta = lon * Math.PI / 180;
+  return new THREE.Vector3(
+    r * Math.sin(phi) * Math.sin(theta),
+    r * Math.cos(phi),
+    r * Math.sin(phi) * Math.cos(theta)
+  );
+}
+
 async function loadWorldMap() {
-  const statusEl = document.getElementById('map-status');
-  statusEl.style.display = 'block';
   try {
-    // Natural Earth 110m countries via unpkg
     const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
     if (!resp.ok) throw new Error('fetch failed');
     const world = await resp.json();
-
-    // Extract land and borders using topojson
-    const land = topojson.feature(world, world.objects.land);
-    const countries = topojson.feature(world, world.objects.countries);
-    const borders = topojson.mesh(world, world.objects.countries, (a, b) => a !== b);
-
-    // Store as GeoJSON features for d3 path rendering
-    window._worldLand = land;
-    window._worldCountries = countries;
-    window._worldBorders = borders;
+    window._worldLand     = topojson.feature(world, world.objects.land);
+    window._worldCountries= topojson.feature(world, world.objects.countries);
+    window._worldBorders  = topojson.mesh(world, world.objects.countries);
     worldGeoReady = true;
-    statusEl.style.display = 'none';
+    buildBorderLines();
+  } catch(e) { console.warn('World map load failed:', e); }
+}
 
-    // If the mini-map picker is open, rebuild its paths now
-    if (document.getElementById('map-picker-modal').classList.contains('open')) {
-      // mpRebuildPaths and mpDraw are in the picker IIFE scope; use the poll mechanism
+function buildBorderLines() {
+  if (!worldGeoReady || !window._worldBorders) return;
+  if (borderLines) { scene.remove(borderLines); borderLines.geometry.dispose(); borderLines.material.dispose(); }
+  const pts = [];
+  function addCoords(coords) {
+    for (let i = 0; i < coords.length - 1; i++) {
+      pts.push(geo3D(coords[i][1],   coords[i][0],   EARTH_R + 0.004));
+      pts.push(geo3D(coords[i+1][1], coords[i+1][0], EARTH_R + 0.004));
     }
-
-    // If projection is already set up, pre-bake paths
-    if (baseScale > 1) rebuildMapPaths();
-  } catch(e) {
-    statusEl.textContent = 'Map unavailable';
-    console.warn('World map load failed:', e);
   }
+  const b = window._worldBorders;
+  if (b.type === 'MultiLineString')      b.coordinates.forEach(addCoords);
+  else if (b.type === 'LineString')      addCoords(b.coordinates);
+  const geom = new THREE.BufferGeometry().setFromPoints(pts);
+  borderLines = new THREE.LineSegments(geom, new THREE.LineBasicMaterial({
+    color: new THREE.Color(settings.colBorders), opacity: 0.45, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  borderLines.visible = settings.borders;
+  scene.add(borderLines);
 }
 
-// Build canvas Path2D objects from GeoJSON using current projection
-// We use a custom d3 path that writes to a Path2D
-let d3Projection = null;
-
-function rebuildMapPaths() {
-  if (!worldGeoReady || !window._worldLand) return;
-
-  // Build a d3 equirectangular projection matching our baseScale/offsets
-  // Our project(lat,lon) = { x: lon*baseScale+baseOffX, y: baseOffY - lat*baseScale }
-  // d3 equirectangular: x = (lon+180)/360 * width, y = (90-lat)/180 * height
-  // We need a custom transform. Use d3.geoTransform to map directly.
-  d3Projection = d3.geoTransform({
-    point: function(lon, lat) {
-      this.stream.point(
-        lon * baseScale + baseOffX,
-        baseOffY - lat * baseScale
-      );
-    }
-  });
-
-  const pathGen = d3.geoPath(d3Projection);
-
-  // Build Path2D for land fill
-  const landPath = new Path2D(pathGen(window._worldLand));
-  const bordersPath = new Path2D(pathGen(window._worldBorders));
-
-  worldLandPaths = [landPath];
-  worldBorderPaths = [bordersPath];
+/* ── Shared flare geometry / sprite cache ── */
+let RING_GEOM = new THREE.RingGeometry(1.0 - settings.ringWidth, 1.0, 48);
+let _lastRingWidth = settings.ringWidth;
+const CORE_GEOM = new THREE.SphereGeometry(1.0, 8, 8);
+const spriteCache = {};
+function hexToRgba(hex, a) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function getSpriteTex(hex) {
+  if (spriteCache[hex]) return spriteCache[hex];
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const cx2 = cv.getContext('2d');
+  const g2 = cx2.createRadialGradient(32,32,0, 32,32,32);
+  g2.addColorStop(0,    hexToRgba(hex, 1.0));
+  g2.addColorStop(0.3,  hexToRgba(hex, 0.65));
+  g2.addColorStop(0.65, hexToRgba(hex, 0.2));
+  g2.addColorStop(1,    hexToRgba(hex, 0.0));
+  cx2.fillStyle = g2; cx2.fillRect(0,0,64,64);
+  spriteCache[hex] = new THREE.CanvasTexture(cv);
+  return spriteCache[hex];
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-function hexToRgb(hex) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return {r,g,b};
-}
-
+/* ── Color helpers ── */
+function hexToRgb(hex) { return { r:parseInt(hex.slice(1,3),16), g:parseInt(hex.slice(3,5),16), b:parseInt(hex.slice(5,7),16) }; }
 function lerpColor(a, b, t) {
-  const ca = hexToRgb(a), cb = hexToRgb(b);
-  return `rgb(${Math.round(ca.r+(cb.r-ca.r)*t)},${Math.round(ca.g+(cb.g-ca.g)*t)},${Math.round(ca.b+(cb.b-ca.b)*t)})`;
+  const ca=hexToRgb(a), cb=hexToRgb(b);
+  return `#${[0,1,2].map(i=>[ca.r,ca.g,ca.b][i]+([cb.r-ca.r,cb.g-ca.g,cb.b-ca.b][i])*t).map(v=>Math.round(v).toString(16).padStart(2,'0')).join('')}`;
 }
-
 function magColor(mag) {
   if (mag <= 4) return settings.colLow;
   if (mag <= 6) return lerpColor(settings.colLow, settings.colMid, (mag-4)/2);
   return lerpColor(settings.colMid, settings.colHigh, Math.min(1,(mag-6)/2));
 }
+function magRadius(mag) { return Math.min(settings.maxR, Math.pow(Math.max(0, mag), settings.magScale)); }
 
-function magRadius(mag) {
-  return Math.min(settings.maxR, settings.baseR * 0.1 + Math.pow(Math.max(0, mag), settings.magScale));
+/* ── Spawn / remove circle meshes ── */
+function spawnCircle(eq) {
+  const hexCol = magColor(eq.mag);
+  let col = new THREE.Color(hexCol);
+  if (settings.depth && eq.depth > 0) {
+    const df = Math.min(1, eq.depth / 300);
+    col.r *= (1 - df * 0.5);
+    col.g *= (1 - df * 0.5);
+    col.b = Math.min(1, col.b + df * 0.35);
+  }
+  const pos    = geo3D(eq.lat, eq.lon, EARTH_R);
+  const outDir = pos.clone().normalize();
+  const obj = { eq, color: col, hexCol, born: performance.now(), pos, outDir, dead: false, mesh3d: null };
+
+  const core = new THREE.Mesh(CORE_GEOM, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, blending: THREE.NormalBlending, depthWrite: false, depthTest: false }));
+  core.renderOrder = 2;
+  const spr  = new THREE.Sprite(new THREE.SpriteMaterial({ map: getSpriteTex(hexCol), transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+  spr.renderOrder = 2;
+  const rings = [];
+  for (let i = 0; i < MAX_RINGS; i++) {
+    const r = new THREE.Mesh(RING_GEOM, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.NormalBlending, depthWrite: false, depthTest: false }));
+    r.renderOrder = 2;
+    r.visible = false;
+    scene.add(r);
+    rings.push(r);
+  }
+  scene.add(core); scene.add(spr);
+  obj.mesh3d = { core, spr, rings };
+  return obj;
 }
 
-// ── Base projection (no pan/zoom) ──
-function setupProjection() {
-  const { lat, lon, radiusKm } = queryParams;
-  const dLat = (radiusKm / 111.32) * 1.05;
-  const dLon = dLat / Math.cos(lat * Math.PI / 180);
-
-  const minLat = lat - dLat, maxLat = lat + dLat;
-  const minLon = lon - dLon, maxLon = lon + dLon;
-
-  const scaleX = W / (maxLon - minLon);
-  const scaleY = H / (maxLat - minLat);
-  baseScale = Math.min(scaleX, scaleY) * 0.8;
-
-  const latRange = (maxLat - minLat) * baseScale;
-  const lonRange = (maxLon - minLon) * baseScale;
-
-  baseOffX = (W - lonRange) / 2 - minLon * baseScale;
-  baseOffY = (H - latRange) / 2 + maxLat * baseScale;
-
-  // Reset pan/zoom
-  panX = 0; panY = 0; zoom = 1;
-  updateHudZoom();
-
-  // Rebuild map paths with new projection
-  if (worldGeoReady) rebuildMapPaths();
+function removeCircle(obj) {
+  if (!obj.mesh3d) return;
+  scene.remove(obj.mesh3d.core);   obj.mesh3d.core.material.dispose();
+  scene.remove(obj.mesh3d.spr);    obj.mesh3d.spr.material.dispose();
+  for (const r of obj.mesh3d.rings) { scene.remove(r); r.material.dispose(); }
+  obj.mesh3d = null;
 }
 
-// Project lat/lon → canvas pixel (base coords, before pan/zoom transform)
-function projectBase(lat, lon) {
-  return {
-    x: lon * baseScale + baseOffX,
-    y: baseOffY - lat * baseScale
-  };
-}
+function updateCircle(obj, now) {
+  const age  = (now - obj.born) / 1000;
+  if (age > settings.fadeTime) { obj.dead = true; removeCircle(obj); return; }
+  const norm  = age / settings.fadeTime;
+  const alpha = 1 - norm;
+  const rawR  = magRadius(obj.eq.mag);
+  const wPeak = rawR * WORLD_SCALE * Math.pow(settings.baseR, 0.7);
 
-// Project lat/lon → screen pixel (with current pan/zoom applied)
-function projectScreen(lat, lon) {
-  const b = projectBase(lat, lon);
-  return {
-    x: b.x * zoom + panX,
-    y: b.y * zoom + panY
-  };
-}
+  // Depth-adjusted world position — recomputed every frame so slider updates live
+  const depthKm   = Math.max(0, obj.eq.depth || 0);
+  const depthFrac = Math.min(1, depthKm / 700);
+  const visualR   = EARTH_R * (1 - depthFrac * settings.depthScale * 0.75);
+  obj.pos    = geo3D(obj.eq.lat, obj.eq.lon, visualR);
+  obj.outDir = obj.pos.clone().normalize();
 
-// ── Canvas resize ──
-function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-  if (earthquakes.length) {
-    setupProjection();
+  // Cull pulses on the far side of the globe (dot product with camera direction)
+  const camDir   = camera.position.clone().normalize();
+  const frontside = obj.outDir.dot(camDir) > -0.1;
+
+  const coreR = wPeak * (0.35 + norm * 0.15);
+  obj.mesh3d.core.position.copy(obj.pos);
+  obj.mesh3d.core.scale.setScalar(Math.max(coreR, 0.001));
+  obj.mesh3d.core.material.opacity = alpha * settings.pulseOpacity * 0.85;
+  obj.mesh3d.core.visible = frontside;
+
+  obj.mesh3d.spr.position.copy(obj.pos);
+  obj.mesh3d.spr.scale.setScalar(Math.max(wPeak * 3.5 * (1 - norm * 0.45), 0.001));
+  obj.mesh3d.spr.material.opacity = alpha * settings.pulseOpacity * 0.4;
+  obj.mesh3d.spr.visible = frontside;
+
+  for (let i = 0; i < MAX_RINGS; i++) {
+    const ring = obj.mesh3d.rings[i];
+    const rn   = (norm + i * 0.2) % 1;
+    const rR   = wPeak * (0.4 + rn * 1.8);
+    ring.position.copy(obj.pos);
+    ring.quaternion.setFromUnitVectors(UP_Z, obj.outDir);
+    ring.scale.setScalar(Math.max(rR, 0.001));
+    ring.material.opacity = (1 - rn) * settings.pulseOpacity * alpha;
+    ring.visible = frontside && i < settings.rings;
   }
 }
-window.addEventListener('resize', resize);
-resize();
 
-// ═══════════════════════════════════════════════════════════════════════════
-// PAN & ZOOM
-// ═══════════════════════════════════════════════════════════════════════════
-function updateHudZoom() {
-  document.getElementById('hud-zoom').textContent = `zoom ${zoom.toFixed(2)}×`;
+/* ── Tooltip via screen-space projection ── */
+const tooltip = document.getElementById('tooltip');
+let mouseX = -999, mouseY = -999;
+function worldToScreen(pos3) {
+  const v = pos3.clone().project(camera);
+  return { x:(v.x+1)/2*window.innerWidth, y:-(v.y-1)/2*window.innerHeight, vis: v.z < 1 };
 }
+window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 
-function applyZoom(factor, cx, cy) {
-  // cx, cy = screen pivot point (zoom toward cursor or screen center)
-  const newZoom = Math.max(0.2, Math.min(50, zoom * factor));
-  const scale = newZoom / zoom;
-  panX = cx - scale * (cx - panX);
-  panY = cy - scale * (cy - panY);
-  zoom = newZoom;
-  updateHudZoom();
-}
-
-// Mouse drag
-canvas.addEventListener('mousedown', e => {
-  if (e.button !== 0) return;
-  // Don't drag if over a UI element
-  isDragging = true;
-  dragStartX = e.clientX;
-  dragStartY = e.clientY;
-  dragPanX = panX;
-  dragPanY = panY;
-  canvas.classList.add('dragging');
-  e.preventDefault();
-});
-
-window.addEventListener('mousemove', e => {
-  if (!isDragging) return;
-  panX = dragPanX + (e.clientX - dragStartX);
-  panY = dragPanY + (e.clientY - dragStartY);
-});
-
-window.addEventListener('mouseup', e => {
-  if (e.button !== 0) return;
-  isDragging = false;
-  canvas.classList.remove('dragging');
-});
-
-// Touch drag
-let touchStartX = 0, touchStartY = 0, touchPanX = 0, touchPanY = 0;
-let touchStartDist = 0, touchStartZoom = 1;
-
-canvas.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) {
-    isDragging = true;
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    touchPanX = panX; touchPanY = panY;
-  } else if (e.touches.length === 2) {
-    isDragging = false;
-    const dx = e.touches[0].clientX - e.touches[1].clientX;
-    const dy = e.touches[0].clientY - e.touches[1].clientY;
-    touchStartDist = Math.hypot(dx, dy);
-    touchStartZoom = zoom;
+function updateTooltip() {
+  let best = null, bestDist = 40;
+  for (const obj of activeCircles) {
+    if (obj.dead) continue;
+    const sc = worldToScreen(obj.pos);
+    if (!sc.vis) continue;
+    const d = Math.hypot(sc.x - mouseX, sc.y - mouseY);
+    if (d < bestDist) { best = obj; bestDist = d; }
   }
-  e.preventDefault();
-}, { passive: false });
-
-canvas.addEventListener('touchmove', e => {
-  if (e.touches.length === 1 && isDragging) {
-    panX = touchPanX + (e.touches[0].clientX - touchStartX);
-    panY = touchPanY + (e.touches[0].clientY - touchStartY);
-  } else if (e.touches.length === 2) {
-    const dx = e.touches[0].clientX - e.touches[1].clientX;
-    const dy = e.touches[0].clientY - e.touches[1].clientY;
-    const dist = Math.hypot(dx, dy);
-    const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-    const newZoom = Math.max(0.2, Math.min(50, touchStartZoom * dist / touchStartDist));
-    const scale = newZoom / zoom;
-    panX = cx - scale * (cx - panX);
-    panY = cy - scale * (cy - panY);
-    zoom = newZoom;
-    updateHudZoom();
+  if (best) {
+    tooltip.style.display = 'block';
+    tooltip.style.left = (mouseX + 16) + 'px';
+    tooltip.style.top  = (mouseY - 10) + 'px';
+    tooltip.innerHTML = `<b>M${best.eq.mag.toFixed(1)}</b><br>${best.eq.place || 'Unknown'}<br>Depth: ${best.eq.depth != null ? best.eq.depth.toFixed(1)+' km' : '—'}`;
+  } else {
+    tooltip.style.display = 'none';
   }
-  e.preventDefault();
-}, { passive: false });
-
-canvas.addEventListener('touchend', () => { isDragging = false; });
-
-// Mouse wheel zoom
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-  applyZoom(factor, e.clientX, e.clientY);
-}, { passive: false });
-
-// Zoom buttons
-document.getElementById('btn-zoom-in').addEventListener('click', () =>
-  applyZoom(1.4, W/2, H/2));
-document.getElementById('btn-zoom-out').addEventListener('click', () =>
-  applyZoom(1/1.4, W/2, H/2));
-
-// Reset view
-function resetView() {
-  panX = 0; panY = 0; zoom = 1;
-  updateHudZoom();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// FETCH EARTHQUAKES
-// ═══════════════════════════════════════════════════════════════════════════
+/* ── Main render loop ── */
+function animate(ts) {
+  requestAnimationFrame(animate);
+
+  if (animActive && !animPaused) {
+    if (lastRealTs !== null) {
+      const rd = ts - lastRealTs;
+      simTime += rd * settings.speed;
+    }
+    lastRealTs = ts;
+
+    if (earthquakes.length > 0) {
+      const t0 = earthquakes[0].time;
+      while (eqIndex < earthquakes.length && (earthquakes[eqIndex].time - t0) <= simTime) {
+        activeCircles.push(spawnCircle(earthquakes[eqIndex]));
+        eqIndex++;
+      }
+    }
+
+    const progress = totalSimDuration > 0 ? Math.min(1, simTime / totalSimDuration) : 1;
+    document.getElementById('progress-bar').style.width = (progress * 100) + '%';
+    if (earthquakes.length > 0) {
+      document.getElementById('hud-current-time').textContent =
+        new Date(earthquakes[0].time + simTime).toUTCString().slice(5, 22);
+    }
+    if (simTime >= totalSimDuration && eqIndex >= earthquakes.length && activeCircles.every(o => o.dead)) {
+      startAnimation();
+    }
+  } else if (animPaused) {
+    lastRealTs = null;
+  }
+
+  const now = performance.now();
+  for (const obj of activeCircles) { if (!obj.dead) updateCircle(obj, now); }
+  activeCircles = activeCircles.filter(o => !o.dead);
+
+  // Atmosphere visibility
+  atmosLayers.forEach(m => m.visible = settings.atmos);
+
+  // Globe uniforms
+  globeMat.uniforms.uGridAlpha.value = settings.grat ? 0.55 : 0.0;
+
+  // Ring width: rebuild geometry only when slider changed
+  if (settings.ringWidth !== _lastRingWidth) {
+    _lastRingWidth = settings.ringWidth;
+    const old = RING_GEOM;
+    RING_GEOM = new THREE.RingGeometry(Math.max(0.01, 1.0 - settings.ringWidth), 1.0, 48);
+    for (const obj of activeCircles) { if (obj.mesh3d) for (const r of obj.mesh3d.rings) r.geometry = RING_GEOM; }
+    old.dispose();
+  }
+
+  // Scale rotate speed inversely with zoom so apparent spin stays constant
+  controls.rotateSpeed = 0.45 * (camera.position.length() / INIT_DIST);
+  controls.autoRotate = settings.autorot;
+  controls.update();
+
+  updateTooltip();
+
+  const camDist = camera.position.length();
+  document.getElementById('hud-zoom').textContent = 'zoom ' + (INIT_DIST / camDist).toFixed(2) + '×';
+
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+/* ── Animation control ── */
+function startAnimation() {
+  eqIndex = 0; simTime = 0; lastRealTs = null;
+  for (const obj of activeCircles) removeCircle(obj);
+  activeCircles = [];
+  animActive = true; animPaused = false;
+  totalSimDuration = earthquakes.length < 2 ? 1000
+    : (earthquakes[earthquakes.length-1].time - earthquakes[0].time);
+  document.getElementById('hud-count').textContent = earthquakes.length;
+  document.getElementById('controls-bar').style.display = 'flex';
+  document.getElementById('legend').style.display = 'block';
+  document.getElementById('zoom-controls').style.display = 'flex';
+  document.getElementById('btn-play').classList.remove('active');
+  document.getElementById('btn-pause').classList.add('active');
+}
+
+/* ── HUD buttons ── */
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (!animActive && earthquakes.length) { startAnimation(); return; }
+  if (animPaused) { animPaused=false; document.getElementById('btn-play').classList.remove('active'); document.getElementById('btn-pause').classList.add('active'); }
+});
+document.getElementById('btn-pause').addEventListener('click', () => {
+  animPaused = !animPaused;
+  document.getElementById('btn-pause').classList.toggle('active', !animPaused);
+  document.getElementById('btn-play').classList.toggle('active', animPaused);
+});
+document.getElementById('btn-rewind').addEventListener('click', () => { if (earthquakes.length) startAnimation(); });
+document.getElementById('btn-query').addEventListener('click', openQuery);
+document.getElementById('btn-restart').addEventListener('click', () => { if (earthquakes.length) startAnimation(); });
+document.getElementById('btn-new-query').addEventListener('click', openQuery);
+document.getElementById('btn-pause-panel').addEventListener('click', () => document.getElementById('btn-pause').click());
+document.getElementById('btn-reset-view').addEventListener('click', () => { controls.reset(); controls.update(); });
+
+document.getElementById('btn-zoom-in').addEventListener('click', () => { camera.position.multiplyScalar(0.8); controls.update(); });
+document.getElementById('btn-zoom-out').addEventListener('click', () => { camera.position.multiplyScalar(1.25); controls.update(); });
+
+/* ── Settings wiring ── */
+function bindSlider(id, lblId, key, fmt) {
+  const sl = document.getElementById(id), lbl = document.getElementById(lblId);
+  sl.addEventListener('input', () => { settings[key] = parseFloat(sl.value); lbl.textContent = fmt(settings[key]); });
+  lbl.textContent = fmt(settings[key]);
+}
+function fmtSpeed(v) { return v>=1e6?(v/1e6).toFixed(1)+'M×':v>=1000?(v/1000).toFixed(0)+'K×':v.toFixed(0)+'×'; }
+bindSlider('sl-speed',    'lbl-speed',    'speed',    fmtSpeed);
+bindSlider('sl-fade',     'lbl-fade',     'fadeTime', v=>v.toFixed(1)+'s');
+bindSlider('sl-rings',        'lbl-rings',        'rings',        v=>v);
+bindSlider('sl-ringWidth',    'lbl-ringWidth',    'ringWidth',    v=>v.toFixed(2));
+bindSlider('sl-baseR',        'lbl-baseR',        'baseR',        v=>v.toFixed(1));
+bindSlider('sl-magScale',     'lbl-magScale',     'magScale',     v=>v.toFixed(1));
+bindSlider('sl-maxR',         'lbl-maxR',         'maxR',         v=>v);
+bindSlider('sl-depthScale',   'lbl-depthScale',   'depthScale',   v=>v.toFixed(2));
+bindSlider('sl-pulseOpacity', 'lbl-pulseOpacity', 'pulseOpacity', v=>v.toFixed(2));
+
+function bindCheck(id, key, cb) {
+  const el = document.getElementById(id);
+  el.addEventListener('change', () => { settings[key] = el.checked; if(cb) cb(); });
+}
+bindCheck('chk-glow',    'glow');
+bindCheck('chk-depth',   'depth');
+bindCheck('chk-atmos',   'atmos');
+bindCheck('chk-grat',    'grat');
+bindCheck('chk-borders', 'borders', () => { if(borderLines) borderLines.visible = settings.borders; });
+bindCheck('chk-autorot', 'autorot');
+
+function bindColor(id, key, cb) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { settings[key] = el.value; if(cb) cb(); });
+}
+bindColor('col-low',     'colLow');
+bindColor('col-mid',     'colMid');
+bindColor('col-high',    'colHigh');
+bindColor('col-borders', 'colBorders', () => { if(borderLines) borderLines.material.color.set(settings.colBorders); });
+
+/* ── Panel toggle ── */
+document.getElementById('panel-toggle').addEventListener('click', () => {
+  document.getElementById('settings-panel').classList.toggle('collapsed');
+});
+
+/* ── Fetch ── */
 async function fetchEarthquakes(params) {
   const url = new URL('https://earthquake.usgs.gov/fdsnws/event/1/query');
   url.searchParams.set('format', 'geojson');
@@ -1295,365 +785,54 @@ async function fetchEarthquakes(params) {
   url.searchParams.set('maxmagnitude', params.maxMag);
   url.searchParams.set('orderby', 'time-asc');
   url.searchParams.set('limit', 20000);
-
   const resp = await fetch(url.toString());
   if (!resp.ok) throw new Error(`USGS returned ${resp.status}`);
   const data = await resp.json();
   return data.features.map(f => ({
-    time: f.properties.time,
-    mag: f.properties.mag,
-    lat: f.geometry.coordinates[1],
-    lon: f.geometry.coordinates[0],
-    depth: f.geometry.coordinates[2],
-    place: f.properties.place,
-    id: f.id,
+    time: f.properties.time, mag: f.properties.mag,
+    lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
+    depth: f.geometry.coordinates[2], place: f.properties.place,
   })).filter(e => e.mag != null).sort((a,b) => a.time - b.time);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ANIMATION LOOP
-// ═══════════════════════════════════════════════════════════════════════════
-let eqIndex = 0;
-let totalSimDuration = 0;
-
-function startAnimation() {
-  eqIndex = 0;
-  simTime = 0;
-  lastRealTs = null;
-  activeCircles = [];
-  animActive = true;
-  animPaused = false;
-
-  totalSimDuration = earthquakes.length < 2 ? 1000
-    : earthquakes[earthquakes.length - 1].time - earthquakes[0].time;
-
-  document.getElementById('hud-count').textContent = earthquakes.length;
-  document.getElementById('controls-bar').style.display = 'flex';
-  document.getElementById('legend').style.display = 'block';
-  document.getElementById('zoom-controls').style.display = 'flex';
-  document.getElementById('btn-play').classList.remove('active');
-  document.getElementById('btn-pause').classList.add('active');
-
-  if (animFrame) cancelAnimationFrame(animFrame);
-  animFrame = requestAnimationFrame(animTick);
-}
-
-function animTick(ts) {
-  if (!animActive) return;
-
-  if (!animPaused) {
-    if (lastRealTs !== null) {
-      const realDelta = ts - lastRealTs;
-      simTime += realDelta * settings.speed * 1000.0;
-    }
-    lastRealTs = ts;
-
-    // Spawn new earthquakes
-    if (earthquakes.length > 0) {
-      const t0 = earthquakes[0].time;
-      while (eqIndex < earthquakes.length) {
-        const eq = earthquakes[eqIndex];
-        if ((eq.time - t0) <= simTime) {
-          const pos = projectScreen(eq.lat, eq.lon);
-          activeCircles.push({
-            lat: eq.lat, lon: eq.lon,
-            mag: eq.mag, depth: eq.depth, place: eq.place,
-            color: magColor(eq.mag),
-            radius: magRadius(eq.mag),
-            born: performance.now(),
-          });
-          eqIndex++;
-        } else break;
-      }
-    }
-
-    drawFrame();
-
-    const progress = totalSimDuration > 0 ? Math.min(1, simTime / totalSimDuration) : 1;
-    document.getElementById('progress-bar').style.width = (progress * 100) + '%';
-
-    if (earthquakes.length > 0) {
-      const curMs = earthquakes[0].time + simTime;
-      document.getElementById('hud-current-time').textContent =
-        new Date(curMs).toUTCString().slice(5, 22);
-    }
-
-    if (simTime >= totalSimDuration && eqIndex >= earthquakes.length && activeCircles.length === 0) {
-      // document.getElementById('progress-bar').style.width = '100%';
-      // animActive = false;
-      // document.getElementById('btn-pause').classList.remove('active');
-      // return;
-      startAnimation();
-    }
-  } else {
-    lastRealTs = null;
-    drawFrame();
-  }
-
-  animFrame = requestAnimationFrame(animTick);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DRAW FRAME
-// ═══════════════════════════════════════════════════════════════════════════
-function drawFrame() {
-  const now = performance.now();
-
-  // ── Background ──
-  if (settings.trail) {
-    const bg = hexToRgb(settings.colBg);
-    ctx.fillStyle = `rgba(${bg.r},${bg.g},${bg.b},${settings.trailAlpha + 0.18})`;
-  } else {
-    ctx.fillStyle = settings.colBg;
-  }
-  ctx.fillRect(0, 0, W, H);
-
-  // ── Apply viewport transform for map & earthquakes ──
-  ctx.save();
-  ctx.translate(panX, panY);
-  ctx.scale(zoom, zoom);
-
-  // ── Draw world map ──
-  if (settings.map && worldGeoReady && worldLandPaths.length > 0) {
-    ctx.save();
-    ctx.globalAlpha = settings.mapOpacity;
-
-    // Land fill (subtle, slightly lighter than background)
-    const bg = hexToRgb(settings.colBg);
-    const landR = Math.min(255, bg.r + 12);
-    const landG = Math.min(255, bg.g + 18);
-    const landB = Math.min(255, bg.b + 22);
-    ctx.fillStyle = `rgb(${landR},${landG},${landB})`;
-    for (const p of worldLandPaths) ctx.fill(p);
-
-    // Country borders
-    ctx.strokeStyle = settings.mapColor;
-    ctx.lineWidth = settings.mapLineWidth / zoom; // compensate for zoom so lines stay thin
-    ctx.globalAlpha = settings.mapOpacity;
-    for (const p of worldBorderPaths) ctx.stroke(p);
-
-    ctx.restore();
-  }
-
-  // ── Center crosshair ──
-  if (queryParams.lat !== undefined) {
-    const center = projectBase(queryParams.lat, queryParams.lon);
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0,200,180,0.25)';
-    ctx.lineWidth = 1 / zoom;
-    const cs = 12 / zoom;
-    ctx.beginPath();
-    ctx.moveTo(center.x - cs, center.y); ctx.lineTo(center.x + cs, center.y);
-    ctx.moveTo(center.x, center.y - cs); ctx.lineTo(center.x, center.y + cs);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // ── Prune dead circles ──
-  const fadeSec = settings.fadeTime;
-  activeCircles = activeCircles.filter(c => (now - c.born) / 1000 < fadeSec);
-
-  // ── Draw circles (using base coordinates so they stay fixed to the map) ──
-  for (const c of activeCircles) {
-    const age = (now - c.born) / 1000;
-    const life = age / fadeSec;
-    const alpha = Math.max(0, 1 - life);
-
-    // Always recompute screen-space position from lat/lon (handles pan/zoom correctly)
-    const pos = projectBase(c.lat, c.lon);
-    const cx = pos.x, cy = pos.y;
-
-    // Scale radius inversely with zoom so circles maintain same visual size
-    const r = c.radius / zoom;
-
-    ctx.save();
-
-    if (settings.glow) {
-      ctx.shadowColor = c.color;
-      ctx.shadowBlur = r * 1.8;
-    }
-
-    let fillColor = c.color;
-    if (settings.depth && c.depth > 0) {
-      const df = Math.min(1, c.depth / 300);
-      const cc = hexToRgb(c.color);
-      fillColor = `rgb(${Math.round(cc.r*(1-df*0.5))},${Math.round(cc.g*(1-df*0.5))},${Math.min(255,Math.round(cc.b+df*60))})`;
-    }
-
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-
-    // Ripple rings
-    ctx.shadowBlur = 0;
-    const ringCount = Math.floor(settings.rings);
-    for (let i = 1; i <= ringCount; i++) {
-      const ringR = r + r * life * i * 2.5;
-      const ringAlpha = alpha * (1 - i / (ringCount + 1)) * 0.6;
-      if (ringAlpha <= 0) continue;
-      ctx.globalAlpha = ringAlpha;
-      ctx.beginPath();
-      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
-      ctx.strokeStyle = c.color;
-      ctx.lineWidth = Math.max(0.3, (1.5 - i * 0.3) / zoom);
-      ctx.stroke();
-    }
-
-    // Magnitude label
-    if (settings.labels && c.mag >= 5 && alpha > 0.2) {
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.round((8 + r * 0.3))}px 'Share Tech Mono', monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(c.mag.toFixed(1), cx, cy);
-    }
-
-    ctx.restore();
-  }
-
-  ctx.restore(); // end viewport transform
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// UI BINDINGS
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Panel toggle
-const panel = document.getElementById('settings-panel');
-document.getElementById('panel-toggle').addEventListener('click', () => {
-  panel.classList.toggle('collapsed');
-});
-
-// Sliders
-function bindSlider(id, lblId, key, fmt) {
-  const sl = document.getElementById(id);
-  const lbl = document.getElementById(lblId);
-  sl.addEventListener('input', () => {
-    settings[key] = parseFloat(sl.value);
-    lbl.textContent = fmt(settings[key]);
-  });
-  lbl.textContent = fmt(settings[key]);
-}
-
-bindSlider('sl-speed',    'lbl-speed',      'speed',      v => v.toFixed(1)+'×');
-bindSlider('sl-fade',     'lbl-fade',       'fadeTime',   v => v.toFixed(1)+'s');
-bindSlider('sl-rings',    'lbl-rings',      'rings',      v => v);
-bindSlider('sl-baseR',    'lbl-baseR',      'baseR',      v => v);
-bindSlider('sl-magScale', 'lbl-magScale',   'magScale',   v => v.toFixed(1));
-bindSlider('sl-maxR',     'lbl-maxR',       'maxR',       v => v);
-bindSlider('sl-trail',    'lbl-trail',      'trailAlpha', v => v.toFixed(3));
-bindSlider('sl-mapW',     'lbl-mapW',       'mapLineWidth', v => v.toFixed(1));
-bindSlider('sl-mapOpacity','lbl-mapOpacity','mapOpacity', v => v.toFixed(2));
-
-// Checkboxes
-function bindCheck(id, key, cb) {
-  const el = document.getElementById(id);
-  el.addEventListener('change', () => { settings[key] = el.checked; if(cb) cb(); });
-}
-bindCheck('chk-glow',  'glow');
-bindCheck('chk-depth', 'depth');
-bindCheck('chk-trail', 'trail');
-bindCheck('chk-labels','labels');
-bindCheck('chk-map',   'map');
-bindCheck('chk-grid',  'grid', () => {
-  document.getElementById('grid-overlay').style.display = settings.grid ? '' : 'none';
-});
-
-// Colors
-function bindColor(id, key, cb) {
-  const el = document.getElementById(id);
-  el.addEventListener('input', () => { settings[key] = el.value; if(cb) cb(); });
-}
-bindColor('col-low',  'colLow');
-bindColor('col-mid',  'colMid');
-bindColor('col-high', 'colHigh');
-bindColor('col-bg',   'colBg');
-bindColor('col-map',  'mapColor');
-
-// Playback buttons
-document.getElementById('btn-play').addEventListener('click', () => {
-  if (!animActive && earthquakes.length) startAnimation();
-  else if (animPaused) {
-    animPaused = false;
-    lastRealTs = null;
-    document.getElementById('btn-play').classList.remove('active');
-    document.getElementById('btn-pause').classList.add('active');
-    if (!animFrame) animFrame = requestAnimationFrame(animTick);
-  }
-});
-
-document.getElementById('btn-pause').addEventListener('click', () => {
-  animPaused = !animPaused;
-  if (animPaused) {
-    document.getElementById('btn-pause').classList.remove('active');
-    document.getElementById('btn-play').classList.add('active');
-  } else {
-    lastRealTs = null;
-    document.getElementById('btn-pause').classList.add('active');
-    document.getElementById('btn-play').classList.remove('active');
-    if (!animFrame) animFrame = requestAnimationFrame(animTick);
-  }
-});
-
-document.getElementById('btn-rewind').addEventListener('click', () => {
-  if (earthquakes.length) startAnimation();
-});
-
-document.getElementById('btn-query').addEventListener('click', openQuery);
-document.getElementById('btn-restart').addEventListener('click', () => {
-  if (earthquakes.length) startAnimation();
-});
-document.getElementById('btn-new-query').addEventListener('click', openQuery);
-document.getElementById('btn-pause-panel').addEventListener('click', () => {
-  document.getElementById('btn-pause').click();
-});
-document.getElementById('btn-reset-view').addEventListener('click', resetView);
-
-// ── QUERY SUBMIT ──────────────────────────────────────────────────────────
 document.getElementById('fetch-btn').addEventListener('click', async () => {
-  const start  = document.getElementById('q-start').value;
-  const end    = document.getElementById('q-end').value;
-  const lat    = parseFloat(document.getElementById('q-lat').value);
-  const lon    = parseFloat(document.getElementById('q-lon').value);
-  const rKm    = parseFloat(document.getElementById('q-radius').value);
-  const minMag = parseFloat(document.getElementById('q-minmag').value);
-  const maxMag = parseFloat(document.getElementById('q-maxmag').value);
-  const errEl  = document.getElementById('fetch-error');
-
+  const start=document.getElementById('q-start').value, end=document.getElementById('q-end').value;
+  const lat=parseFloat(document.getElementById('q-lat').value), lon=parseFloat(document.getElementById('q-lon').value);
+  const rKm=parseFloat(document.getElementById('q-radius').value);
+  const minMag=parseFloat(document.getElementById('q-minmag').value), maxMag=parseFloat(document.getElementById('q-maxmag').value);
+  const errEl = document.getElementById('fetch-error');
   errEl.textContent = '';
-  if (!start || !end)          { errEl.textContent = 'Please enter start and end dates.'; return; }
-  if (isNaN(lat) || isNaN(lon)){ errEl.textContent = 'Please enter valid coordinates.'; return; }
-  if (isNaN(rKm) || rKm <= 0) { errEl.textContent = 'Please enter a valid radius.'; return; }
-  if (minMag >= maxMag)        { errEl.textContent = 'Min magnitude must be less than max.'; return; }
-
-  queryParams = { start, end, lat, lon, radiusKm: rKm, minMag, maxMag };
-
+  if (!start||!end) { errEl.textContent='Please enter start and end dates.'; return; }
+  if (isNaN(lat)||isNaN(lon)) { errEl.textContent='Please enter valid coordinates.'; return; }
+  if (isNaN(rKm)||rKm<=0) { errEl.textContent='Please enter a valid radius.'; return; }
+  if (minMag>=maxMag) { errEl.textContent='Min magnitude must be less than max.'; return; }
+  queryParams = {start,end,lat,lon,radiusKm:rKm,minMag,maxMag};
   document.getElementById('query-modal').style.display = 'none';
   const loading = document.getElementById('loading-overlay');
   loading.style.display = 'flex';
   document.getElementById('loader-count').textContent = '';
-
   try {
     earthquakes = await fetchEarthquakes(queryParams);
-    if (earthquakes.length === 0) {
+    if (!earthquakes.length) {
       loading.style.display = 'none';
       document.getElementById('query-modal').style.display = 'flex';
       errEl.textContent = 'No earthquakes found for these parameters.';
       return;
     }
     document.getElementById('loader-count').textContent = `${earthquakes.length} events found`;
-    await new Promise(r => setTimeout(r, 600));
-
-    resize();
-    setupProjection();
-
+    // Auto-set speed: full dataset in ~40 real seconds
+    const dur = earthquakes[earthquakes.length-1].time - earthquakes[0].time;
+    settings.speed = Math.max(1000, dur / (40 * 1000));
+    document.getElementById('sl-speed').value = settings.speed;
+    document.getElementById('lbl-speed').textContent = fmtSpeed(settings.speed);
+    await new Promise(r => setTimeout(r, 500));
     loading.style.display = 'none';
+    // Orient camera toward earthquake center
+    const targetPos = geo3D(lat, lon, INIT_DIST);
+    camera.position.copy(targetPos);
+    camera.lookAt(0, 0, 0);
+    controls.update();
     startAnimation();
-
   } catch(e) {
     loading.style.display = 'none';
     document.getElementById('query-modal').style.display = 'flex';
@@ -1662,439 +841,122 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
 });
 
 function openQuery() {
-  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
   animActive = false;
   document.getElementById('query-modal').style.display = 'flex';
   document.getElementById('controls-bar').style.display = 'none';
 }
 
-// ── TOOLTIP ON HOVER ──────────────────────────────────────────────────────
-const tooltip = document.getElementById('tooltip');
-
-canvas.addEventListener('mousemove', e => {
-  if (isDragging) { tooltip.style.display = 'none'; return; }
-  if (!animActive && activeCircles.length === 0) return;
-
-  const mx = e.clientX, my = e.clientY;
-  const now = performance.now();
-
-  // Convert mouse to base (pre-transform) coords
-  const baseMouseX = (mx - panX) / zoom;
-  const baseMouseY = (my - panY) / zoom;
-
-  let best = null, bestDist = Infinity;
-  for (const c of activeCircles) {
-    const age = (now - c.born) / 1000;
-    if (age >= settings.fadeTime) continue;
-    const pos = projectBase(c.lat, c.lon);
-    const d = Math.hypot(baseMouseX - pos.x, baseMouseY - pos.y);
-    const hitR = (c.radius / zoom) + 10 / zoom;
-    if (d < hitR && d < bestDist) { bestDist = d; best = c; }
-  }
-
-  if (best) {
-    tooltip.style.display = 'block';
-    tooltip.style.left = (mx + 16) + 'px';
-    tooltip.style.top  = (my - 10) + 'px';
-    tooltip.innerHTML = `<b>M${best.mag.toFixed(1)}</b><br>${best.place || 'Unknown'}<br>Depth: ${best.depth != null ? best.depth.toFixed(1)+' km' : '—'}`;
-  } else {
-    tooltip.style.display = 'none';
-  }
-});
-
-canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MINI MAP PICKER
-// ═══════════════════════════════════════════════════════════════════════════
+/* ── Mini Map Picker (2D D3 overlay, same as original) ── */
 (function() {
-  const modal   = document.getElementById('map-picker-modal');
+  const modal = document.getElementById('map-picker-modal');
   const mpCanvas = document.getElementById('map-picker-canvas');
-  const mpCtx    = mpCanvas.getContext('2d');
+  const mpCtx = mpCanvas.getContext('2d');
   const coordsEl = document.getElementById('map-picker-coords');
   const confirmBtn = document.getElementById('map-picker-confirm');
+  let mpW=0, mpH=0, mpPanX=0, mpPanY=0, mpZoom=1;
+  let selActive=false, selLat=null, selLon=null, selRadiusKm=null, selCurX=0, selCurY=0;
+  let mpDragging=false, mpDragStartX=0, mpDragStartY=0, mpDragPanX=0, mpDragPanY=0;
+  let mpLandPath=null, mpBordersPath=null, mpBaseScale=1, mpBaseOffX=0, mpBaseOffY=0;
 
-  // Mini-map viewport state
-  let mpW = 0, mpH = 0;
-  let mpPanX = 0, mpPanY = 0;
-  let mpZoom = 1;
-
-  // Selection state
-  let selActive = false;    // currently drawing
-  let selLat = null, selLon = null, selRadiusKm = null;
-  let selStartX = 0, selStartY = 0;  // canvas pixel coords at drag start
-  let selCurX = 0, selCurY = 0;      // current mouse position
-
-  // Pan state (non-shift drag)
-  let mpDragging = false;
-  let mpDragStartX = 0, mpDragStartY = 0;
-  let mpDragPanX = 0, mpDragPanY = 0;
-
-  // Map paths for mini-map (separate from main canvas paths)
-  let mpLandPath = null, mpBordersPath = null;
-  let mpBaseScale = 1, mpBaseOffX = 0, mpBaseOffY = 0;
-
-  // ── Setup base equirectangular projection for the mini-map ──
-  // Fits the whole world (-180..180, -90..90) into the canvas
-  function mpSetupProjection() {
-    // Fit world into canvas with a little margin
-    const aspect = mpW / mpH;
-    const worldAspect = 360 / 180;
-    let sc;
-    if (aspect > worldAspect) {
-      sc = (mpH * 0.9) / 180;
-    } else {
-      sc = (mpW * 0.9) / 360;
-    }
-    mpBaseScale = sc;
-    // center: lon=0 -> mpW/2, lat=0 -> mpH/2
-    mpBaseOffX = mpW / 2;
-    mpBaseOffY = mpH / 2;
+  function mpSetup() { const a=mpW/mpH, wa=360/180; mpBaseScale=(a>wa?mpH*.9/180:mpW*.9/360); mpBaseOffX=mpW/2; mpBaseOffY=mpH/2; }
+  function mpProj(lat,lon) { const bx=lon*mpBaseScale+mpBaseOffX, by=mpBaseOffY-lat*mpBaseScale; return {x:bx*mpZoom+mpPanX, y:by*mpZoom+mpPanY}; }
+  function mpUnproj(sx,sy) { const bx=(sx-mpPanX)/mpZoom, by=(sy-mpPanY)/mpZoom; return {lat:(mpBaseOffY-by)/mpBaseScale, lon:(bx-mpBaseOffX)/mpBaseScale}; }
+  function mpApplyZoom(f,cx,cy) { const nz=Math.max(.4,Math.min(80,mpZoom*f)),s=nz/mpZoom; mpPanX=cx-s*(cx-mpPanX); mpPanY=cy-s*(cy-mpPanY); mpZoom=nz; mpRebuild(); mpDraw(); }
+  function mpRebuild() {
+    if (!worldGeoReady||!window._worldLand) return;
+    const proj = d3.geoTransform({ point: function(lon,lat) { const bx=lon*mpBaseScale+mpBaseOffX,by=mpBaseOffY-lat*mpBaseScale; this.stream.point(bx*mpZoom+mpPanX,by*mpZoom+mpPanY); } });
+    const pg = d3.geoPath(proj);
+    mpLandPath = new Path2D(pg(window._worldLand));
+    mpBordersPath = new Path2D(pg(window._worldBorders));
   }
-
-  function mpProject(lat, lon) {
-    // base coords
-    const bx = lon * mpBaseScale + mpBaseOffX;
-    const by = mpBaseOffY - lat * mpBaseScale;
-    // apply zoom/pan
-    return { x: bx * mpZoom + mpPanX, y: by * mpZoom + mpPanY };
-  }
-
-  function mpUnproject(sx, sy) {
-    // screen → base
-    const bx = (sx - mpPanX) / mpZoom;
-    const by = (sy - mpPanY) / mpZoom;
-    const lon = (bx - mpBaseOffX) / mpBaseScale;
-    const lat = (mpBaseOffY - by) / mpBaseScale;
-    return { lat, lon };
-  }
-
-  function mpApplyZoom(factor, cx, cy) {
-    const newZoom = Math.max(0.4, Math.min(80, mpZoom * factor));
-    const s = newZoom / mpZoom;
-    mpPanX = cx - s * (cx - mpPanX);
-    mpPanY = cy - s * (cy - mpPanY);
-    mpZoom = newZoom;
-    mpRebuildPaths();
-    mpDraw();
-  }
-
-  function mpRebuildPaths() {
-    if (!worldGeoReady || !window._worldLand) return;
-
-    const proj = d3.geoTransform({
-      point: function(lon, lat) {
-        const bx = lon * mpBaseScale + mpBaseOffX;
-        const by = mpBaseOffY - lat * mpBaseScale;
-        this.stream.point(
-          bx * mpZoom + mpPanX,
-          by * mpZoom + mpPanY
-        );
-      }
-    });
-
-    const pathGen = d3.geoPath(proj);
-    mpLandPath    = new Path2D(pathGen(window._worldLand));
-    mpBordersPath = new Path2D(pathGen(window._worldBorders));
-  }
-
-  // ── Draw the mini-map ──
   function mpDraw() {
-    mpCtx.clearRect(0, 0, mpW, mpH);
-
-    // Background
-    mpCtx.fillStyle = '#05070f';
-    mpCtx.fillRect(0, 0, mpW, mpH);
-
-    // Grid lines (lat/lon graticule-style)
-    mpCtx.save();
-    mpCtx.strokeStyle = 'rgba(0,200,180,0.06)';
-    mpCtx.lineWidth = 0.5;
-    for (let lon = -180; lon <= 180; lon += 30) {
-      const a = mpProject(-90, lon), b = mpProject(90, lon);
-      mpCtx.beginPath(); mpCtx.moveTo(a.x, a.y); mpCtx.lineTo(b.x, b.y); mpCtx.stroke();
-    }
-    for (let lat = -90; lat <= 90; lat += 30) {
-      const a = mpProject(lat, -180), b = mpProject(lat, 180);
-      mpCtx.beginPath(); mpCtx.moveTo(a.x, a.y); mpCtx.lineTo(b.x, b.y); mpCtx.stroke();
-    }
+    mpCtx.clearRect(0,0,mpW,mpH);
+    mpCtx.fillStyle='#020610'; mpCtx.fillRect(0,0,mpW,mpH);
+    mpCtx.save(); mpCtx.strokeStyle='rgba(0,200,180,0.06)'; mpCtx.lineWidth=.5;
+    for (let l=-180;l<=180;l+=30){const a=mpProj(-90,l),b=mpProj(90,l);mpCtx.beginPath();mpCtx.moveTo(a.x,a.y);mpCtx.lineTo(b.x,b.y);mpCtx.stroke();}
+    for (let l=-90;l<=90;l+=30){const a=mpProj(l,-180),b=mpProj(l,180);mpCtx.beginPath();mpCtx.moveTo(a.x,a.y);mpCtx.lineTo(b.x,b.y);mpCtx.stroke();}
     mpCtx.restore();
-
-    // Land + borders
     if (mpLandPath) {
-      const bg = hexToRgb('#05070f');
-      mpCtx.save();
-      mpCtx.globalAlpha = 0.85;
-      mpCtx.fillStyle = `rgb(${bg.r+14},${bg.g+20},${bg.b+26})`;
-      mpCtx.fill(mpLandPath);
-      mpCtx.strokeStyle = '#1e3344';
-      mpCtx.lineWidth = 0.6;
-      mpCtx.stroke(mpBordersPath);
-      mpCtx.restore();
-    } else {
-      mpCtx.save();
-      mpCtx.fillStyle = 'rgba(0,200,180,0.06)';
-      mpCtx.fillRect(0, 0, mpW, mpH);
+      mpCtx.save(); mpCtx.globalAlpha=.85; mpCtx.fillStyle='#0c1a26'; mpCtx.fill(mpLandPath);
+      mpCtx.strokeStyle='#1e3344'; mpCtx.lineWidth=.6; mpCtx.stroke(mpBordersPath); mpCtx.restore();
+    }
+    if (selLat!==null&&selRadiusKm>0) {
+      const c=mpProj(selLat,selLon), rPx=(selRadiusKm/111.32)*mpBaseScale*mpZoom;
+      mpCtx.save(); mpCtx.beginPath(); mpCtx.arc(c.x,c.y,rPx,0,Math.PI*2);
+      mpCtx.fillStyle='rgba(0,200,180,0.12)'; mpCtx.fill();
+      mpCtx.setLineDash([4,3]); mpCtx.strokeStyle='#00c8b4'; mpCtx.lineWidth=1.5; mpCtx.stroke(); mpCtx.setLineDash([]);
+      mpCtx.strokeStyle='rgba(0,200,180,0.8)'; mpCtx.lineWidth=1;
+      mpCtx.beginPath(); mpCtx.moveTo(c.x-6,c.y); mpCtx.lineTo(c.x+6,c.y); mpCtx.moveTo(c.x,c.y-6); mpCtx.lineTo(c.x,c.y+6); mpCtx.stroke();
       mpCtx.restore();
     }
-
-    // Draw selection circle
-    if (selLat !== null && selLon !== null && selRadiusKm !== null && selRadiusKm > 0) {
-      const center = mpProject(selLat, selLon);
-      // Radius in pixels: radiusKm / 111.32 degrees * mpBaseScale * mpZoom
-      const rPx = (selRadiusKm / 111.32) * mpBaseScale * mpZoom;
-
-      // Filled translucent circle
-      mpCtx.save();
-      mpCtx.beginPath();
-      mpCtx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
-      mpCtx.fillStyle = 'rgba(0,200,180,0.12)';
-      mpCtx.fill();
-      // Dashed border
-      mpCtx.setLineDash([4, 3]);
-      mpCtx.strokeStyle = '#00c8b4';
-      mpCtx.lineWidth = 1.5;
-      mpCtx.stroke();
-      mpCtx.setLineDash([]);
-      // Center crosshair
-      mpCtx.strokeStyle = 'rgba(0,200,180,0.8)';
-      mpCtx.lineWidth = 1;
-      const cs = 6;
-      mpCtx.beginPath();
-      mpCtx.moveTo(center.x - cs, center.y); mpCtx.lineTo(center.x + cs, center.y);
-      mpCtx.moveTo(center.x, center.y - cs); mpCtx.lineTo(center.x, center.y + cs);
-      mpCtx.stroke();
-      mpCtx.restore();
-    }
-
-    // Live drag preview
     if (selActive) {
-      const center = mpProject(selLat, selLon);
-      const rPx = Math.hypot(selCurX - center.x, selCurY - center.y);
-
-      mpCtx.save();
-      mpCtx.beginPath();
-      mpCtx.arc(center.x, center.y, rPx, 0, Math.PI * 2);
-      mpCtx.fillStyle = 'rgba(255,209,102,0.10)';
-      mpCtx.fill();
-      mpCtx.setLineDash([5, 3]);
-      mpCtx.strokeStyle = '#ffd166';
-      mpCtx.lineWidth = 1.5;
-      mpCtx.stroke();
-      mpCtx.setLineDash([]);
-      mpCtx.restore();
-    }
-
-    // Hint overlay when map not yet loaded
-    if (!worldGeoReady) {
-      mpCtx.save();
-      mpCtx.fillStyle = 'rgba(0,200,180,0.5)';
-      mpCtx.font = `11px 'Share Tech Mono', monospace`;
-      mpCtx.textAlign = 'center';
-      mpCtx.textBaseline = 'middle';
-      mpCtx.fillText('Loading map data…', mpW / 2, mpH / 2);
+      const c=mpProj(selLat,selLon), rPx=Math.hypot(selCurX-c.x,selCurY-c.y);
+      mpCtx.save(); mpCtx.beginPath(); mpCtx.arc(c.x,c.y,rPx,0,Math.PI*2);
+      mpCtx.fillStyle='rgba(255,209,102,0.10)'; mpCtx.fill();
+      mpCtx.setLineDash([5,3]); mpCtx.strokeStyle='#ffd166'; mpCtx.lineWidth=1.5; mpCtx.stroke(); mpCtx.setLineDash([]);
       mpCtx.restore();
     }
   }
-
-  // ── Resize mini-map canvas to match its CSS size ──
   function mpResize() {
-    const rect = mpCanvas.parentElement.getBoundingClientRect();
-    mpW = mpCanvas.width  = Math.round(rect.width);
-    mpH = mpCanvas.height = Math.round(Math.max(340, rect.height));
-    mpCanvas.parentElement.style.height = mpH + 'px';
-    mpSetupProjection();
-    mpRebuildPaths();
-    mpDraw();
+    const rect=mpCanvas.parentElement.getBoundingClientRect();
+    mpW=mpCanvas.width=Math.round(rect.width);
+    mpH=mpCanvas.height=Math.round(Math.max(340,rect.height));
+    mpCanvas.parentElement.style.height=mpH+'px';
+    mpSetup(); mpRebuild(); mpDraw();
   }
-
-  // ── Open the picker ──
+  function updateCoords() {
+    if (selLat===null){coordsEl.innerHTML='No selection yet';return;}
+    const la=Math.abs(selLat).toFixed(3)+(selLat>=0?'°N':'°S'), lo=Math.abs(selLon).toFixed(3)+(selLon>=0?'°E':'°W');
+    coordsEl.innerHTML=`<span>${la}, ${lo}</span>  radius: <span>${selRadiusKm?Math.round(selRadiusKm)+' km':'—'}</span>`;
+  }
   window.openMapPicker = function() {
     modal.classList.add('open');
-    // defer resize so the modal has rendered
-    requestAnimationFrame(() => {
+    requestAnimationFrame(()=>{
       mpResize();
-      // If worldGeoReady already, rebuild now
-      if (worldGeoReady) { mpRebuildPaths(); mpDraw(); }
-      // Restore previously entered values as a preview circle if valid
-      const lat = parseFloat(document.getElementById('q-lat').value);
-      const lon = parseFloat(document.getElementById('q-lon').value);
-      const rKm = parseFloat(document.getElementById('q-radius').value);
-      if (!isNaN(lat) && !isNaN(lon) && !isNaN(rKm) && rKm > 0) {
-        selLat = lat; selLon = lon; selRadiusKm = rKm;
-        confirmBtn.disabled = false;
-        updateCoordsDisplay();
-        // Pan to show the selection
-        mpCenterOn(lat, lon);
+      const lat=parseFloat(document.getElementById('q-lat').value), lon=parseFloat(document.getElementById('q-lon').value), rKm=parseFloat(document.getElementById('q-radius').value);
+      if (!isNaN(lat)&&!isNaN(lon)&&!isNaN(rKm)&&rKm>0) {
+        selLat=lat; selLon=lon; selRadiusKm=rKm; confirmBtn.disabled=false; updateCoords();
+        const bx=lon*mpBaseScale+mpBaseOffX, by=mpBaseOffY-lat*mpBaseScale;
+        mpPanX=mpW/2-bx*mpZoom; mpPanY=mpH/2-by*mpZoom; mpRebuild();
       }
       mpDraw();
     });
   };
-
-  function mpCenterOn(lat, lon) {
-    const bx = lon * mpBaseScale + mpBaseOffX;
-    const by = mpBaseOffY - lat * mpBaseScale;
-    mpPanX = mpW / 2 - bx * mpZoom;
-    mpPanY = mpH / 2 - by * mpZoom;
-    mpRebuildPaths();
-  }
-
-  function closePicker() {
+  document.getElementById('map-picker-close').addEventListener('click', ()=>{ modal.classList.remove('open'); selActive=false; });
+  document.getElementById('btn-map-pick').addEventListener('click', ()=>window.openMapPicker());
+  confirmBtn.addEventListener('click', ()=>{
+    if (selLat===null||selRadiusKm===null) return;
+    document.getElementById('q-lat').value=selLat.toFixed(4);
+    document.getElementById('q-lon').value=selLon.toFixed(4);
+    document.getElementById('q-radius').value=Math.round(selRadiusKm);
     modal.classList.remove('open');
-    selActive = false;
-  }
-
-  document.getElementById('map-picker-close').addEventListener('click', closePicker);
-
-  // Confirm selection
-  confirmBtn.addEventListener('click', () => {
-    if (selLat === null || selRadiusKm === null) return;
-    document.getElementById('q-lat').value    = selLat.toFixed(4);
-    document.getElementById('q-lon').value    = selLon.toFixed(4);
-    document.getElementById('q-radius').value = Math.round(selRadiusKm);
-    closePicker();
   });
-
-  document.getElementById('btn-map-pick').addEventListener('click', () => {
-    window.openMapPicker();
+  document.getElementById('mp-zoom-in').addEventListener('click', ()=>mpApplyZoom(1.5,mpW/2,mpH/2));
+  document.getElementById('mp-zoom-out').addEventListener('click', ()=>mpApplyZoom(1/1.5,mpW/2,mpH/2));
+  mpCanvas.addEventListener('wheel', e=>{ e.preventDefault(); const r=mpCanvas.getBoundingClientRect(); mpApplyZoom(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top); },{passive:false});
+  mpCanvas.addEventListener('mousedown', e=>{
+    const r=mpCanvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    if (e.shiftKey){e.preventDefault();const g=mpUnproj(mx,my);selLat=Math.max(-90,Math.min(90,g.lat));selLon=g.lon;selCurX=mx;selCurY=my;selActive=true;selRadiusKm=0;confirmBtn.disabled=true;}
+    else{mpDragging=true;mpDragStartX=mx;mpDragStartY=my;mpDragPanX=mpPanX;mpDragPanY=mpPanY;mpCanvas.classList.add('map-panning');e.preventDefault();}
   });
-
-  // Zoom buttons
-  document.getElementById('mp-zoom-in').addEventListener('click', () =>
-    mpApplyZoom(1.5, mpW / 2, mpH / 2));
-  document.getElementById('mp-zoom-out').addEventListener('click', () =>
-    mpApplyZoom(1 / 1.5, mpW / 2, mpH / 2));
-
-  // ── Mouse wheel zoom ──
-  mpCanvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const rect = mpCanvas.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-    mpApplyZoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, cx, cy);
-  }, { passive: false });
-
-  // ── Mouse events ──
-  mpCanvas.addEventListener('mousedown', e => {
-    const rect = mpCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    if (e.shiftKey) {
-      // Start selection
-      e.preventDefault();
-      const geo = mpUnproject(mx, my);
-      selLat = Math.max(-90, Math.min(90, geo.lat));
-      selLon = geo.lon;
-      selCurX = mx; selCurY = my;
-      selActive = true;
-      selRadiusKm = 0;
-      confirmBtn.disabled = true;
-    } else {
-      // Start pan
-      mpDragging = true;
-      mpDragStartX = mx; mpDragStartY = my;
-      mpDragPanX = mpPanX; mpDragPanY = mpPanY;
-      mpCanvas.classList.add('map-panning');
-      e.preventDefault();
-    }
-  });
-
-  window.addEventListener('mousemove', e => {
+  window.addEventListener('mousemove', e=>{
     if (!modal.classList.contains('open')) return;
-    const rect = mpCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    if (selActive) {
-      selCurX = mx; selCurY = my;
-      // Compute live radius in km
-      const center = mpProject(selLat, selLon);
-      const rPx = Math.hypot(mx - center.x, my - center.y);
-      const rDeg = rPx / (mpBaseScale * mpZoom);
-      selRadiusKm = Math.max(1, rDeg * 111.32);
-      updateCoordsDisplay();
-      mpDraw();
-    } else if (mpDragging) {
-      mpPanX = mpDragPanX + (mx - mpDragStartX);
-      mpPanY = mpDragPanY + (my - mpDragStartY);
-      mpRebuildPaths();
-      mpDraw();
-    } else {
-      // Just show hover coords
-      const geo = mpUnproject(mx, my);
-      const latStr = geo.lat.toFixed(3);
-      const lonStr = geo.lon.toFixed(3);
-      if (selLat !== null && selRadiusKm > 0) {
-        updateCoordsDisplay();
-      } else {
-        coordsEl.innerHTML = `Cursor: <span>${latStr}°, ${lonStr}°</span>`;
-      }
-    }
+    const r=mpCanvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    if (selActive){selCurX=mx;selCurY=my;const c=mpProj(selLat,selLon),rPx=Math.hypot(mx-c.x,my-c.y);selRadiusKm=Math.max(1,rPx/(mpBaseScale*mpZoom)*111.32);updateCoords();mpDraw();}
+    else if (mpDragging){mpPanX=mpDragPanX+(mx-mpDragStartX);mpPanY=mpDragPanY+(my-mpDragStartY);mpRebuild();mpDraw();}
+    else{const g=mpUnproj(mx,my);if(selLat!==null&&selRadiusKm>0)updateCoords();else coordsEl.innerHTML=`Cursor: <span>${g.lat.toFixed(3)}°, ${g.lon.toFixed(3)}°</span>`;}
   });
-
-  window.addEventListener('mouseup', e => {
+  window.addEventListener('mouseup', e=>{
     if (!modal.classList.contains('open')) return;
-    if (selActive) {
-      selActive = false;
-      if (selRadiusKm > 1) {
-        confirmBtn.disabled = false;
-        updateCoordsDisplay();
-      } else {
-        selLat = null; selLon = null; selRadiusKm = null;
-        confirmBtn.disabled = true;
-        coordsEl.innerHTML = 'No selection yet';
-      }
-      mpDraw();
-    }
-    if (mpDragging) {
-      mpDragging = false;
-      mpCanvas.classList.remove('map-panning');
-    }
+    if (selActive){selActive=false;if(selRadiusKm>1){confirmBtn.disabled=false;updateCoords();}else{selLat=null;selLon=null;selRadiusKm=null;confirmBtn.disabled=true;coordsEl.innerHTML='No selection yet';}mpDraw();}
+    if (mpDragging){mpDragging=false;mpCanvas.classList.remove('map-panning');}
   });
-
-  // Prevent the canvas from intercepting keyboard shortcuts while picker is open
-  mpCanvas.addEventListener('keydown', e => { e.stopPropagation(); });
-
-  function updateCoordsDisplay() {
-    if (selLat === null) { coordsEl.innerHTML = 'No selection yet'; return; }
-    const latD = Math.abs(selLat).toFixed(3) + (selLat >= 0 ? '°N' : '°S');
-    const lonD = Math.abs(selLon).toFixed(3) + (selLon >= 0 ? '°E' : '°W');
-    const rStr = selRadiusKm ? Math.round(selRadiusKm) + ' km' : '—';
-    coordsEl.innerHTML = `<span>${latD}, ${lonD}</span>  radius: <span>${rStr}</span>`;
-  }
-
-  // ── When world map loads, rebuild mini-map too ──
-  const origLoad = loadWorldMap;
-  // We patch via a post-load hook — after worldGeoReady is set we call mpRebuildPaths
-  // This is handled by polling below since loadWorldMap is async
-  const mpReadyPoll = setInterval(() => {
-    if (worldGeoReady && modal.classList.contains('open')) {
-      mpRebuildPaths();
-      mpDraw();
-      clearInterval(mpReadyPoll);
-    } else if (worldGeoReady) {
-      clearInterval(mpReadyPoll);
-    }
-  }, 200);
-
-  // Close on backdrop click
-  modal.addEventListener('click', e => {
-    if (e.target === modal) closePicker();
-  });
-
-  // Escape key
-  window.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && modal.classList.contains('open')) closePicker();
-  });
-
+  modal.addEventListener('click', e=>{ if(e.target===modal)modal.classList.remove('open'); });
+  window.addEventListener('keydown', e=>{ if(e.key==='Escape'&&modal.classList.contains('open'))modal.classList.remove('open'); });
+  const poll = setInterval(()=>{ if(worldGeoReady&&modal.classList.contains('open')){mpRebuild();mpDraw();clearInterval(poll);}else if(worldGeoReady)clearInterval(poll); }, 200);
 })();
 
-// ── INIT ──────────────────────────────────────────────────────────────────
-ctx.fillStyle = settings.colBg;
-ctx.fillRect(0, 0, W, H);
-
-// Start loading world map in background
+/* ── Init ── */
 loadWorldMap();
 </script>
 </body>

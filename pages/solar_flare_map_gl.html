@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solar Pulse GL — Flare Map</title>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #03050c;
+    --panel-bg: rgba(6, 9, 20, 0.97);
+    --border: rgba(255,209,102,0.18);
+    --accent:  #ffd166;
+    --accent2: #ff6b35;
+    --accent3: #ff3860;
+    --text: #e8dec8;
+    --text-dim: #8a7a5a;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+    --panel-w: 300px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); overflow: hidden; height: 100vh; width: 100vw; user-select: none; }
+
+  #gl-container { position: fixed; inset: 0; z-index: 0; }
+  #gl-container canvas { display: block; }
+  #canvas-2d { position: fixed; inset: 0; z-index: 0; display: none; cursor: grab; }
+  #canvas-2d.dragging { cursor: grabbing; }
+
+  #grid-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 1;
+    background-image: linear-gradient(rgba(255,209,102,0.025) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,209,102,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ── QUERY MODAL ── */
+  #query-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 40%, rgba(255,209,102,0.07) 0%, rgba(3,5,12,0.97) 70%); }
+  #query-modal.hidden { display: none; }
+  #query-box {
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    padding: 36px 40px 32px; width: min(560px, 92vw); max-height: 92vh; overflow-y: auto;
+    box-shadow: 0 0 80px rgba(255,209,102,0.12), 0 0 0 1px rgba(255,209,102,0.04); position: relative;
+  }
+  #query-box::before { content: ''; position: absolute; top: -1px; left: 40px; width: 60px; height: 2px; background: var(--accent2); }
+  .q-title { font-family: var(--sans); font-weight: 700; font-size: 28px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+  .q-sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--text-dim); margin-bottom: 24px; text-transform: uppercase; }
+  .q-row { margin-bottom: 16px; }
+  .q-row label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 6px; }
+  .q-row input, .q-row select { width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 13px; padding: 8px 10px; outline: none; }
+  .q-row input:focus, .q-row select:focus { border-color: var(--accent); }
+  .q-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .q-actions { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
+  .q-btn { background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; padding: 10px 18px; cursor: pointer; transition: all 0.15s; }
+  .q-btn:hover { background: var(--accent); color: #0a0a0e; }
+  .q-btn.secondary { border-color: var(--text-dim); color: var(--text-dim); }
+  .q-btn.secondary:hover { background: var(--text-dim); color: #0a0a0e; }
+  .q-err { color: var(--accent3); font-family: var(--mono); font-size: 11px; margin-top: 12px; min-height: 14px; }
+  .q-warn { color: var(--accent2); font-family: var(--mono); font-size: 11px; margin-top: 8px; }
+  .q-key-row { display: flex; gap: 6px; align-items: center; }
+  .q-key-row input { flex: 1; min-width: 0; }
+  .q-info-btn { flex-shrink: 0; position: relative; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 13px; font-weight: bold; text-decoration: none; cursor: pointer; transition: all 0.15s; line-height: 1; }
+  .q-info-btn:hover { background: var(--accent); color: #0a0a0e; }
+  .q-info-tip { display: none; position: absolute; right: 30px; top: 50%; transform: translateY(-50%); width: 210px; background: var(--panel-bg); border: 1px solid var(--border); border-left: 2px solid var(--accent); color: var(--text); font-family: var(--mono); font-size: 11px; line-height: 1.55; padding: 8px 10px; z-index: 200; pointer-events: none; white-space: normal; }
+  .q-info-btn:hover .q-info-tip { display: block; }
+
+  /* ── SETTINGS PANEL ── */
+  #settings { position: fixed; top: 0; left: 0; width: var(--panel-w); height: 100vh; background: var(--panel-bg); border-right: 1px solid var(--border); z-index: 50; overflow-y: auto; transition: transform 0.35s cubic-bezier(0.5,0,0.2,1); padding: 20px 18px 80px; }
+  #settings.collapsed { transform: translateX(calc(-1 * var(--panel-w))); }
+  #settings::-webkit-scrollbar { width: 6px; }
+  #settings::-webkit-scrollbar-thumb { background: var(--border); }
+  #panel-toggle { position: fixed; top: 14px; left: calc(var(--panel-w) + 8px); z-index: 51; background: var(--panel-bg); border: 1px solid var(--border); color: var(--accent); font-family: var(--mono); font-size: 12px; width: 28px; height: 28px; cursor: pointer; transition: left 0.35s cubic-bezier(0.5,0,0.2,1); }
+  #settings.collapsed ~ #panel-toggle { left: 8px; }
+  #panel-toggle:hover { background: var(--accent); color: #0a0a0e; }
+  .sec { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed rgba(255,209,102,0.10); }
+  .sec:last-child { border-bottom: none; }
+  .sec h3 { font-family: var(--sans); font-weight: 600; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; color: var(--text-dim); }
+  .row .val { color: var(--text); }
+  .row input[type=range] { flex: 1; margin: 0 8px; -webkit-appearance: none; appearance: none; background: transparent; height: 14px; }
+  .row input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--border); }
+  .row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); margin-top: -4px; box-shadow: 0 0 6px var(--accent); cursor: pointer; }
+  .row input[type=range]::-moz-range-track { height: 2px; background: var(--border); }
+  .row input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: none; box-shadow: 0 0 6px var(--accent); cursor: pointer; }
+  .row input[type=color] { width: 28px; height: 18px; border: 1px solid var(--border); background: transparent; cursor: pointer; padding: 0; }
+  .row input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+  .label-min { width: 64px; }
+  .view-switch { display: flex; width: 100%; border: 1px solid var(--border); margin-top: 4px; }
+  .view-switch button { flex: 1; background: transparent; border: none; color: var(--text-dim); font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; padding: 8px 4px; cursor: pointer; text-transform: uppercase; }
+  .view-switch button.active { background: var(--accent); color: #0a0a0e; }
+  .panel-btn { width: 100%; background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; padding: 8px; cursor: pointer; margin-top: 6px; }
+  .panel-btn:hover { background: var(--accent); color: #0a0a0e; }
+
+  /* ── HUD ── */
+  #hud { position: fixed; bottom: 0; left: 0; right: 0; z-index: 55; display: flex; flex-direction: column; align-items: stretch; background: linear-gradient(to top, rgba(3,5,12,0.95), rgba(3,5,12,0.0)); font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; }
+  #hud.hidden { display: none; }
+  #progress-track { width: 100%; height: 3px; background: rgba(255,209,102,0.08); flex-shrink: 0; }
+  #progress-fill { height: 100%; width: 0%; background: var(--accent); box-shadow: 0 0 10px var(--accent); transition: width 0.08s linear; }
+  #hud-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
+  .hud-btn { background: var(--panel-bg); border: 1px solid var(--border); color: var(--accent); font-family: var(--mono); font-size: 11px; width: 32px; height: 28px; cursor: pointer; transition: all 0.12s; flex-shrink: 0; }
+  .hud-btn:hover { background: var(--accent); color: #0a0a0e; }
+  .hud-spacer { flex: 1; }
+  .hud-readout { color: var(--text); margin: 0 4px; }
+  #h-status { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); border: 1px solid currentColor; padding: 2px 6px; flex-shrink: 0; }
+
+  /* ── LOADING ── */
+  #loading { position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(3,5,12,0.88); color: var(--accent); font-family: var(--mono); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; }
+  #loading.show { display: flex; }
+  .spinner { width: 36px; height: 36px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; margin-bottom: 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── TOOLTIP ── */
+  #tooltip { position: fixed; z-index: 60; background: var(--panel-bg); border: 1px solid var(--border); border-top: 1px solid var(--accent); padding: 8px 10px; font-family: var(--mono); font-size: 11px; color: var(--text); pointer-events: none; display: none; max-width: 240px; line-height: 1.5; }
+  #tooltip.show { display: block; }
+  #tooltip .tt-class { color: var(--accent); font-weight: bold; }
+  #tooltip .tt-dim { color: var(--text-dim); }
+  #tooltip a { color: var(--accent); pointer-events: auto; }
+
+  /* ── GL badge ── */
+  #gl-badge { position: fixed; top: 12px; right: 12px; z-index: 60; font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; color: var(--accent); border: 1px solid rgba(255,209,102,0.3); padding: 3px 8px; background: rgba(3,5,12,0.7); pointer-events: none; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<div id="gl-container"></div>
+<canvas id="canvas-2d"></canvas>
+<div id="grid-overlay"></div>
+<div id="gl-badge">WebGL · 3D</div>
+
+<!-- ── Query Modal ── -->
+<div id="query-modal">
+  <div id="query-box">
+    <div class="q-title">Solar Pulse GL</div>
+    <div class="q-sub">NASA DONKI · Flare Catalog · 2010–present · 3D WebGL</div>
+    <div class="q-grid2">
+      <div class="q-row"><label>Start date</label><input type="date" id="q-start"></div>
+      <div class="q-row"><label>End date</label><input type="date" id="q-end"></div>
+    </div>
+    <div class="q-row">
+      <label>Minimum class</label>
+      <select id="q-minclass">
+        <option value="C" selected>C</option>
+        <option value="M">M — moderate</option>
+        <option value="X">X — strongest</option>
+      </select>
+    </div>
+    <div class="q-row">
+      <label>NASA API key (optional)</label>
+      <div class="q-key-row">
+        <input type="text" id="q-apikey" placeholder="DEMO_KEY (rate limited ~30/hr)" value="DEMO_KEY">
+        <a class="q-info-btn" href="https://api.nasa.gov" target="_blank" rel="noopener">!
+          <span class="q-info-tip">The default DEMO_KEY allows only 30 requests/hr shared across all visitors — get a free personal key at api.nasa.gov to raise that to 1,000/hr.</span>
+        </a>
+      </div>
+    </div>
+    <div class="q-actions">
+      <button class="q-btn" id="q-fetch">Fetch flares</button>
+      <button class="q-btn secondary" id="q-cancel" style="display:none">Cancel</button>
+    </div>
+    <div class="q-err" id="q-err"></div>
+    <div class="q-warn" id="q-warn"></div>
+  </div>
+</div>
+
+<!-- ── Settings Panel ── -->
+<aside id="settings">
+  <div class="sec">
+    <h3>View</h3>
+    <div class="view-switch">
+      <button id="view-disk" class="active">3D Sun</button>
+      <button id="view-flat">Flat map</button>
+    </div>
+    <button class="panel-btn" id="btn-newquery" style="margin-top:14px;">New query</button>
+  </div>
+  <div class="sec">
+    <h3>Animation</h3>
+    <div class="row"><span class="label-min">Speed</span><input type="range" id="s-speed" min="0" max="100" step="1" value="35"><span class="val" id="v-speed">—</span></div>
+    <div class="row"><span class="label-min">Fade</span><input type="range" id="s-fade" min="0.3" max="15" step="0.1" value="1"><span class="val" id="v-fade">1.0s</span></div>
+    <div class="row"><span class="label-min">Rings</span><input type="range" id="s-rings" min="0" max="5" step="1" value="1"><span class="val" id="v-rings">1</span></div>
+  </div>
+  <div class="sec">
+    <h3>Pulse size</h3>
+    <div class="row"><span class="label-min">Base</span><input type="range" id="s-base" min="2" max="40" step="1" value="5"><span class="val" id="v-base">5</span></div>
+    <div class="row"><span class="label-min">Scale</span><input type="range" id="s-scale" min="0.5" max="6" step="0.1" value="3"><span class="val" id="v-scale">3.0</span></div>
+    <div class="row"><span class="label-min">Max</span><input type="range" id="s-max" min="20" max="300" step="5" value="120"><span class="val" id="v-max">120</span></div>
+  </div>
+  <div class="sec">
+    <h3>Colors</h3>
+    <div class="row"><span class="label-min">C class</span><input type="color" id="s-cC" value="#ffd166"></div>
+    <div class="row"><span class="label-min">M class</span><input type="color" id="s-cM" value="#ff6b35"></div>
+    <div class="row"><span class="label-min">X class</span><input type="color" id="s-cX" value="#ff3860"></div>
+    <div class="row"><span class="label-min">Sun</span><input type="color" id="s-cSun" value="#ffaa33"></div>
+    <div class="row"><span class="label-min">Grid</span><input type="color" id="s-cGrid" value="#5a4a2a"></div>
+  </div>
+  <div class="sec">
+    <h3>Toggles</h3>
+    <div class="row" id="row-showC"><span>Show C flares</span><input type="checkbox" id="t-showC" checked></div>
+    <div class="row" id="row-showM"><span>Show M flares</span><input type="checkbox" id="t-showM" checked></div>
+    <div class="row" id="row-showX"><span>Show X flares</span><input type="checkbox" id="t-showX" checked></div>
+    <div class="row"><span>Graticule</span><input type="checkbox" id="t-grat" checked></div>
+    <div class="row"><span>Backside events</span><input type="checkbox" id="t-back" checked></div>
+    <div class="row"><span>Rotate Sun</span><input type="checkbox" id="t-rotate" checked></div>
+    <div class="row"><span>Solar wind</span><input type="checkbox" id="t-wind" checked></div>
+  </div>
+</aside>
+<button id="panel-toggle" title="Toggle panel">‹</button>
+
+<!-- ── HUD ── -->
+<div id="hud" class="hidden">
+  <div id="progress-track"><div id="progress-fill"></div></div>
+  <div id="hud-row">
+    <button class="hud-btn" id="h-play" title="Play / pause">▶</button>
+    <button class="hud-btn" id="h-restart" title="Restart">⟲</button>
+    <button class="hud-btn" id="h-rew" title="Rewind 1h">«</button>
+    <span class="hud-readout" id="h-time">—</span>
+    <span>Events: <span class="hud-readout" id="h-count">0</span> / <span id="h-total">0</span></span>
+    <span id="h-status">PLAYING</span>
+    <span class="hud-spacer"></span>
+    <button class="hud-btn" id="h-zin" title="Zoom in">+</button>
+    <button class="hud-btn" id="h-zout" title="Zoom out">−</button>
+    <button class="hud-btn" id="h-reset" title="Reset view">⊙</button>
+    <span class="hud-readout" id="h-zoom">1.00×</span>
+  </div>
+</div>
+
+<div id="loading"><div class="spinner"></div><div id="loading-msg">Fetching DONKI…</div></div>
+<div id="tooltip"></div>
+
+<script type="module">
+'use strict';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ── DOM ── */
+const $ = id => document.getElementById(id);
+
+/* ── Constants ── */
+const SUN_R    = 2.0;
+const INIT_DIST = SUN_R * 3.6;
+const WORLD_SCALE = SUN_R * 0.55 / 120; // pixel-space max → world units
+const MAX_RINGS   = 5;
+const UP_Z = new THREE.Vector3(0, 0, 1);
+const SUN_ROT_RATE = 360 / (27.27 * 24 * 3600 * 1000); // °/ms sim time
+
+/* ── Simulation state (mirrored from original) ── */
+const settings = {
+  speed: 126, fade: 1, rings: 1,
+  base: 5, scale: 3, max: 120,
+  cC: '#ffd166', cM: '#ff6b35', cX: '#ff3860',
+  cSun: '#ffaa33', cGrid: '#5a4a2a',
+  grat: true, back: true, rotate: true, wind: true,
+  showC: true, showM: true, showX: true,
+  view: 'disk',
+};
+
+let flares = [], hasQueried = false, activeCircles = [];
+let simTime = 0, datasetStart = 0, datasetEnd = 0, firedCount = 0;
+let animPaused = false, reachedEnd = false, awaitingLoop = false, loopTimerHandle = null;
+let lastFrame = performance.now();
+let simRotAngle = 0;
+
+/* ── 2D flat map state ── */
+let panX2 = 0, panY2 = 0, zoom2 = 1;
+let dragging2 = false, dragStart2 = null;
+const canvas2d = $('canvas-2d');
+const ctx2 = canvas2d.getContext('2d');
+
+/* ── Three.js setup ── */
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+$('gl-container').appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 2000);
+camera.position.set(0, 0, INIT_DIST);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.07;
+controls.minDistance    = SUN_R * 1.3;
+controls.maxDistance    = SUN_R * 18;
+controls.enablePan      = true;
+controls.panSpeed       = 0.6;
+controls.rotateSpeed    = 0.55;
+controls.saveState();
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  canvas2d.width  = window.innerWidth;
+  canvas2d.height = window.innerHeight;
+});
+canvas2d.width  = window.innerWidth;
+canvas2d.height = window.innerHeight;
+
+/* ── Star field ── */
+{
+  const n = 3000;
+  const pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const theta = Math.random() * Math.PI * 2;
+    const r = 400 + Math.random() * 200;
+    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i*3+2] = r * Math.cos(phi);
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(geom, new THREE.PointsMaterial({ color: 0xffffff, size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0.65 })));
+}
+
+/* ── Sun shaders ── */
+const sunVert = /* glsl */`
+  varying vec3 vLocalPos;
+  varying vec3 vViewNormal;
+  void main() {
+    vLocalPos   = position;
+    vViewNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const sunFrag = /* glsl */`
+  uniform float uRotAngle;
+  uniform vec3  uGridColor;
+  uniform float uGridAlpha;
+  varying vec3 vLocalPos;
+  varying vec3 vViewNormal;
+  #define PI 3.14159265358979
+
+  void main() {
+    vec3  n      = normalize(vLocalPos);
+    float lat    = asin(clamp(n.y, -1.0, 1.0));
+    float lon    = atan(n.x, n.z);
+    float sLon   = lon - uRotAngle;
+
+    float latD   = lat  * (180.0 / PI);
+    float lonD   = sLon * (180.0 / PI);
+
+    float lw     = 1.2;
+    float latDist = abs(mod(latD + 15.0, 30.0) - 15.0);
+    float lonDist = abs(mod(lonD + 15.0, 30.0) - 15.0);
+    float latLine = 1.0 - smoothstep(lw * 0.5, lw * 1.5, latDist);
+    float lonLine = 1.0 - smoothstep(lw * 0.5, lw * 1.5, lonDist);
+    float eqLine  = 1.0 - smoothstep(0.35, 1.2, abs(latD));
+    float gridA   = clamp(latLine * 0.7 + lonLine * 0.7 + eqLine * 0.5, 0.0, 1.0) * uGridAlpha;
+
+    float facing  = max(0.0, vViewNormal.z);
+    float limbDk  = pow(facing, 0.6);
+
+    vec3 body = vec3(0.06, 0.027, 0.006) * (0.35 + 0.65 * limbDk);
+    vec3 col  = mix(body, uGridColor * 0.85, gridA);
+
+    float rim = pow(1.0 - facing, 3.5);
+    col += vec3(1.0, 0.52, 0.12) * rim * 0.32;
+
+    // Subtle heat shimmer near equator
+    float eq2 = 1.0 - smoothstep(0.0, 8.0, abs(latD));
+    col += vec3(0.9, 0.4, 0.1) * eq2 * 0.04 * (1.0 - facing * 0.5);
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+const sunMat = new THREE.ShaderMaterial({
+  vertexShader: sunVert,
+  fragmentShader: sunFrag,
+  uniforms: {
+    uRotAngle:  { value: 0.0 },
+    uGridColor: { value: new THREE.Color(settings.cGrid) },
+    uGridAlpha: { value: 0.7 },
+  },
+  side: THREE.FrontSide,
+});
+const sun = new THREE.Mesh(new THREE.SphereGeometry(SUN_R, 128, 64), sunMat);
+scene.add(sun);
+
+/* ── Corona layers ── */
+const mkCorona = (scale, color, opacity) => {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(SUN_R * scale, 32, 32),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  scene.add(m);
+  return m;
+};
+const coronaRim    = mkCorona(1.015, 0xff8820, 0.18);
+const coronaInner  = mkCorona(1.10,  0xff6010, 0.08);
+const coronaMiddle = mkCorona(1.30,  0xff4408, 0.04);
+const coronaOuter  = mkCorona(1.80,  0xff3000, 0.015);
+
+/* ── Solar wind particles ── */
+const SW_COUNT = 350;
+const swPosArr = new Float32Array(SW_COUNT * 3);
+const swVelArr = new Float32Array(SW_COUNT * 3);
+function resetSwParticle(i) {
+  const phi   = (Math.random() - 0.5) * Math.PI;
+  const theta = Math.random() * Math.PI * 2;
+  const r = SUN_R * (1.0 + Math.random() * 0.15);
+  swPosArr[i*3]   = r * Math.cos(phi) * Math.sin(theta);
+  swPosArr[i*3+1] = r * Math.sin(phi);
+  swPosArr[i*3+2] = r * Math.cos(phi) * Math.cos(theta);
+  const spd = 0.0028 + Math.random() * 0.0035;
+  const nx = swPosArr[i*3] / r, ny = swPosArr[i*3+1] / r, nz = swPosArr[i*3+2] / r;
+  swVelArr[i*3]   = nx * spd + (Math.random() - 0.5) * 0.001;
+  swVelArr[i*3+1] = ny * spd + (Math.random() - 0.5) * 0.001;
+  swVelArr[i*3+2] = nz * spd + (Math.random() - 0.5) * 0.001;
+}
+for (let i = 0; i < SW_COUNT; i++) {
+  resetSwParticle(i);
+  // spread particles at random initial distances
+  const spread = Math.random();
+  swPosArr[i*3]   += swVelArr[i*3]   * spread * 400;
+  swPosArr[i*3+1] += swVelArr[i*3+1] * spread * 400;
+  swPosArr[i*3+2] += swVelArr[i*3+2] * spread * 400;
+}
+const swGeom = new THREE.BufferGeometry();
+swGeom.setAttribute('position', new THREE.BufferAttribute(swPosArr, 3));
+const swMesh = new THREE.Points(swGeom, new THREE.PointsMaterial({
+  color: 0xffbb55, size: 0.025, transparent: true, opacity: 0.3,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+}));
+scene.add(swMesh);
+
+/* ── Shared flare geometry ── */
+const RING_GEOM = new THREE.RingGeometry(0.65, 1.0, 48);
+const CORE_GEOM = new THREE.SphereGeometry(1.0, 8, 8);
+
+/* ── Sprite glow texture cache ── */
+const spriteCache = {};
+function hexToRgba(hex, a) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function getSpriteTex(hex) {
+  if (spriteCache[hex]) return spriteCache[hex];
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const cx = cv.getContext('2d');
+  const g = cx.createRadialGradient(32,32,0, 32,32,32);
+  g.addColorStop(0,   hexToRgba(hex, 1.0));
+  g.addColorStop(0.25,hexToRgba(hex, 0.7));
+  g.addColorStop(0.6, hexToRgba(hex, 0.2));
+  g.addColorStop(1,   hexToRgba(hex, 0.0));
+  cx.fillStyle = g; cx.fillRect(0,0,64,64);
+  spriteCache[hex] = new THREE.CanvasTexture(cv);
+  return spriteCache[hex];
+}
+
+/* ── Spawn / remove 3D circle objects ── */
+function spawnCircle3D(c) {
+  const col = new THREE.Color(c.color);
+  c.mesh3d = { rings: [] };
+
+  const core = new THREE.Mesh(CORE_GEOM, new THREE.MeshBasicMaterial({
+    color: col, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  scene.add(core);
+  c.mesh3d.core = core;
+
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: getSpriteTex(c.color), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  scene.add(spr);
+  c.mesh3d.sprite = spr;
+
+  for (let i = 0; i < MAX_RINGS; i++) {
+    const r = new THREE.Mesh(RING_GEOM, new THREE.MeshBasicMaterial({
+      color: col, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    r.visible = false;
+    scene.add(r);
+    c.mesh3d.rings.push(r);
+  }
+}
+
+function removeCircle3D(c) {
+  if (!c.mesh3d) return;
+  scene.remove(c.mesh3d.core);   c.mesh3d.core.material.dispose();
+  scene.remove(c.mesh3d.sprite); c.mesh3d.sprite.material.dispose();
+  for (const r of c.mesh3d.rings) { scene.remove(r); r.material.dispose(); }
+  c.mesh3d = null;
+}
+
+function flarePos3D(c) {
+  let currentLon = c.lon;
+  if (settings.rotate) currentLon = c.lon + (simRotAngle - c.flareRotAngle);
+  const normLon = ((currentLon + 180) % 360 + 360) % 360 - 180;
+  const isBack  = Math.abs(normLon) > 90;
+  const phi     = c.lat * Math.PI / 180;
+  const theta   = normLon  * Math.PI / 180;
+  const pos = new THREE.Vector3(
+    SUN_R * Math.cos(phi) * Math.sin(theta),
+    SUN_R * Math.sin(phi),
+    SUN_R * Math.cos(phi) * Math.cos(theta)
+  );
+  return { pos, normLon, isBack };
+}
+
+function updateCircle3D(c, now) {
+  const age = (now - c.startReal) / 1000;
+  if (age > settings.fade) { c.dead = true; removeCircle3D(c); return; }
+  const norm  = age / settings.fade;
+  const alpha = 1 - norm;
+
+  const { pos, normLon, isBack } = flarePos3D(c);
+  const outDir = pos.clone().normalize();
+
+  const showCls  = settings['show' + c.classLetter];
+  const showBack = settings.back || !isBack;
+  const visible  = showCls && showBack && settings.view === 'disk';
+  const backA    = isBack ? 0.35 : 1.0;
+  const sizeFactor = (settings.rotate && !isBack)
+    ? Math.cos(normLon * Math.PI / 180) * 0.75 + 0.25 : 1.0;
+
+  const rawR      = settings.base + settings.base * settings.scale * c.radMult;
+  const peakR     = Math.min(settings.max, rawR) * sizeFactor;
+  const worldPeak = peakR * WORLD_SCALE;
+
+  const coreR = worldPeak * (0.35 + norm * 0.15);
+  c.mesh3d.core.position.copy(pos.clone().multiplyScalar(1.005));
+  c.mesh3d.core.scale.setScalar(Math.max(coreR, 0.001));
+  c.mesh3d.core.material.opacity = alpha * 0.9 * backA;
+  c.mesh3d.core.visible = visible;
+
+  const sprScale = worldPeak * 3.5 * (1 - norm * 0.4);
+  c.mesh3d.sprite.position.copy(pos.clone().multiplyScalar(1.006));
+  c.mesh3d.sprite.scale.setScalar(Math.max(sprScale, 0.001));
+  c.mesh3d.sprite.material.opacity = alpha * 0.5 * backA;
+  c.mesh3d.sprite.visible = visible;
+
+  for (let i = 0; i < MAX_RINGS; i++) {
+    const ring = c.mesh3d.rings[i];
+    const ringNorm = (norm + i * 0.18) % 1;
+    const ringR    = worldPeak * (0.5 + ringNorm * 1.4);
+    ring.position.copy(pos.clone().multiplyScalar(1.008));
+    ring.quaternion.setFromUnitVectors(UP_Z, outDir);
+    ring.scale.setScalar(Math.max(ringR, 0.001));
+    ring.material.opacity = (1 - ringNorm) * 0.75 * alpha * backA;
+    ring.visible = visible && i < settings.rings;
+  }
+}
+
+/* ── Helpers (same as original) ── */
+function parseLocation(s) {
+  if (!s) return null;
+  const m = /^([NS])(\d{1,2})([EW])(\d{1,3})$/i.exec(s.trim());
+  if (!m) return null;
+  return { lat: (m[1].toUpperCase()==='N'?1:-1)*parseInt(m[2],10), lon: (m[3].toUpperCase()==='W'?1:-1)*parseInt(m[4],10) };
+}
+function parseClass(s) {
+  if (!s) return null;
+  const m = /^([ABCMX])([\d.]+)?/i.exec(s.trim());
+  if (!m) return null;
+  return { letter: m[1].toUpperCase(), mag: m[2] ? parseFloat(m[2]) : 1 };
+}
+const CLASS_RANK = { C:0, M:1, X:2 };
+function colorForClass(l) { return l==='X'?settings.cX : l==='M'?settings.cM : settings.cC; }
+function classRadiusMultiplier(l, mag) {
+  return ({C:1.0,M:1.6,X:2.6}[l]||1.0) * (1 + Math.log10(Math.max(mag,0.1))*0.25);
+}
+function fmtDate(ms) { if (!isFinite(ms)) return '—'; return new Date(ms).toISOString().replace('T',' ').slice(0,16)+'Z'; }
+function todayStr(off=0) { return new Date(Date.now()+off*86400000).toISOString().slice(0,10); }
+
+const SPEED_LO = Math.log10(1e3), SPEED_HI = Math.log10(2e6);
+function sliderToSpeed(v) { return Math.round(Math.pow(10, SPEED_LO + v*(SPEED_HI-SPEED_LO)/100)); }
+function speedToSlider(s) { return Math.min(100, Math.max(0, Math.round((Math.log10(Math.max(s,1e3))-SPEED_LO)*100/(SPEED_HI-SPEED_LO)))); }
+function speedLabel(s) { return s>=1e6?(s/1e6).toFixed(1)+'M×':s>=1000?(s/1000).toFixed(1)+'K×':s+'×'; }
+function setSpeed(v) { v=Math.min(100,Math.max(0,Math.round(v))); settings.speed=sliderToSpeed(v); $('s-speed').value=v; $('v-speed').textContent=speedLabel(settings.speed); }
+
+/* ── Loop / replay ── */
+function scheduleLoop() {
+  if (awaitingLoop) return;
+  awaitingLoop = true;
+  loopTimerHandle = setTimeout(() => { awaitingLoop=false; reachedEnd=false; loopTimerHandle=null; restartAnim(); }, 2500);
+}
+function cancelLoop() { if (loopTimerHandle) { clearTimeout(loopTimerHandle); loopTimerHandle=null; } awaitingLoop=false; }
+function restartAnim() {
+  simTime=0; firedCount=0;
+  for (const c of activeCircles) removeCircle3D(c);
+  activeCircles=[];
+  animPaused=false; reachedEnd=false;
+  $('h-play').textContent='❚❚';
+}
+function recomputeFired() {
+  for (const c of activeCircles) removeCircle3D(c);
+  activeCircles=[]; firedCount=0;
+  while (firedCount<flares.length && (flares[firedCount].peak-datasetStart)<=simTime) firedCount++;
+}
+
+/* ── 2D flat map projection ── */
+function flatMapSize() {
+  return { W: Math.min(window.innerWidth, window.innerHeight)*1.6*zoom2, H: Math.min(window.innerWidth, window.innerHeight)*0.8*zoom2 };
+}
+function projectFlat2D(lat, lon) {
+  const { W, H } = flatMapSize();
+  const cx = window.innerWidth/2 + panX2, cy = window.innerHeight/2 + panY2;
+  return { x: cx + (lon/180)*(W/2), y: cy - (lat/90)*(H/2), visible: true, backside: false };
+}
+
+function drawFlatMap2D(now) {
+  const W2 = window.innerWidth, H2 = window.innerHeight;
+  ctx2.clearRect(0, 0, W2, H2);
+  ctx2.fillStyle = '#03050c';
+  ctx2.fillRect(0, 0, W2, H2);
+
+  const { W, H } = flatMapSize();
+  const cx = W2/2 + panX2, cy = H2/2 + panY2;
+  const x0 = cx - W/2, y0 = cy - H/2;
+
+  ctx2.save();
+  ctx2.strokeStyle = settings.cGrid;
+  ctx2.globalAlpha = 0.55;
+  ctx2.strokeRect(x0, y0, W, H);
+  ctx2.restore();
+
+  if (settings.grat) {
+    ctx2.save();
+    ctx2.beginPath(); ctx2.rect(x0, y0, W, H); ctx2.clip();
+    ctx2.strokeStyle = settings.cGrid;
+    ctx2.lineWidth = 1;
+    ctx2.globalAlpha = 0.45;
+    for (let lat=-60; lat<=60; lat+=30) { const y=cy-(lat/90)*(H/2); ctx2.beginPath(); ctx2.moveTo(x0,y); ctx2.lineTo(x0+W,y); ctx2.stroke(); }
+    ctx2.globalAlpha = 0.85;
+    ctx2.beginPath(); ctx2.moveTo(x0,cy); ctx2.lineTo(x0+W,cy); ctx2.stroke();
+    const phase = ((simRotAngle%30)+30)%30;
+    ctx2.globalAlpha = 0.45;
+    for (let vl=-180+phase; vl<=180+30; vl+=30) { const x=cx+(vl/180)*(W/2); ctx2.beginPath(); ctx2.moveTo(x,y0); ctx2.lineTo(x,y0+H); ctx2.stroke(); }
+    ctx2.restore();
+  }
+
+  // Draw circles on 2D flat map
+  for (const c of activeCircles) {
+    const age = (now - c.startReal)/1000;
+    if (age > settings.fade) { c.dead = true; continue; }
+    if (!settings['show' + c.classLetter]) continue;
+    const norm  = age / settings.fade;
+    const alpha = 1 - norm;
+
+    let currentLon = c.lon;
+    if (settings.rotate) currentLon = c.lon + (simRotAngle - c.flareRotAngle);
+    currentLon = ((currentLon+180)%360+360)%360-180;
+
+    const proj = projectFlat2D(c.lat, currentLon);
+    const rawR  = settings.base + settings.base*settings.scale*c.radMult;
+    const peakR = Math.min(settings.max, rawR);
+
+    ctx2.save();
+    ctx2.shadowColor = c.color; ctx2.shadowBlur = 14*(1-norm*0.5);
+    ctx2.globalAlpha = alpha;
+    ctx2.fillStyle   = c.color;
+    ctx2.beginPath(); ctx2.arc(proj.x, proj.y, peakR*(0.35+norm*0.15), 0, Math.PI*2); ctx2.fill();
+    for (let i=0; i<settings.rings; i++) {
+      const rn=(norm+i*0.18)%1;
+      const rr=peakR*(0.5+rn*1.4);
+      ctx2.globalAlpha=(1-rn)*0.6*alpha;
+      ctx2.lineWidth=2; ctx2.strokeStyle=c.color;
+      ctx2.beginPath(); ctx2.arc(proj.x, proj.y, rr, 0, Math.PI*2); ctx2.stroke();
+    }
+    ctx2.restore();
+  }
+}
+
+/* ── Tooltip ── */
+function worldToScreen(pos3) {
+  const v = pos3.clone().project(camera);
+  return { x:(v.x+1)/2*window.innerWidth, y:-(v.y-1)/2*window.innerHeight, vis: v.z < 1 };
+}
+
+function updateTooltip(mx, my) {
+  const tt = $('tooltip');
+  let best = null, bestDist = 36;
+  for (const c of activeCircles) {
+    if (c.dead) continue;
+    let sx, sy;
+    if (settings.view === 'disk') {
+      const { pos } = flarePos3D(c);
+      const sc = worldToScreen(pos);
+      if (!sc.vis) continue;
+      sx = sc.x; sy = sc.y;
+    } else {
+      let lon = c.lon;
+      if (settings.rotate) lon = c.lon + (simRotAngle - c.flareRotAngle);
+      lon = ((lon+180)%360+360)%360-180;
+      const pr = projectFlat2D(c.lat, lon);
+      sx = pr.x; sy = pr.y;
+    }
+    const d = Math.hypot(sx - mx, sy - my);
+    if (d < bestDist) { best = c; bestDist = d; }
+  }
+  if (!best) { tt.classList.remove('show'); return; }
+  const f = best.flare;
+  tt.innerHTML =
+    `<span class="tt-class">${f.classLetter}${f.classMag.toFixed(1)}</span>` +
+    `<span class="tt-dim"> · peak </span>${fmtDate(f.peak)}<br>` +
+    `<span class="tt-dim">loc </span>${f.lat>=0?'N':'S'}${Math.abs(f.lat)}` +
+    `${f.lon>=0?'W':'E'}${Math.abs(f.lon)}` +
+    (f.backside ? ' <span class="tt-dim">(backside)</span>' : '') +
+    (f.activeRegion ? `<br><span class="tt-dim">AR </span>${f.activeRegion}` : '') +
+    (f.link ? `<br><a href="${f.link}" target="_blank">DONKI →</a>` : '');
+  tt.style.left = (mx + 14) + 'px';
+  tt.style.top  = (my + 14) + 'px';
+  tt.classList.add('show');
+}
+
+let mouseX = -999, mouseY = -999;
+window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; if (!dragging2) updateTooltip(mouseX, mouseY); });
+
+/* ── Main animation loop ── */
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = now - lastFrame;
+  lastFrame = now;
+
+  if (!animPaused && flares.length) {
+    simTime += dt * settings.speed;
+    if (simTime > datasetEnd - datasetStart) {
+      simTime = datasetEnd - datasetStart;
+      animPaused = true; reachedEnd = true;
+      $('h-play').textContent = '▶';
+    }
+    while (firedCount < flares.length && (flares[firedCount].peak - datasetStart) <= simTime) {
+      const f = flares[firedCount];
+      if (settings.back || !f.backside) {
+        const c = {
+          lat: f.lat, lon: f.lon, backside: f.backside,
+          classLetter: f.classLetter, color: colorForClass(f.classLetter),
+          radMult: classRadiusMultiplier(f.classLetter, f.classMag),
+          startReal: now, flareRotAngle: (f.peak - datasetStart) * SUN_ROT_RATE,
+          flare: f, dead: false, mesh3d: null,
+        };
+        if (settings.view === 'disk') spawnCircle3D(c);
+        activeCircles.push(c);
+      }
+      firedCount++;
+    }
+  }
+
+  simRotAngle = settings.rotate ? simTime * SUN_ROT_RATE : 0;
+
+  if (settings.view === 'disk') {
+    // Update sun shader
+    sunMat.uniforms.uRotAngle.value  = simRotAngle * Math.PI / 180;
+    sunMat.uniforms.uGridColor.value.set(settings.cGrid);
+    sunMat.uniforms.uGridAlpha.value = settings.grat ? 0.7 : 0.0;
+
+    // Solar wind
+    if (settings.wind) {
+      swMesh.visible = true;
+      for (let i = 0; i < SW_COUNT; i++) {
+        swPosArr[i*3]   += swVelArr[i*3];
+        swPosArr[i*3+1] += swVelArr[i*3+1];
+        swPosArr[i*3+2] += swVelArr[i*3+2];
+        const d = Math.hypot(swPosArr[i*3], swPosArr[i*3+1], swPosArr[i*3+2]);
+        if (d > SUN_R * 2.8) resetSwParticle(i);
+      }
+      swGeom.attributes.position.needsUpdate = true;
+    } else {
+      swMesh.visible = false;
+    }
+
+    // Update flare circles
+    for (const c of activeCircles) {
+      if (c.dead) continue;
+      if (!c.mesh3d) spawnCircle3D(c);
+      updateCircle3D(c, now);
+    }
+
+    controls.enabled = true;
+    controls.update();
+    renderer.render(scene, camera);
+  } else {
+    // Flat map mode — hide 3D objects, draw 2D
+    for (const c of activeCircles) {
+      if (c.mesh3d) { c.mesh3d.core.visible=false; c.mesh3d.sprite.visible=false; for(const r of c.mesh3d.rings) r.visible=false; }
+    }
+    controls.enabled = false;
+    drawFlatMap2D(now);
+  }
+
+  // Expire dead circles
+  activeCircles = activeCircles.filter(c => !c.dead);
+
+  if (reachedEnd && activeCircles.length === 0 && !awaitingLoop) scheduleLoop();
+
+  // HUD
+  const dur = datasetEnd - datasetStart;
+  const pct = dur > 0 ? (simTime/dur)*100 : 0;
+  $('progress-fill').style.width = pct.toFixed(2) + '%';
+  $('h-time').textContent = fmtDate(datasetStart + simTime);
+  $('h-count').textContent = firedCount;
+  const camDist = camera.position.length();
+  $('h-zoom').textContent = (settings.view==='disk') ? (INIT_DIST/camDist).toFixed(2)+'×' : zoom2.toFixed(2)+'×';
+  const st = $('h-status');
+  if (awaitingLoop)  { st.textContent='LOOPING…';  st.style.color='var(--accent2)'; }
+  else if (animPaused){ st.textContent='PAUSED';   st.style.color='var(--text-dim)'; }
+  else               { st.textContent='PLAYING';   st.style.color='var(--accent)'; }
+}
+requestAnimationFrame(animate);
+
+/* ── 2D flat map pan / zoom ── */
+canvas2d.addEventListener('mousedown', e => { dragging2=true; dragStart2={x:e.clientX-panX2,y:e.clientY-panY2}; canvas2d.classList.add('dragging'); });
+window.addEventListener('mouseup', () => { dragging2=false; canvas2d.classList.remove('dragging'); });
+window.addEventListener('mousemove', e => { if (dragging2 && settings.view==='flat') { panX2=e.clientX-dragStart2.x; panY2=e.clientY-dragStart2.y; } });
+canvas2d.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.12 : 1/1.12;
+  const old = zoom2;
+  zoom2 = Math.max(0.15, Math.min(20, zoom2*f));
+  const rf = zoom2/old;
+  panX2 = panX2 + (e.clientX - window.innerWidth/2 - panX2)*(1-rf);
+  panY2 = panY2 + (e.clientY - window.innerHeight/2 - panY2)*(1-rf);
+}, { passive: false });
+
+/* ── HUD buttons ── */
+$('h-play').onclick = () => { cancelLoop(); reachedEnd=false; animPaused=!animPaused; $('h-play').textContent=animPaused?'▶':'❚❚'; };
+$('h-restart').onclick = () => { cancelLoop(); restartAnim(); };
+$('h-rew').onclick = () => { cancelLoop(); reachedEnd=false; simTime=Math.max(0,simTime-3600*1000); recomputeFired(); if(animPaused){animPaused=false;$('h-play').textContent='❚❚';} };
+$('h-zin').onclick  = () => {
+  if (settings.view==='disk') { const d=camera.position.length(); camera.position.multiplyScalar(Math.max(SUN_R*1.3/d,0.8)); controls.update(); }
+  else zoom2 = Math.min(20, zoom2*1.25);
+};
+$('h-zout').onclick = () => {
+  if (settings.view==='disk') { camera.position.multiplyScalar(Math.min(SUN_R*18/camera.position.length(),1.25)); controls.update(); }
+  else zoom2 = Math.max(0.15, zoom2/1.25);
+};
+$('h-reset').onclick = () => {
+  if (settings.view==='disk') { controls.reset(); camera.position.set(0,0,INIT_DIST); camera.lookAt(0,0,0); controls.update(); }
+  else { panX2=0; panY2=0; zoom2=1; }
+};
+
+/* ── Settings wiring ── */
+function bindRange(id, key, fmt) {
+  const el = $(id), out = $('v-' + id.split('-')[1]);
+  el.addEventListener('input', () => { settings[key]=parseFloat(el.value); if(out) out.textContent=fmt(settings[key]); });
+  if (out) out.textContent = fmt(settings[key]);
+}
+{ const el=$('s-speed'); el.addEventListener('input', () => setSpeed(parseFloat(el.value))); setSpeed(35); }
+bindRange('s-fade',  'fade',  v=>v.toFixed(1)+'s');
+bindRange('s-rings', 'rings', v=>v.toFixed(0));
+bindRange('s-base',  'base',  v=>v.toFixed(0));
+bindRange('s-scale', 'scale', v=>v.toFixed(1));
+bindRange('s-max',   'max',   v=>v.toFixed(0));
+['cC','cM','cX','cSun','cGrid'].forEach(k => { $('s-'+k).addEventListener('input', e => settings[k]=e.target.value); });
+['grat','back','rotate','wind'].forEach(k => { $('t-'+k).addEventListener('change', e => settings[k]=e.target.checked); });
+['C','M','X'].forEach(cls => { $('t-show'+cls).addEventListener('change', e => settings['show'+cls]=e.target.checked); });
+
+function updateClassToggles(minClass) {
+  const minRank = CLASS_RANK[minClass] ?? 0;
+  ['C','M','X'].forEach(cls => {
+    const cb=document.getElementById('t-show'+cls), row=document.getElementById('row-show'+cls);
+    const ok = (CLASS_RANK[cls]??-1) >= minRank;
+    cb.disabled=!ok; row.style.opacity=ok?'':'0.4'; cb.checked=ok; settings['show'+cls]=ok;
+  });
+}
+
+$('view-disk').onclick = () => setView('disk');
+$('view-flat').onclick = () => setView('flat');
+function setView(v) {
+  settings.view = v;
+  $('view-disk').classList.toggle('active', v==='disk');
+  $('view-flat').classList.toggle('active', v==='flat');
+  $('gl-container').style.display = v==='disk' ? '' : 'none';
+  canvas2d.style.display = v==='flat' ? 'block' : 'none';
+  $('gl-badge').style.display = v==='disk' ? '' : 'none';
+  panX2=0; panY2=0; zoom2=1;
+}
+
+$('panel-toggle').onclick = () => {
+  $('settings').classList.toggle('collapsed');
+  $('panel-toggle').textContent = $('settings').classList.contains('collapsed') ? '›' : '‹';
+};
+$('btn-newquery').onclick = () => openQueryModal();
+
+/* ── Query / fetch ── */
+function openQueryModal() {
+  $('query-modal').classList.remove('hidden');
+  $('hud').classList.add('hidden');
+  if (!hasQueried) { $('q-end').value=todayStr(0); $('q-start').value=todayStr(-30); }
+  $('q-err').textContent=''; $('q-warn').textContent='';
+}
+function closeQueryModal() { $('query-modal').classList.add('hidden'); $('hud').classList.remove('hidden'); }
+
+$('q-fetch').onclick = doFetch;
+$('q-start').addEventListener('change', updateWarn);
+$('q-end').addEventListener('change', updateWarn);
+function updateWarn() {
+  const d = (new Date($('q-end').value) - new Date($('q-start').value)) / 86400000;
+  $('q-warn').textContent = d > 180 ? 'Range > 6 months — request may be slow or large.' : d > 90 ? 'Range > 3 months — may return many events.' : '';
+}
+
+async function doFetch() {
+  $('q-err').textContent = '';
+  const start = $('q-start').value, end = $('q-end').value;
+  const minClass = $('q-minclass').value;
+  const apiKey   = $('q-apikey').value.trim() || 'DEMO_KEY';
+  if (!start||!end) { $('q-err').textContent='Pick a start and end date.'; return; }
+  if (new Date(start) >= new Date(end)) { $('q-err').textContent='End must be after start.'; return; }
+
+  const cacheKey = `donki:${start}:${end}:${apiKey}`;
+  let raw = null;
+  try { raw = JSON.parse(sessionStorage.getItem(cacheKey)||'null'); } catch(e) {}
+
+  if (!raw) {
+    $('loading').classList.add('show');
+    $('loading-msg').textContent = 'Fetching DONKI…';
+    try {
+      const url = `https://api.nasa.gov/DONKI/FLR?startDate=${start}&endDate=${end}&api_key=${encodeURIComponent(apiKey)}`;
+      const resp = await fetch(url);
+      if (resp.status===429) throw new Error('429');
+      if (!resp.ok) throw new Error('HTTP '+resp.status);
+      raw = await resp.json();
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(raw)); } catch(e) {}
+    } catch(err) {
+      $('loading').classList.remove('show');
+      $('q-err').textContent = err.message==='429'
+        ? 'Rate limit hit (429) — DEMO_KEY allows ~30 requests/hr shared across all visitors. Get a free personal key at api.nasa.gov to raise this to 1,000/hr.'
+        : 'Fetch failed: ' + err.message;
+      return;
+    }
+    $('loading').classList.remove('show');
+  }
+
+  if (!Array.isArray(raw)) { $('q-err').textContent='Unexpected response from DONKI.'; return; }
+
+  const minRank = CLASS_RANK[minClass]||0;
+  const parsed = [];
+  for (const item of raw) {
+    const cls = parseClass(item.classType);
+    if (!cls || (CLASS_RANK[cls.letter]??-1) < minRank) continue;
+    const peakStr = item.peakTime || item.beginTime;
+    if (!peakStr) continue;
+    const peak = Date.parse(peakStr);
+    if (!isFinite(peak)) continue;
+    const loc = parseLocation(item.sourceLocation);
+    let lat=0, lon=0, backside=false;
+    if (loc) { lat=loc.lat; lon=loc.lon; }
+    else { backside=true; lat=Math.random()*60-30; lon=Math.random()<0.5?-120:120; }
+    parsed.push({ peak, begin:Date.parse(item.beginTime)||peak, end:Date.parse(item.endTime)||peak, classLetter:cls.letter, classMag:cls.mag, lat, lon, backside, activeRegion:item.activeRegionNum||null, link:item.link||null });
+  }
+  parsed.sort((a,b) => a.peak-b.peak);
+
+  if (!parsed.length) { $('q-err').textContent='No flares matched in that range / class.'; return; }
+
+  for (const c of activeCircles) removeCircle3D(c);
+  flares = parsed;
+  datasetStart = flares[0].peak;
+  datasetEnd   = flares[flares.length-1].peak + 60_000;
+  setSpeed(speedToSlider((datasetEnd-datasetStart)/(20*1000)));
+  cancelLoop(); simTime=0; firedCount=0; activeCircles=[]; reachedEnd=false; animPaused=false;
+  $('h-play').textContent='❚❚'; $('h-total').textContent=flares.length;
+  hasQueried=true;
+  updateClassToggles(minClass);
+  closeQueryModal();
+}
+
+openQueryModal();
+</script>
+</body>
+</html>
