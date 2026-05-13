@@ -331,9 +331,9 @@ function geo3D(lat, lon, r = EARTH_R) {
 function paintCrater(lat, lon, radiusDeg, depthFraction) {
   const scaledDepth = depthFraction * Math.max(0.05, 1 - settings.hardness);
   if (scaledDepth <= 0) return;
-  // Three.js SphereGeometry UV: u = lon/360+0.25 (mod 1), v = 0.5 - lat/180
+  // Three.js SphereGeometry UV: u = lon/360+0.25 (mod 1), v = 0.5 + lat/180
   const cu = ((lon / 360 + 0.25) % 1 + 1) % 1;
-  const cv = 0.5 - lat / 180;
+  const cv = 0.5 + lat / 180;
   const ci = Math.round(cu * TEX_SIZE);
   const cj = Math.round(cv * TEX_SIZE);
   const rPx = Math.ceil(Math.max(radiusDeg / 360, radiusDeg / 180) * TEX_SIZE * 1.6) + 2;
