@@ -98,9 +98,9 @@
 
     <div class="panel-section">
       <div class="panel-section-title">Impactors</div>
-      <div class="slider-row"><div class="slider-label"><span>Mass Scale</span><span id="lbl-massScale">2.0×</span></div><input type="range" id="sl-massScale" min="0.1" max="20" step="0.1" value="2"></div>
-      <div class="slider-row"><div class="slider-label"><span>Size Scale</span><span id="lbl-sizeScale">2.0×</span></div><input type="range" id="sl-sizeScale" min="0.1" max="10" step="0.1" value="2"></div>
-      <div class="slider-row"><div class="slider-label"><span>Speed Scale</span><span id="lbl-speedScale">1.0×</span></div><input type="range" id="sl-speedScale" min="0.1" max="5" step="0.1" value="1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Mass Scale</span><span id="lbl-massScale">3.5×</span></div><input type="range" id="sl-massScale" min="0.1" max="20" step="0.1" value="3.5"></div>
+      <div class="slider-row"><div class="slider-label"><span>Size Scale</span><span id="lbl-sizeScale">1.0×</span></div><input type="range" id="sl-sizeScale" min="0.1" max="10" step="0.1" value="1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Speed Scale</span><span id="lbl-speedScale">2.5×</span></div><input type="range" id="sl-speedScale" min="0.1" max="5" step="0.1" value="2.5"></div>
       <div class="slider-row"><div class="slider-label"><span>Impact Interval</span><span id="lbl-impactInterval">0.5s</span></div><input type="range" id="sl-impactInterval" min="0.5" max="20" step="0.5" value="0.5"></div>
     </div>
 
@@ -112,9 +112,9 @@
 
     <div class="panel-section">
       <div class="panel-section-title">Visuals</div>
-      <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">0.70</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="0.7"></div>
-      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">3</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="3"></div>
-      <div class="slider-row"><div class="slider-label"><span>Ring Width</span><span id="lbl-ringWidth">0.12</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.12"></div>
+      <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">0.90</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="0.9"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">4</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="4"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ring Width</span><span id="lbl-ringWidth">0.4</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.4"></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-autorot" checked><label for="chk-autorot">Auto-Rotate</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-grat" checked><label for="chk-grat">Globe Grid</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-atmos" checked><label for="chk-atmos">Atmosphere</label></div>
@@ -128,7 +128,7 @@
 
     <div class="panel-section">
       <div class="panel-section-title">Audio</div>
-      <div class="slider-row"><div class="slider-label"><span>Volume</span><span id="lbl-vol">off</span></div><input type="range" id="sl-vol" min="0" max="1" step="0.01" value="0"></div>
+      <div class="slider-row"><div class="slider-label"><span>Volume</span><span id="lbl-vol">0.1</span></div><input type="range" id="sl-vol" min="0" max="1" step="0.01" value="0.1"></div>
     </div>
 
     <div class="panel-section">
@@ -172,9 +172,9 @@ const PULSE_FADE  = 3.5;
 
 /* ── Settings ── */
 const settings = {
-  massScale: 2.0, sizeScale: 2.0, speedScale: 1.0, impactInterval: 0.5,
+  massScale: 3.5, sizeScale: 1.0, speedScale: 5.0, impactInterval: 0.5,
   hardness: 0.5, trailLength: 30,
-  pulseOpacity: 0.7, rings: 3, ringWidth: 0.12,
+  pulseOpacity: 0.9, rings: 5, ringWidth: 0.4,
   autorot: true, grat: true, atmos: true,
   vol: 0.0,
 };
