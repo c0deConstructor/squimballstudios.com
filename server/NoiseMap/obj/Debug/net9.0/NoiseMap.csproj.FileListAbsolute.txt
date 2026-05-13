@@ -1,0 +1,8 @@
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\NoiseMap.csproj.AssemblyReference.cache
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\rpswa.dswa.cache.json
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\NoiseMap.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\NoiseMap.AssemblyInfoInputs.cache
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\NoiseMap.AssemblyInfo.cs
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\NoiseMap.csproj.CoreCompileInputs.cache
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\NoiseMap.MvcApplicationPartsAssemblyInfo.cache
+C:\Users\squim\Desktop\AI Projects\squimballstudios.com\server\NoiseMap\obj\Debug\net9.0\NoiseMap.sourcelink.json

@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Pulse — Internet Noise Map</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg:       #04080e;
+    --panel-bg: rgba(4, 12, 22, 0.97);
+    --border:   rgba(0,230,160,0.18);
+    --accent:   #00e8a0;   /* green — "live" / primary */
+    --accent2:  #ff4466;   /* red   — dangerous services (SSH/RDP) */
+    --accent3:  #44aaff;   /* blue  — HTTP */
+    --text:     #c0d8cc;
+    --text-dim: #4a7060;
+    --mono:     'Share Tech Mono', monospace;
+    --sans:     'Rajdhani', sans-serif;
+    --panel-w:  300px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+  }
+
+  /* ── CANVAS ── */
+  #canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 0;
+    cursor: grab;
+  }
+  #canvas.dragging { cursor: grabbing; }
+
+  /* ── GRID OVERLAY ── */
+  #grid-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image:
+      linear-gradient(rgba(0,230,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,230,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ── STATUS OVERLAY (shown while connecting / disconnected) ── */
+  #status-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 18px;
+    background: rgba(4,8,14,0.92);
+    transition: opacity 0.5s;
+  }
+  #status-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .so-title {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 32px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .so-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .so-status {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+  .so-status.connecting  { color: var(--accent3); }
+  .so-status.reconnecting { color: #ff9900; }
+  .so-status.offline     { color: var(--accent2); }
+
+  .so-spinner {
+    width: 32px; height: 32px;
+    border: 2px solid rgba(0,230,160,0.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .so-url {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  /* ── SETTINGS PANEL ── */
+  #settings {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--panel-w);
+    height: 100vh;
+    background: var(--panel-bg);
+    border-right: 1px solid var(--border);
+    z-index: 50;
+    overflow-y: auto;
+    transition: transform 0.35s cubic-bezier(0.5,0,0.2,1);
+    padding: 20px 18px 80px;
+  }
+  #settings.collapsed { transform: translateX(calc(-1 * var(--panel-w))); }
+  #settings::-webkit-scrollbar { width: 5px; }
+  #settings::-webkit-scrollbar-thumb { background: var(--border); }
+
+  #panel-toggle {
+    position: fixed;
+    top: 14px;
+    left: calc(var(--panel-w) + 8px);
+    z-index: 51;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 14px;
+    width: 28px; height: 28px;
+    cursor: pointer;
+    transition: left 0.35s cubic-bezier(0.5,0,0.2,1), background 0.12s;
+  }
+  #settings.collapsed ~ #panel-toggle { left: 8px; }
+  #panel-toggle:hover { background: var(--accent); color: #040810; }
+
+  .sec {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed rgba(0,230,160,0.09);
+  }
+  .sec:last-child { border-bottom: none; }
+  .sec h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  /* rows */
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    gap: 6px;
+  }
+  .row .val { color: var(--text); min-width: 32px; text-align: right; }
+  .row .lbl { min-width: 60px; }
+  .row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    background: transparent;
+    height: 14px;
+  }
+  .row input[type=range]::-webkit-slider-runnable-track { height:2px; background:var(--border); }
+  .row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width:10px; height:10px;
+    border-radius:50%;
+    background:var(--accent);
+    margin-top:-4px;
+    box-shadow:0 0 6px var(--accent);
+    cursor:pointer;
+  }
+  .row input[type=range]::-moz-range-track { height:2px; background:var(--border); }
+  .row input[type=range]::-moz-range-thumb {
+    width:10px; height:10px;
+    border-radius:50%;
+    background:var(--accent);
+    border:none;
+    box-shadow:0 0 6px var(--accent);
+    cursor:pointer;
+  }
+  .row input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+
+  /* service filter chips */
+  .filter-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-top: 4px;
+  }
+  .filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .filter-chip:hover { color: var(--text); }
+  .chip-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .filter-chip input { display: none; }
+  .filter-chip.off .chip-dot { opacity: 0.2; }
+  .filter-chip.off { color: #2a3a30; }
+
+  /* top countries list */
+  .country-list {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .country-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .country-row .c-flag { font-size: 14px; }
+  .country-row .c-bar-wrap {
+    flex: 1;
+    height: 3px;
+    background: rgba(0,230,160,0.08);
+  }
+  .country-row .c-bar { height: 3px; background: var(--accent); }
+  .country-row .c-count { color: var(--text); min-width: 28px; text-align: right; }
+
+  .panel-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 8px;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: all 0.12s;
+  }
+  .panel-btn:hover { background: var(--accent); color: #040810; }
+  .panel-btn.danger { border-color: var(--accent2); color: var(--accent2); }
+  .panel-btn.danger:hover { background: var(--accent2); color: #040810; }
+
+  /* ── HUD ── */
+  #hud {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 14px;
+    background: linear-gradient(to top, rgba(4,8,14,0.96), rgba(4,8,14,0));
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  .hud-chip {
+    padding: 3px 8px;
+    border: 1px solid currentColor;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: bold;
+  }
+  .hud-chip.live        { color: var(--accent); border-color: var(--accent); animation: pulse-live 2s infinite; }
+  .hud-chip.connecting  { color: var(--accent3); border-color: var(--accent3); }
+  .hud-chip.reconnecting { color: #ff9900; border-color: #ff9900; animation: pulse-live 1s infinite; }
+  .hud-chip.offline     { color: var(--accent2); border-color: var(--accent2); }
+
+  @keyframes pulse-live {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+  }
+
+  .hud-stat { color: var(--text); }
+  .hud-label { color: var(--text-dim); }
+  .hud-spacer { flex: 1; }
+
+  .hud-btn {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    width: 30px; height: 26px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .hud-btn:hover { background: var(--accent); color: #040810; }
+
+  /* ── TOOLTIP ── */
+  #tooltip {
+    position: fixed;
+    z-index: 60;
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-top: 1px solid var(--accent);
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    pointer-events: none;
+    display: none;
+    max-width: 220px;
+    line-height: 1.6;
+  }
+  #tooltip.show { display: block; }
+  #tooltip .tt-port { color: var(--accent); font-size: 12px; }
+  #tooltip .tt-dim  { color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<div id="grid-overlay"></div>
+
+<!-- ── Status Overlay ── -->
+<div id="status-overlay">
+  <div class="so-title">Threat Pulse</div>
+  <div class="so-sub">Internet Background Noise · Real-time</div>
+  <div class="so-spinner" id="so-spinner"></div>
+  <div class="so-status connecting" id="so-status-text">Connecting…</div>
+  <div class="so-url" id="so-url"></div>
+</div>
+
+<!-- ── Settings Panel ── -->
+<aside id="settings">
+
+  <div class="sec">
+    <h3>Connection</h3>
+    <div class="row">
+      <span class="lbl">Status</span>
+      <span class="hud-chip connecting" id="p-status-chip">CONNECTING</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Events</span>
+      <span class="hud-stat" id="p-total">0</span>
+    </div>
+    <div class="row">
+      <span class="lbl">Rate</span>
+      <span class="hud-stat" id="p-eps">0.0</span><span class="val">/s</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h3>Service Filters</h3>
+    <div class="filter-grid" id="filter-grid"></div>
+  </div>
+
+  <div class="sec">
+    <h3>Display</h3>
+    <div class="row"><span class="lbl">Fade</span><input type="range" id="s-fade" min="1" max="20" step="0.5" value="5"><span class="val" id="v-fade">5.0s</span></div>
+    <div class="row"><span class="lbl">Rings</span><input type="range" id="s-rings" min="0" max="5" step="1" value="2"><span class="val" id="v-rings">2</span></div>
+    <div class="row"><span class="lbl">Radius</span><input type="range" id="s-radius" min="3" max="30" step="1" value="8"><span class="val" id="v-radius">8</span></div>
+    <div class="row"><span class="lbl">Glow</span><input type="checkbox" id="t-glow" checked></div>
+    <div class="row"><span class="lbl">Trails</span><input type="checkbox" id="t-trails"></div>
+  </div>
+
+  <div class="sec">
+    <h3>Top Sources</h3>
+    <div class="country-list" id="country-list">
+      <div class="country-row" style="color:var(--text-dim);font-size:10px;">Waiting for data…</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <button class="panel-btn danger" id="btn-clear">Clear</button>
+  </div>
+
+</aside>
+<button id="panel-toggle" title="Toggle panel">‹</button>
+
+<!-- ── HUD ── -->
+<div id="hud">
+  <span class="hud-chip connecting" id="h-status-chip">CONNECTING</span>
+  <span class="hud-label">eps</span>
+  <span class="hud-stat" id="h-eps">0.0</span>
+  <span class="hud-label" style="margin-left:10px;">total</span>
+  <span class="hud-stat" id="h-total">0</span>
+  <span class="hud-spacer"></span>
+  <button class="hud-btn" id="h-zin"  title="Zoom in">+</button>
+  <button class="hud-btn" id="h-zout" title="Zoom out">−</button>
+  <button class="hud-btn" id="h-reset" title="Reset view">⊙</button>
+  <span class="hud-stat" id="h-zoom" style="min-width:42px">1.00×</span>
+</div>
+
+<!-- ── Tooltip ── -->
+<div id="tooltip"></div>
+
+<script>
+'use strict';
+
+/* ── Config ───────────────────────────────────────────────── */
+// Change this to match your server. For local testing use ws://localhost:443/ws
+const WS_URL = 'wss://noise.squimballstudios.com/ws';
+
+/* ── Service groups ───────────────────────────────────────── */
+const SERVICES = {
+  SSH:      { ports: [22],              color: '#ff4466', label: 'SSH'      },
+  RDP:      { ports: [3389],            color: '#ff6b35', label: 'RDP'      },
+  SMB:      { ports: [445],             color: '#ffcc00', label: 'SMB'      },
+  HTTP:     { ports: [80, 8080],        color: '#44aaff', label: 'HTTP'     },
+  Database: { ports: [1433,3306,6379,27017], color: '#aa44ff', label: 'DB' },
+  Telnet:   { ports: [23],             color: '#ff9900', label: 'Telnet'   },
+  FTP:      { ports: [21],             color: '#00e8a0', label: 'FTP'      },
+  VNC:      { ports: [5900],           color: '#ff44ff', label: 'VNC'      },
+  DNS:      { ports: [53],             color: '#44ffbb', label: 'DNS'      },
+  Other:    { ports: [],               color: '#607060', label: 'Other'    },
+};
+
+function portToService(port) {
+  for (const [key, svc] of Object.entries(SERVICES))
+    if (svc.ports.includes(port)) return key;
+  return 'Other';
+}
+function portColor(port) { return SERVICES[portToService(port)].color; }
+
+/* ── Settings state ─────────────────────────────────────── */
+const settings = {
+  fade: 5, rings: 2, radius: 8,
+  glow: true, trails: false,
+};
+const filters = Object.fromEntries(Object.keys(SERVICES).map(k => [k, true]));
+
+/* ── Stats ──────────────────────────────────────────────── */
+let totalEvents  = 0;
+const evtTimes   = [];            // timestamps for rolling events/sec
+const countryCounts = {};         // code → { name, count }
+
+function recordEvent(evt) {
+  totalEvents++;
+  evtTimes.push(Date.now());
+  if (evt.country && evt.country !== '??') {
+    if (!countryCounts[evt.country])
+      countryCounts[evt.country] = { name: evt.countryName || evt.country, count: 0 };
+    countryCounts[evt.country].count++;
+  }
+}
+
+function eventsPerSec() {
+  const cut = Date.now() - 5000;
+  // Prune old timestamps
+  while (evtTimes.length && evtTimes[0] < cut) evtTimes.shift();
+  return (evtTimes.length / 5).toFixed(1);
+}
+
+function topCountries(n = 6) {
+  return Object.entries(countryCounts)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, n)
+    .map(([code, { name, count }]) => ({ code, name, count }));
+}
+
+/* ── Canvas + DPR ───────────────────────────────────────── */
+const canvas  = document.getElementById('canvas');
+const ctx     = canvas.getContext('2d');
+let W = 0, H = 0;
+const dpr = window.devicePixelRatio || 1;
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  rebuildMap();
+}
+window.addEventListener('resize', resize);
+
+/* ── D3 Projection ──────────────────────────────────────── */
+let projection = null;
+let mapCanvas  = null;
+let mapReady   = false;
+let worldData  = null;
+
+async function loadWorldAtlas() {
+  const resp = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+  worldData = await resp.json();
+  rebuildMap();
+}
+
+function rebuildMap() {
+  if (!worldData || W === 0) return;
+
+  mapCanvas = document.createElement('canvas');
+  mapCanvas.width  = W * dpr;
+  mapCanvas.height = H * dpr;
+  const mCtx = mapCanvas.getContext('2d');
+  mCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  projection = d3.geoEquirectangular()
+    .fitExtent([[20, 20], [W - 20, H - 20]], { type: 'Sphere' });
+
+  const path      = d3.geoPath(projection, mCtx);
+  const graticule = d3.geoGraticule()();
+  const land      = topojson.feature(worldData, worldData.objects.land);
+  const borders   = topojson.mesh(worldData, worldData.objects.countries, (a, b) => a !== b);
+  const outline   = { type: 'Sphere' };
+
+  // Ocean tint
+  mCtx.fillStyle = 'rgba(0,30,25,0.5)';
+  mCtx.beginPath(); path(outline); mCtx.fill();
+
+  // Graticule
+  mCtx.strokeStyle = 'rgba(0,200,140,0.07)';
+  mCtx.lineWidth = 0.6;
+  mCtx.beginPath(); path(graticule); mCtx.stroke();
+
+  // Land
+  mCtx.fillStyle = 'rgba(10,50,38,0.85)';
+  mCtx.beginPath(); path(land); mCtx.fill();
+
+  // Country borders
+  mCtx.strokeStyle = 'rgba(0,200,140,0.22)';
+  mCtx.lineWidth = 0.7;
+  mCtx.beginPath(); path(borders); mCtx.stroke();
+
+  // Outline (antimeridian + poles)
+  mCtx.strokeStyle = 'rgba(0,200,140,0.25)';
+  mCtx.lineWidth = 1;
+  mCtx.beginPath(); path(outline); mCtx.stroke();
+
+  mapReady = true;
+}
+
+/* ── Pan / Zoom ─────────────────────────────────────────── */
+let panX = 0, panY = 0, zoom = 1;
+let dragging = false, lastMouse = null;
+
+canvas.addEventListener('mousedown', e => {
+  dragging  = true;
+  lastMouse = { x: e.clientX, y: e.clientY };
+  canvas.classList.add('dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (dragging) {
+    panX += e.clientX - lastMouse.x;
+    panY += e.clientY - lastMouse.y;
+    lastMouse = { x: e.clientX, y: e.clientY };
+  }
+  updateTooltip(e.clientX, e.clientY);
+});
+window.addEventListener('mouseup', () => {
+  dragging = false;
+  canvas.classList.remove('dragging');
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor  = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const newZoom = Math.max(0.6, Math.min(20, zoom * factor));
+  const rf      = newZoom / zoom;
+  panX = e.clientX - W/2 - (e.clientX - W/2 - panX) * rf;
+  panY = e.clientY - H/2 - (e.clientY - H/2 - panY) * rf;
+  zoom = newZoom;
+}, { passive: false });
+
+// Touch
+let pinchStart = null;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    dragging = true;
+    lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else if (e.touches.length === 2) {
+    dragging = false;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchStart = { dist: Math.hypot(dx, dy), zoom };
+  }
+}, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && dragging) {
+    panX += e.touches[0].clientX - lastMouse.x;
+    panY += e.touches[0].clientY - lastMouse.y;
+    lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else if (e.touches.length === 2 && pinchStart) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    zoom = Math.max(0.6, Math.min(20, pinchStart.zoom * Math.hypot(dx, dy) / pinchStart.dist));
+  }
+}, { passive: true });
+canvas.addEventListener('touchend', () => { dragging = false; pinchStart = null; });
+
+/* ── HUD buttons ────────────────────────────────────────── */
+document.getElementById('h-zin').onclick  = () => { zoom = Math.min(20, zoom * 1.2); };
+document.getElementById('h-zout').onclick = () => { zoom = Math.max(0.6, zoom / 1.2); };
+document.getElementById('h-reset').onclick= () => { zoom = 1; panX = 0; panY = 0; };
+
+document.getElementById('btn-clear').onclick = () => {
+  activeCircles = [];
+  totalEvents   = 0;
+  evtTimes.length = 0;
+  for (const k of Object.keys(countryCounts)) delete countryCounts[k];
+};
+
+/* ── Panel toggle ───────────────────────────────────────── */
+document.getElementById('panel-toggle').onclick = () => {
+  const s = document.getElementById('settings');
+  s.classList.toggle('collapsed');
+  document.getElementById('panel-toggle').textContent =
+    s.classList.contains('collapsed') ? '›' : '‹';
+};
+
+/* ── Service filter chips ───────────────────────────────── */
+const filterGrid = document.getElementById('filter-grid');
+for (const [key, svc] of Object.entries(SERVICES)) {
+  const chip = document.createElement('label');
+  chip.className = 'filter-chip';
+  chip.dataset.key = key;
+  chip.innerHTML = `
+    <input type="checkbox" checked>
+    <span class="chip-dot" style="background:${svc.color}"></span>
+    <span>${svc.label}</span>`;
+  chip.querySelector('input').addEventListener('change', e => {
+    filters[key] = e.target.checked;
+    chip.classList.toggle('off', !filters[key]);
+  });
+  filterGrid.appendChild(chip);
+}
+
+/* ── Settings sliders ───────────────────────────────────── */
+function bindRange(id, key, valId, fmt) {
+  const el  = document.getElementById(id);
+  const out = document.getElementById(valId);
+  el.addEventListener('input', () => { settings[key] = parseFloat(el.value); if (out) out.textContent = fmt(settings[key]); });
+}
+bindRange('s-fade',   'fade',   'v-fade',   v => v.toFixed(1) + 's');
+bindRange('s-rings',  'rings',  'v-rings',  v => v.toFixed(0));
+bindRange('s-radius', 'radius', 'v-radius', v => v.toFixed(0));
+
+document.getElementById('t-glow').addEventListener('change',   e => settings.glow   = e.target.checked);
+document.getElementById('t-trails').addEventListener('change', e => settings.trails  = e.target.checked);
+
+/* ── Active circles ─────────────────────────────────────── */
+let activeCircles = [];
+
+function spawnCircle(evt) {
+  if (!projection) return;
+  if (evt.country === '??' && evt.lat === 0 && evt.lon === 0) return; // no location
+  const [x, y] = projection([evt.lon, evt.lat]);
+  activeCircles.push({
+    x, y,
+    color:     portColor(evt.dstPort),
+    startTime: performance.now(),
+    label:     `${evt.portName} / ${evt.proto}`,
+    country:   evt.countryName || evt.country,
+    srcIp:     evt.srcIp,
+    city:      evt.city || null,
+    dead:      false,
+  });
+}
+
+function drawCircle(c, now) {
+  const age  = (now - c.startTime) / 1000;
+  const life = settings.fade;
+  if (age >= life) { c.dead = true; return; }
+
+  const norm  = age / life;
+  const alpha = 1 - norm;
+  const R     = settings.radius;
+
+  ctx.save();
+  if (settings.glow) {
+    ctx.shadowColor = c.color;
+    ctx.shadowBlur  = 14 * alpha;
+  }
+
+  // Core dot
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle   = c.color;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, R * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ripple rings
+  for (let i = 0; i < settings.rings; i++) {
+    const rn  = (norm + i * 0.28) % 1;
+    const rR  = R * (0.6 + rn * 3.5);
+    ctx.globalAlpha = (1 - rn) * 0.65 * alpha;
+    ctx.strokeStyle = c.color;
+    ctx.lineWidth   = 1.4;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, rR, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+/* ── Tooltip ─────────────────────────────────────────────── */
+function updateTooltip(mx, my) {
+  if (!projection) return;
+  // Find nearest active circle within 22px (pre-transformed)
+  const invMx = (mx - W/2 - panX) / zoom + W/2;
+  const invMy = (my - H/2 - panY) / zoom + H/2;
+  let best = null, bestD = 22;
+  for (const c of activeCircles) {
+    const d = Math.hypot(c.x - invMx, c.y - invMy);
+    if (d < bestD) { best = c; bestD = d; }
+  }
+  const tt = document.getElementById('tooltip');
+  if (!best) { tt.classList.remove('show'); return; }
+  tt.innerHTML =
+    `<span class="tt-port">${best.label}</span><br>` +
+    `<span class="tt-dim">src </span>${best.srcIp}<br>` +
+    `<span class="tt-dim">from </span>${best.city ? best.city + ', ' : ''}${best.country}`;
+  tt.style.left = (mx + 14) + 'px';
+  tt.style.top  = (my + 10) + 'px';
+  tt.classList.add('show');
+}
+
+/* ── Render loop ─────────────────────────────────────────── */
+function render(now) {
+  // Compute canvas transform for pan/zoom
+  const cx = W / 2, cy = H / 2;
+  const tx = cx + panX - cx * zoom;
+  const ty = cy + panY - cy * zoom;
+
+  if (settings.trails) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = 'rgba(4,8,14,0.14)';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#04080e';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Apply zoom/pan transform
+  ctx.setTransform(zoom, 0, 0, zoom, tx, ty);
+
+  // World map
+  if (mapReady) ctx.drawImage(mapCanvas, 0, 0, W, H);
+
+  // Circles
+  for (const c of activeCircles) drawCircle(c, now);
+  activeCircles = activeCircles.filter(c => !c.dead);
+
+  // Reset transform
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  requestAnimationFrame(render);
+}
+
+/* ── Stat DOM updates ─────────────────────────────────────── */
+let _lastStatUpdate = 0;
+function updateStats(now) {
+  if (now - _lastStatUpdate < 500) return;
+  _lastStatUpdate = now;
+
+  const eps = eventsPerSec();
+  document.getElementById('h-eps').textContent    = eps;
+  document.getElementById('h-total').textContent  = totalEvents;
+  document.getElementById('p-eps').textContent    = eps;
+  document.getElementById('p-total').textContent  = totalEvents;
+  document.getElementById('h-zoom').textContent   = zoom.toFixed(2) + '×';
+
+  // Top countries
+  const top  = topCountries(6);
+  const maxN = top[0]?.count || 1;
+  const list = document.getElementById('country-list');
+  if (top.length === 0) {
+    list.innerHTML = '<div class="country-row" style="color:var(--text-dim);font-size:10px;">Waiting for data…</div>';
+  } else {
+    list.innerHTML = top.map(({ code, name, count }) => `
+      <div class="country-row">
+        <span class="c-flag">${flagEmoji(code)}</span>
+        <span style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${name}</span>
+        <div class="c-bar-wrap"><div class="c-bar" style="width:${(count/maxN*100).toFixed(0)}%"></div></div>
+        <span class="c-count">${count}</span>
+      </div>`).join('');
+  }
+}
+
+function flagEmoji(code) {
+  if (!code || code === '??') return '🌐';
+  return code.toUpperCase().replace(/./g, c =>
+    String.fromCodePoint(c.charCodeAt(0) + 127397));
+}
+
+/* ── Connection status helpers ──────────────────────────── */
+function setStatus(s) {
+  // s: 'connecting' | 'live' | 'reconnecting' | 'offline'
+  const labels  = { connecting: 'CONNECTING', live: 'LIVE', reconnecting: 'RECONNECTING', offline: 'OFFLINE' };
+  const label   = labels[s] || s.toUpperCase();
+
+  ['h-status-chip', 'p-status-chip'].forEach(id => {
+    const el = document.getElementById(id);
+    el.className = `hud-chip ${s}`;
+    el.textContent = label;
+  });
+
+  const ov   = document.getElementById('status-overlay');
+  const st   = document.getElementById('so-status-text');
+  const spin = document.getElementById('so-spinner');
+
+  if (s === 'live') {
+    ov.classList.add('hidden');
+  } else {
+    ov.classList.remove('hidden');
+    st.className  = `so-status ${s}`;
+    st.textContent = s === 'connecting'   ? 'Connecting to server…'
+                   : s === 'reconnecting' ? 'Connection lost — retrying…'
+                   :                        'Server offline';
+    spin.style.display = s === 'offline' ? 'none' : '';
+  }
+}
+
+/* ── WebSocket client ────────────────────────────────────── */
+let ws = null;
+let reconnectDelay = 1500;
+const MAX_DELAY = 30000;
+
+document.getElementById('so-url').textContent = WS_URL;
+
+function connect() {
+  setStatus('connecting');
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    setStatus('live');
+    reconnectDelay = 1500;
+  };
+
+  ws.onmessage = e => {
+    let evt;
+    try { evt = JSON.parse(e.data); } catch { return; }
+    const svc = portToService(evt.dstPort);
+    if (!filters[svc]) { recordEvent(evt); return; } // count but don't render
+    recordEvent(evt);
+    spawnCircle(evt);
+  };
+
+  ws.onclose = () => {
+    setStatus('reconnecting');
+    setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 1.8, MAX_DELAY);
+  };
+
+  ws.onerror = () => { /* onclose fires next */ };
+}
+
+/* ── Kick off ────────────────────────────────────────────── */
+resize();
+loadWorldAtlas();
+connect();
+
+// Stats + render loop
+function loop(now) {
+  updateStats(now);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(render);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "dgSpecHash": "iBjou2qx6XA=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\squim\\Desktop\\AI Projects\\squimballstudios.com\\server\\NoiseMap\\NoiseMap.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\squim\\.nuget\\packages\\maxmind.db\\4.0.0\\maxmind.db.4.0.0.nupkg.sha512",
+    "C:\\Users\\squim\\.nuget\\packages\\maxmind.geoip2\\5.1.0\\maxmind.geoip2.5.1.0.nupkg.sha512",
+    "C:\\Users\\squim\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\6.0.0\\microsoft.extensions.dependencyinjection.abstractions.6.0.0.nupkg.sha512",
+    "C:\\Users\\squim\\.nuget\\packages\\microsoft.extensions.options\\6.0.0\\microsoft.extensions.options.6.0.0.nupkg.sha512",
+    "C:\\Users\\squim\\.nuget\\packages\\microsoft.extensions.primitives\\6.0.0\\microsoft.extensions.primitives.6.0.0.nupkg.sha512",
+    "C:\\Users\\squim\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\6.0.0\\system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}
