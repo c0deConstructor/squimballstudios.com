@@ -219,18 +219,18 @@
     <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.25em;color:var(--accent);text-transform:uppercase;margin-bottom:11px;">⚙ Settings</div>
     <div class="panel-section">
       <div class="panel-section-title">Animation</div>
-      <div class="slider-row"><div class="slider-label"><span>Speed Multiplier</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="1" max="5000000" step="1" value="100000"></div>
-      <div class="slider-row"><div class="slider-label"><span>Fade Out (s)</span><span id="lbl-fade">2s</span></div><input type="range" id="sl-fade" min="0.3" max="15" step="0.1" value="2"></div>
-      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">1</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="1"></div>
-      <div class="slider-row"><div class="slider-label"><span>Ripple Line Width</span><span id="lbl-ringWidth">0.10</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Speed Multiplier</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="1" max="10000000" step="1" value="100000"></div>
+      <div class="slider-row"><div class="slider-label"><span>Fade Out (s)</span><span id="lbl-fade">1.0s</span></div><input type="range" id="sl-fade" min="0.3" max="15" step="0.1" value="1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">3</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="3"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ripple Line Width</span><span id="lbl-ringWidth">0.04</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.04"></div>
     </div>
     <div class="panel-section">
       <div class="panel-section-title">Pulse Size</div>
       <div class="slider-row"><div class="slider-label"><span>Base Radius</span><span id="lbl-baseR">1.0</span></div><input type="range" id="sl-baseR" min="0.1" max="10" step="0.1" value="1"></div>
       <div class="slider-row"><div class="slider-label"><span>Mag Scale</span><span id="lbl-magScale">2.0</span></div><input type="range" id="sl-magScale" min="0.1" max="4" step="0.1" value="2.0"></div>
-      <div class="slider-row"><div class="slider-label"><span>Max Radius Cap</span><span id="lbl-maxR">50</span></div><input type="range" id="sl-maxR" min="10" max="100" step="1" value="50"></div>
+      <div class="slider-row"><div class="slider-label"><span>Max Radius Cap</span><span id="lbl-maxR">200</span></div><input type="range" id="sl-maxR" min="10" max="250" step="1" value="200"></div>
       <div class="slider-row"><div class="slider-label"><span>Depth Scale</span><span id="lbl-depthScale">0.50</span></div><input type="range" id="sl-depthScale" min="0" max="1" step="0.01" value="0.5"></div>
-      <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">0.40</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="0.4"></div>
+      <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">0.90</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="0.9"></div>
       <div class="slider-row"><div class="slider-label"><span>Audio Volume</span><span id="lbl-audioVol">0.10</span></div><input type="range" id="sl-audioVol" min="0" max="1" step="0.05" value="0.1"></div>
       <div class="slider-row"><div class="slider-label"><span>Audio Frequencies</span><span id="lbl-audioFreq">Low</span></div><input type="range" id="sl-audioFreq" min="0" max="1" step="0.05" value="0.2"></div>
     </div>
@@ -310,8 +310,8 @@ const UP_Z = new THREE.Vector3(0, 0, 1);
 
 /* ── Settings ── */
 const settings = {
-  speed: 100000, fadeTime: 2, rings: 1, ringWidth: 0.1, pulseOpacity: 0.4,
-  baseR: 1, magScale: 2.0, maxR: 50, depthScale: 0.5,
+  speed: 100000, fadeTime: 1, rings: 3, ringWidth: 0.04, pulseOpacity: 0.9,
+  baseR: 1, magScale: 2.0, maxR: 200, depthScale: 0.5,
   audioVol: 0.1, audioFreq: 0.2,
   glow: true, depth: true, atmos: true, grat: true, borders: true, autorot: false,
   colLow: '#00c8b4', colMid: '#ffd166', colHigh: '#ff6b35', colBorders: '#00c8b4',
@@ -913,6 +913,18 @@ function openQuery() {
   document.getElementById('controls-bar').style.display = 'none';
 }
 
+/* ── Clamp query inputs on commit ── */
+function clampInput(id, min, max) {
+  const el = document.getElementById(id);
+  el.addEventListener('change', () => {
+    const v = parseFloat(el.value);
+    if (!isNaN(v)) el.value = Math.max(min, Math.min(max, v));
+  });
+}
+clampInput('q-lat',    -90,   90);
+clampInput('q-lon',   -180,  180);
+clampInput('q-radius',   1, 20000);
+
 /* ── Mini Map Picker (2D D3 overlay, same as original) ── */
 (function() {
   const modal = document.getElementById('map-picker-modal');
@@ -1003,13 +1015,13 @@ function openQuery() {
   mpCanvas.addEventListener('wheel', e=>{ e.preventDefault(); const r=mpCanvas.getBoundingClientRect(); mpApplyZoom(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top); },{passive:false});
   mpCanvas.addEventListener('mousedown', e=>{
     const r=mpCanvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-    if (e.shiftKey){e.preventDefault();const g=mpUnproj(mx,my);selLat=Math.max(-90,Math.min(90,g.lat));selLon=g.lon;selCurX=mx;selCurY=my;selActive=true;selRadiusKm=0;confirmBtn.disabled=true;}
+    if (e.shiftKey){e.preventDefault();const g=mpUnproj(mx,my);selLat=Math.max(-90,Math.min(90,g.lat));selLon=Math.max(-180,Math.min(180,g.lon));selCurX=mx;selCurY=my;selActive=true;selRadiusKm=0;confirmBtn.disabled=true;}
     else{mpDragging=true;mpDragStartX=mx;mpDragStartY=my;mpDragPanX=mpPanX;mpDragPanY=mpPanY;mpCanvas.classList.add('map-panning');e.preventDefault();}
   });
   window.addEventListener('mousemove', e=>{
     if (!modal.classList.contains('open')) return;
     const r=mpCanvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-    if (selActive){selCurX=mx;selCurY=my;const c=mpProj(selLat,selLon),rPx=Math.hypot(mx-c.x,my-c.y);selRadiusKm=Math.max(1,rPx/(mpBaseScale*mpZoom)*111.32);updateCoords();mpDraw();}
+    if (selActive){selCurX=mx;selCurY=my;const c=mpProj(selLat,selLon),rPx=Math.hypot(mx-c.x,my-c.y);selRadiusKm=Math.max(1,Math.min(20000,rPx/(mpBaseScale*mpZoom)*111.32));updateCoords();mpDraw();}
     else if (mpDragging){mpPanX=mpDragPanX+(mx-mpDragStartX);mpPanY=mpDragPanY+(my-mpDragStartY);mpRebuild();mpDraw();}
     else{const g=mpUnproj(mx,my);if(selLat!==null&&selRadiusKm>0)updateCoords();else coordsEl.innerHTML=`Cursor: <span>${g.lat.toFixed(3)}°, ${g.lon.toFixed(3)}°</span>`;}
   });
