@@ -193,6 +193,27 @@
   }
   .launch:hover { letter-spacing: .32em; }
 
+  /* ── Seizure notice ── */
+  .seizure-notice {
+    margin-top: 52px;
+    font-size: 8px;
+    letter-spacing: .16em;
+    color: var(--muted);
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 2.2;
+    opacity: .55;
+  }
+  .seizure-notice::before {
+    content: '';
+    display: block;
+    width: 30px;
+    height: 1px;
+    background: var(--muted);
+    margin: 0 auto 18px;
+    opacity: .4;
+  }
+
   /* ── Animations ── */
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(18px); }
@@ -269,6 +290,8 @@
     </div>
 
   </div>
+
+  <p class="seizure-notice">⚠ some simulations contain flashing lights and stroboscopic effects<br>not recommended for individuals with photosensitive epilepsy</p>
 </div>
 
 <script>

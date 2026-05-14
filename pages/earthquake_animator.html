@@ -68,28 +68,28 @@
   /* ── SETTINGS PANEL ── */
   #settings-panel { position: fixed; top: 0; left: 0; width: var(--panel-w); height: 100vh; z-index: 50; display: flex; flex-direction: column; pointer-events: none; transition: transform 0.35s cubic-bezier(0.4,0,0.2,1); }
   #settings-panel.collapsed { transform: translateX(calc(-1 * var(--panel-w))); }
-  #panel-inner { background: var(--panel-bg); border-right: 1px solid var(--border); flex: 1; overflow-y: auto; padding: 24px 20px 40px; pointer-events: all; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  #panel-inner { background: var(--panel-bg); border-right: 1px solid var(--border); flex: 1; overflow-y: auto; padding: 14px 13px 20px; pointer-events: all; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   #panel-inner::-webkit-scrollbar { width: 4px; }
   #panel-inner::-webkit-scrollbar-thumb { background: var(--border); }
   #panel-toggle { position: absolute; right: -36px; top: 50%; transform: translateY(-50%); width: 36px; height: 80px; background: var(--panel-bg); border: 1px solid var(--border); border-left: none; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: all; color: var(--accent); transition: background 0.2s; writing-mode: vertical-lr; font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; }
   #panel-toggle:hover { background: rgba(0,200,180,0.1); }
-  .panel-section { margin-bottom: 24px; }
-  .panel-section-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-  .slider-row { margin-bottom: 14px; }
-  .slider-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-  .slider-label span:first-child { font-size: 12px; color: var(--text); font-weight: 600; letter-spacing: 0.06em; }
-  .slider-label span:last-child { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+  .panel-section { margin-bottom: 13px; }
+  .panel-section-title { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .slider-row { margin-bottom: 7px; }
+  .slider-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+  .slider-label span:first-child { font-size: 11px; color: var(--text); font-weight: 600; letter-spacing: 0.04em; }
+  .slider-label span:last-child { font-family: var(--mono); font-size: 10px; color: var(--accent); }
   input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: rgba(0,200,180,0.15); outline: none; cursor: pointer; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 6px rgba(0,200,180,0.5); transition: transform 0.15s; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 6px rgba(0,200,180,0.5); transition: transform 0.15s; }
   input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.3); }
-  input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
-  .color-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .color-row label { font-size: 12px; font-weight: 600; flex: 1; letter-spacing: 0.06em; }
-  .color-row input[type=color] { width: 36px; height: 24px; border: 1px solid var(--border); background: transparent; cursor: pointer; padding: 1px; }
-  .checkbox-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer; }
-  .checkbox-row input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
-  .checkbox-row label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; }
-  .panel-btn { width: 100%; background: transparent; border: 1px solid rgba(0,200,180,0.3); color: var(--text); font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; padding: 9px; cursor: pointer; margin-bottom: 8px; transition: border-color 0.2s, color 0.2s, background 0.2s; }
+  input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+  .color-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .color-row label { font-size: 11px; font-weight: 600; flex: 1; letter-spacing: 0.04em; }
+  .color-row input[type=color] { width: 28px; height: 20px; border: 1px solid var(--border); background: transparent; cursor: pointer; padding: 1px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; cursor: pointer; }
+  .checkbox-row input[type=checkbox] { accent-color: var(--accent); width: 12px; height: 12px; cursor: pointer; }
+  .checkbox-row label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; }
+  .panel-btn { width: 100%; background: transparent; border: 1px solid rgba(0,200,180,0.3); color: var(--text); font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px; cursor: pointer; margin-bottom: 5px; transition: border-color 0.2s, color 0.2s, background 0.2s; }
   .panel-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,200,180,0.05); }
 
   /* ── HUD ── */
@@ -216,7 +216,7 @@
 <!-- ── Settings Panel ── -->
 <div id="settings-panel" class="collapsed">
   <div id="panel-inner">
-    <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.25em;color:var(--accent);text-transform:uppercase;margin-bottom:20px;">⚙ Settings</div>
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.25em;color:var(--accent);text-transform:uppercase;margin-bottom:11px;">⚙ Settings</div>
     <div class="panel-section">
       <div class="panel-section-title">Animation</div>
       <div class="slider-row"><div class="slider-label"><span>Speed Multiplier</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="1" max="5000000" step="1" value="100000"></div>
@@ -231,6 +231,8 @@
       <div class="slider-row"><div class="slider-label"><span>Max Radius Cap</span><span id="lbl-maxR">50</span></div><input type="range" id="sl-maxR" min="10" max="100" step="1" value="50"></div>
       <div class="slider-row"><div class="slider-label"><span>Depth Scale</span><span id="lbl-depthScale">0.50</span></div><input type="range" id="sl-depthScale" min="0" max="1" step="0.01" value="0.5"></div>
       <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">0.40</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="0.4"></div>
+      <div class="slider-row"><div class="slider-label"><span>Audio Volume</span><span id="lbl-audioVol">0.10</span></div><input type="range" id="sl-audioVol" min="0" max="1" step="0.05" value="0.1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Audio Frequencies</span><span id="lbl-audioFreq">Low</span></div><input type="range" id="sl-audioFreq" min="0" max="1" step="0.05" value="0.2"></div>
     </div>
     <div class="panel-section">
       <div class="panel-section-title">Colors</div>
@@ -310,6 +312,7 @@ const UP_Z = new THREE.Vector3(0, 0, 1);
 const settings = {
   speed: 100000, fadeTime: 2, rings: 1, ringWidth: 0.1, pulseOpacity: 0.4,
   baseR: 1, magScale: 2.0, maxR: 50, depthScale: 0.5,
+  audioVol: 0.1, audioFreq: 0.2,
   glow: true, depth: true, atmos: true, grat: true, borders: true, autorot: false,
   colLow: '#00c8b4', colMid: '#ffd166', colHigh: '#ff6b35', colBorders: '#00c8b4',
 };
@@ -629,6 +632,66 @@ function updateTooltip() {
   }
 }
 
+/* ── Audio ── */
+let audioCtx = null, masterComp = null;
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterComp = audioCtx.createDynamicsCompressor();
+  masterComp.threshold.value = -18;
+  masterComp.knee.value      = 12;
+  masterComp.ratio.value     = 4;
+  masterComp.attack.value    = 0.003;
+  masterComp.release.value   = 0.25;
+  masterComp.connect(audioCtx.destination);
+}
+document.addEventListener('click', initAudio, { once: true });
+
+function thudFreq(mag) {
+  // log-spaced: each integer magnitude step sounds like an equal pitch interval
+  // audioFreq slider shifts the entire range up/down
+  const t      = Math.max(0, Math.min(1, (Math.max(1, mag) - 1) / 8)); // 0=mag1, 1=mag9
+  const freqMax = 90  + settings.audioFreq * 510;  // 90–600 Hz  (small quakes, high pitch)
+  const freqMin = 15  + settings.audioFreq * 65;   // 15–80  Hz  (huge  quakes, low  pitch)
+  return Math.exp(Math.log(freqMax) - t * (Math.log(freqMax) - Math.log(freqMin)));
+}
+
+function playThud(mag) {
+  if (!audioCtx || settings.audioVol === 0) return;
+  const freq  = thudFreq(mag);
+  // Gain: scales from 0.15 (mag1) up to 1.0 (mag9+), then multiplied by volume slider
+  const peak  = Math.min(1.0, 0.15 + ((Math.max(1, mag) - 1) / 8) * 0.85) * settings.audioVol;
+  const osc   = audioCtx.createOscillator();
+  const gain  = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(masterComp);
+  const now = audioCtx.currentTime;
+  osc.type  = 'sine';
+
+  if (mag >= 6) {
+    // Diving thud: slow pitch sweep from 2.8× down to target, 1.2–2.0 s decay
+    const diveTime = 0.35 + (mag - 6) * 0.10;
+    const decay    = 1.20 + (mag - 6) * 0.20;
+    osc.frequency.setValueAtTime(freq * 2.8, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(freq, 1), now + diveTime);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(peak, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+    osc.start(now);
+    osc.stop(now + decay + 0.15);
+  } else {
+    // Standard thud: quick pitch sweep from 2.2× down to target, short decay
+    const decay = 0.12 + (mag / 6) * 0.38;   // 0.12 s (mag1) → 0.50 s (mag6)
+    osc.frequency.setValueAtTime(freq * 2.2, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(freq, 1), now + 0.045);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(peak, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+    osc.start(now);
+    osc.stop(now + decay + 0.10);
+  }
+}
+
 /* ── Main render loop ── */
 function animate(ts) {
   requestAnimationFrame(animate);
@@ -643,7 +706,9 @@ function animate(ts) {
     if (earthquakes.length > 0) {
       const t0 = earthquakes[0].time;
       while (eqIndex < earthquakes.length && (earthquakes[eqIndex].time - t0) <= simTime) {
-        activeCircles.push(spawnCircle(earthquakes[eqIndex]));
+        const eq = earthquakes[eqIndex];
+        activeCircles.push(spawnCircle(eq));
+        playThud(eq.mag);
         eqIndex++;
       }
     }
@@ -746,6 +811,8 @@ bindSlider('sl-magScale',     'lbl-magScale',     'magScale',     v=>v.toFixed(1
 bindSlider('sl-maxR',         'lbl-maxR',         'maxR',         v=>v);
 bindSlider('sl-depthScale',   'lbl-depthScale',   'depthScale',   v=>v.toFixed(2));
 bindSlider('sl-pulseOpacity', 'lbl-pulseOpacity', 'pulseOpacity', v=>v.toFixed(2));
+bindSlider('sl-audioVol',  'lbl-audioVol',  'audioVol',  v => v === 0 ? 'off' : v.toFixed(2));
+bindSlider('sl-audioFreq', 'lbl-audioFreq', 'audioFreq', v => v <= 0.15 ? 'Sub' : v < 0.45 ? 'Low' : v < 0.70 ? 'Mid' : 'High');
 
 function bindCheck(id, key, cb) {
   const el = document.getElementById(id);
