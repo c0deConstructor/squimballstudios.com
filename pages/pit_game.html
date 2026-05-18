@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PIT — Police Intercept</title>
-<!-- Planck.js 2D physics -->
 <script src="https://cdn.jsdelivr.net/npm/planck@1.0.0/dist/planck.min.js"></script>
-<!-- Three.js via importmap -->
 <script type="importmap">
 {"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
 </script>
@@ -163,7 +161,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 'use strict';
 import * as THREE from 'three';
 
-/* planck loaded as CDN global */
 const { World, Vec2, Box, Circle } = planck;
 
 // ═══════════════════════════════════════════════════════
@@ -174,7 +171,6 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.id = 'three-canvas';
 renderer.domElement.id = 'three-canvas';
 document.body.prepend(renderer.domElement);
 
@@ -191,7 +187,6 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 });
 
-// Lighting — sun from upper-left gives crisp 3D shading on boxes
 const ambient = new THREE.AmbientLight(0x8898aa, 1.6);
 const sun     = new THREE.DirectionalLight(0xfff5e0, 2.8);
 sun.position.set(60, 100, 40);
@@ -206,12 +201,16 @@ scene.add(ambient, sun);
 //  CONSTANTS
 // ═══════════════════════════════════════════════════════
 const CAR_W   = 2.2, CAR_L = 4.5, CAR_H = 1.3;
-const ROAD_HALF = 7;       // m each side of centre
-const LANE_HALF = 3.5;     // m per lane
-const WHEELBASE = 2.6;     // m, for steering
-const MAX_STEER = 0.46;    // rad
-const NUM_WP    = 22;      // road waypoints
-const ROAD_STEP = 2;       // m between spline samples
+const ROAD_HALF = 7;
+const LANE_HALF = 3.5;
+const WHEELBASE = 2.6;
+const MAX_STEER = 0.46;
+const ROAD_STEP = 2;
+
+const ROAD_BUFFER_AHEAD  = 1200;  // m ahead of player
+const ROAD_BUFFER_BEHIND = 600;   // m behind player
+const SCENERY_SKIP       = 10;    // road points between scenery placements
+const ROAD_MESH_CAP      = 1100;  // max pts in dynamic road mesh buffer
 
 const DIFF_SETTINGS = {
   easy:   { time:90, aiSpd:0.80, traffic:8,  evasion:0.25 },
@@ -245,17 +244,13 @@ function mkRNG(seed) {
 const clamp = (v,a,b) => v<a?a:v>b?b:v;
 const lerp  = (a,b,t) => a+(b-a)*t;
 function angleDiff(a,b){ let d=((a-b)%(Math.PI*2)+Math.PI*3)%(Math.PI*2)-Math.PI; return d; }
-function cr(p0,p1,p2,p3,t){
-  return 0.5*(2*p1+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t*t+(-p0+3*p1-3*p2+p3)*t*t*t);
-}
-// Planck body forward vector (local +Y in world space at current angle)
 function bodyFwd(body){ const a=body.getAngle(); return {x:-Math.sin(a),y:Math.cos(a)}; }
 function bodyRt(body) { const a=body.getAngle(); return {x: Math.cos(a),y:Math.sin(a)}; }
 
 // ═══════════════════════════════════════════════════════
 //  GAME STATE
 // ═══════════════════════════════════════════════════════
-let state   = 'start';    // start|countdown|playing|ended
+let state   = 'start';
 let diff    = 'normal';
 let seed    = 0;
 let rng     = null;
@@ -264,28 +259,39 @@ let pitDone = false, pitRating = '', endReason = '';
 let locked  = false;
 let sirenT  = 0, sirenPhase = 0;
 
-let roadPts   = [];  // [{x,y,tx,ty,zone}]
-let scenery   = [];  // [{mesh, body, type}]
-let trafficArr= [];  // [{mesh, body, spd, lane}]
-let skidLines = [];  // [{pts, mat}]
-let skidGeo   = null;
+let roadPts    = [];  // sliding window [{x,y,tx,ty,zone}]
+let scenery    = [];  // [{mesh, body}]
+let trafficArr = [];  // [{mesh, body, spd, lane, roadSeq}]
+let skidLines  = [];
+let skidGeo    = null;
+
+// Infinite road generation state
+let genX = 0, genY = 0, genAngle = 0;
+let genCurvature = 0, genCurveTimer = 0;
+let genZone = 'country', genZoneTimer = 0;
+let roadBaseSeq = 0, roadGenSeq = 0;
+
+// Road tracking (sequence numbers)
+let copRoadSeq = 0, suspRoadSeq = 0;
+let trafficSpawnSeq = { fwd: 0, onc: 0 };
+let scenerySeedSeq = 0;
+let suspectLatShift = 0;
+
+// Dynamic road mesh
+let roadPosBuf = null, roadMeshDynamic = null, roadMarkMesh = null;
 
 // World objects
 let physWorld  = null;
 let copBody    = null, suspBody = null;
 let copMesh    = null, suspMesh = null;
-let copLights  = null; // the light bar sub-meshes for flashing
-let roadBounds = { minX:0, maxX:0, minY:0, maxY:0 };
+let copLights  = null;
 
-// Camera smoothing
 const camPos  = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 
-// Input
 const inp = { throttle:false, brake:false, handbrake:false, steer:0 };
-const steerCfg = { sensitivity: 0.0007, nonlin: 0.2, recenter: 0.6 }; // tunable via sliders
+const steerCfg = { sensitivity: 0.0007, nonlin: 0.2, recenter: 0.6 };
 
-// Skid geometry (dynamic)
 const SKID_MAX = 2000;
 const skidPositions = new Float32Array(SKID_MAX * 3);
 let   skidCount = 0;
@@ -301,7 +307,6 @@ function initAudio() {
   aCtx = new (window.AudioContext || window.webkitAudioContext)();
   masterGain = aCtx.createGain(); masterGain.gain.value = 0; masterGain.connect(aCtx.destination);
 
-  // Compressor to prevent clipping
   const comp = aCtx.createDynamicsCompressor();
   comp.threshold.value=-18; comp.knee.value=12; comp.ratio.value=4;
   comp.attack.value=0.003; comp.release.value=0.25;
@@ -358,69 +363,97 @@ function updateAudio(dt) {
   engOsc.frequency.value = 75 + spd * 3.5;
   engGain.gain.value += ((inp.throttle ? 0.10 + spd*0.0005 : 0.03) - engGain.gain.value) * 0.12;
 
-  // Siren
   sirenT += dt;
   if (sirenT > 0.42) { sirenT=0; sirenPhase^=1; sirenG.gain.value=spd>1 ? (sirenPhase?0.13:0.07) : 0; }
 
-  // Screech from lateral slip
   const rt  = bodyRt(copBody);
   const lat = Math.abs(vel.x*rt.x + vel.y*rt.y);
   screechG.gain.value += (clamp((lat-2)/9,0,1)*(inp.handbrake?1.4:1)*0.16 - screechG.gain.value)*0.14;
 }
 
 // ═══════════════════════════════════════════════════════
-//  ROAD GENERATION
+//  INFINITE ROAD GENERATION
 // ═══════════════════════════════════════════════════════
-function generateRoad() {
-  const R = 1000 + rng()*700;
-  const wps = Array.from({length:NUM_WP}, (_,i) => {
-    const a = (i/NUM_WP)*Math.PI*2;
-    const r = R + (rng()-0.5)*R*0.5;
-    const b = (rng()-0.5)*R*0.35;
-    return {
-      x: r*Math.cos(a) + b*(-Math.sin(a)),
-      y: r*Math.sin(a) + b*  Math.cos(a),
-      zone: (i%3===1) ? 'city' : 'country',
-    };
-  });
+function getRoadPt(seq) {
+  const i = seq - roadBaseSeq;
+  if (i < 0 || i >= roadPts.length) return null;
+  return roadPts[i];
+}
 
+// Planck angle for a car facing along road tangent in given lane direction
+// lane=+1 → forward, lane=-1 → oncoming (backward along road)
+function roadFwdAngle(p, lane) {
+  return Math.atan2(-p.tx * lane, p.ty * lane);
+}
+
+function findNearRoad(x, y, hintSeq) {
+  const WINDOW = 80;
+  const hi = clamp(hintSeq - roadBaseSeq, 0, roadPts.length - 1);
+  let best = hi, bestD = Infinity;
+  for (let di = -WINDOW; di <= WINDOW; di++) {
+    const ai = hi + di;
+    if (ai < 0 || ai >= roadPts.length) continue;
+    const p = roadPts[ai];
+    const d = Math.hypot(x - p.x, y - p.y);
+    if (d < bestD) { bestD = d; best = ai; }
+  }
+  return { seq: best + roadBaseSeq, dist: bestD };
+}
+
+// Get lane-centre target point lookaheadM ahead for AI steering
+// lane=+1 looks in +seq direction (forward), lane=-1 looks in -seq direction (oncoming)
+function laneLookAhead(hintSeq, lane, lookaheadM) {
+  const ahead = Math.round(lookaheadM / ROAD_STEP);
+  const targetSeq = clamp(hintSeq + lane * ahead, roadBaseSeq, roadBaseSeq + roadPts.length - 1);
+  const p = getRoadPt(targetSeq);
+  if (!p) return null;
+  // Camera right = world -X, so forward lane (+1) sits on world -X = player's right
+  return { x: p.x - p.ty * LANE_HALF * lane, y: p.y + p.tx * LANE_HALF * lane, p };
+}
+
+function initRoad() {
   roadPts = [];
-  const N = wps.length;
-  for (let i=0; i<N; i++) {
-    const p0=wps[(i-1+N)%N], p1=wps[i], p2=wps[(i+1)%N], p3=wps[(i+2)%N];
-    const segLen = Math.hypot(p2.x-p1.x, p2.y-p1.y);
-    const steps  = Math.max(1, Math.ceil(segLen/ROAD_STEP));
-    for (let j=0; j<steps; j++) {
-      const t=j/steps, dt2=0.01;
-      const x=cr(p0.x,p1.x,p2.x,p3.x,t), y=cr(p0.y,p1.y,p2.y,p3.y,t);
-      const nx=cr(p0.x,p1.x,p2.x,p3.x,t+dt2)-x, ny=cr(p0.y,p1.y,p2.y,p3.y,t+dt2)-y;
-      const nl=Math.hypot(nx,ny)||1;
-      roadPts.push({ x, y, tx:nx/nl, ty:ny/nl, zone:p1.zone });
-    }
-  }
+  roadBaseSeq = 0; roadGenSeq = 0;
+  genX = 0; genY = 0; genAngle = 0;
+  genCurvature = 0; genCurveTimer = 0;
+  genZone = 'country'; genZoneTimer = 0;
+  extendRoadTo(Math.ceil((ROAD_BUFFER_AHEAD + 300) / ROAD_STEP));
+}
 
-  roadBounds={minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity};
-  for (const p of roadPts) {
-    if (p.x<roadBounds.minX) roadBounds.minX=p.x;
-    if (p.x>roadBounds.maxX) roadBounds.maxX=p.x;
-    if (p.y<roadBounds.minY) roadBounds.minY=p.y;
-    if (p.y>roadBounds.maxY) roadBounds.maxY=p.y;
+function extendRoadTo(targetSeq) {
+  while (roadGenSeq < targetSeq) {
+    genCurveTimer -= ROAD_STEP;
+    if (genCurveTimer <= 0) {
+      genCurvature  = (rng() - 0.5) * 0.006;
+      genCurveTimer = 120 + rng() * 300;
+    }
+    genZoneTimer -= ROAD_STEP;
+    if (genZoneTimer <= 0) {
+      genZone      = rng() < 0.25 ? 'city' : 'country';
+      genZoneTimer = 350 + rng() * 650;
+    }
+    genAngle += genCurvature * ROAD_STEP;
+    genX     += Math.sin(genAngle) * ROAD_STEP;
+    genY     += Math.cos(genAngle) * ROAD_STEP;
+    roadPts.push({ x:genX, y:genY, tx:Math.sin(genAngle), ty:Math.cos(genAngle), zone:genZone });
+    roadGenSeq++;
   }
 }
 
-function findNearRoad(x, y, hint) {
-  const N = roadPts.length;
-  let best=hint, bestD=Infinity;
-  for (let di=-80; di<=80; di++) {
-    const i=((hint+di)%N+N)%N;
-    const d=Math.hypot(x-roadPts[i].x, y-roadPts[i].y);
-    if (d<bestD) { bestD=d; best=i; }
+function manageRoadBuffer() {
+  const aheadNeeded = copRoadSeq + Math.ceil(ROAD_BUFFER_AHEAD / ROAD_STEP);
+  if (roadGenSeq < aheadNeeded) extendRoadTo(aheadNeeded);
+
+  const cullBefore = copRoadSeq - Math.ceil(ROAD_BUFFER_BEHIND / ROAD_STEP);
+  if (cullBefore > roadBaseSeq + 100) {
+    const cullCount = cullBefore - roadBaseSeq;
+    roadPts.splice(0, cullCount);
+    roadBaseSeq += cullCount;
   }
-  return { idx:best, dist:bestD };
 }
 
 // ═══════════════════════════════════════════════════════
-//  MESH BUILDERS — 3D SHADED GEOMETRY
+//  DYNAMIC ROAD MESH
 // ═══════════════════════════════════════════════════════
 const MAT = {
   road:     new THREE.MeshLambertMaterial({ color:0x3a3530 }),
@@ -433,58 +466,86 @@ const MAT = {
   glass:    new THREE.MeshPhongMaterial({ color:0x1a2838, transparent:true, opacity:0.75, shininess:80 }),
 };
 
-function buildRoadMesh() {
-  const N = roadPts.length;
-  const verts = [], idx = [];
+function initRoadMesh() {
+  const VERTS = ROAD_MESH_CAP * 2;
 
-  for (let i=0; i<N; i++) {
-    const p = roadPts[i];
-    const rx = p.ty, rz = -p.tx; // right direction in game space (mapped to Three XZ)
-    // Left edge of road in Three: (p.x - p.ty*ROAD_HALF, y, p.y + p.tx*ROAD_HALF)
-    verts.push(p.x - p.ty*(ROAD_HALF+0.5), 0.08, p.y + p.tx*(ROAD_HALF+0.5)); // left shoulder
-    verts.push(p.x + p.ty*(ROAD_HALF+0.5), 0.08, p.y - p.tx*(ROAD_HALF+0.5)); // right shoulder
-  }
-  for (let i=0; i<N-1; i++) {
+  roadPosBuf = new Float32Array(VERTS * 3);
+  const geo  = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(roadPosBuf, 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+
+  // Upward normals — road is flat in XZ plane, always lit correctly from above
+  const normBuf = new Float32Array(VERTS * 3);
+  for (let i = 1; i < normBuf.length; i += 3) normBuf[i] = 1.0;
+  geo.setAttribute('normal', new THREE.BufferAttribute(normBuf, 3));
+
+  const iArr = new Uint32Array((ROAD_MESH_CAP - 1) * 6);
+  for (let i = 0; i < ROAD_MESH_CAP - 1; i++) {
     const a=i*2, b=a+1, c=a+2, d=a+3;
-    idx.push(a,b,c, b,d,c);
+    iArr.set([a,c,b, b,c,d], i*6);  // CCW winding for upward-facing normal
   }
-  // Close loop
-  const a=(N-1)*2, b=a+1;
-  idx.push(a,b,0, b,1,0);
+  geo.setIndex(new THREE.BufferAttribute(iArr, 1));
+  geo.setDrawRange(0, 0);
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
-  geo.setIndex(idx); geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, MAT.road);
-  mesh.receiveShadow = true;
-  scene.add(mesh);
+  roadMeshDynamic = new THREE.Mesh(geo, MAT.road);
+  roadMeshDynamic.receiveShadow = true;
+  scene.add(roadMeshDynamic);
 
-  // Centre dashed marking (white strips every ~20m)
-  const mVerts=[], mIdx=[];
-  const dashLen=8, gap=12, step=dashLen+gap;
-  let accum=0, lastAccum=0, mi=0;
-  for (let i=0; i<N-1; i++) {
-    const cur=roadPts[i], nxt=roadPts[(i+1)%N];
-    accum += Math.hypot(cur.x-nxt.x, cur.y-nxt.y);
-    if (Math.floor(accum/step) > Math.floor(lastAccum/step)) {
-      const p=roadPts[i];
-      const hw=0.18;
-      mVerts.push(p.x-p.ty*hw, 0.12, p.y+p.tx*hw);
-      mVerts.push(p.x+p.ty*hw, 0.12, p.y-p.tx*hw);
-      const nxt2=roadPts[(i+4)%N];
-      mVerts.push(nxt2.x-nxt2.ty*hw, 0.12, nxt2.y+nxt2.tx*hw);
-      mVerts.push(nxt2.x+nxt2.ty*hw, 0.12, nxt2.y-nxt2.tx*hw);
-      const o=mi*4; mIdx.push(o,o+1,o+2, o+1,o+3,o+2);
-      mi++;
+  // Lane marking mesh (dashed centre line)
+  const markBuf  = new Float32Array(VERTS * 3);
+  const markGeo  = new THREE.BufferGeometry();
+  const markAttr = new THREE.BufferAttribute(markBuf, 3);
+  markAttr.setUsage(THREE.DynamicDrawUsage);
+  markGeo.setAttribute('position', markAttr);
+  const markNorm = new Float32Array(VERTS * 3);
+  for (let i = 1; i < markNorm.length; i += 3) markNorm[i] = 1.0;
+  markGeo.setAttribute('normal', new THREE.BufferAttribute(markNorm, 3));
+  const mIdx = new Uint32Array((ROAD_MESH_CAP - 1) * 6);
+  for (let i = 0; i < ROAD_MESH_CAP - 1; i++) {
+    const a=i*2, b=a+1, c=a+2, d=a+3;
+    mIdx.set([a,c,b, b,c,d], i*6);
+  }
+  markGeo.setIndex(new THREE.BufferAttribute(mIdx, 1));
+  markGeo.setDrawRange(0, 0);
+  roadMarkMesh = new THREE.Mesh(markGeo, MAT.marking);
+  roadMarkMesh.renderOrder = 1;
+  scene.add(roadMarkMesh);
+}
+
+function updateRoadMesh() {
+  if (!roadMeshDynamic) return;
+  const N   = Math.min(roadPts.length, ROAD_MESH_CAP);
+  const pos = roadPosBuf;
+  const markPos = roadMarkMesh.geometry.attributes.position.array;
+
+  const dashLen = 8, dashGap = 12, dashStep = dashLen + dashGap;
+  let accum = 0;
+
+  for (let i = 0; i < N; i++) {
+    const p  = roadPts[i];
+    const hw = ROAD_HALF + 0.5;
+    const vi = i * 6;
+    pos[vi]   = p.x - p.ty*hw; pos[vi+1] = 0.08; pos[vi+2] = p.y + p.tx*hw;
+    pos[vi+3] = p.x + p.ty*hw; pos[vi+4] = 0.08; pos[vi+5] = p.y - p.tx*hw;
+
+    // Dashed centre marking — degenerate quad when in gap (zero-area → invisible)
+    const inDash = (accum % dashStep) < dashLen;
+    const mw = 0.18;
+    if (inDash) {
+      markPos[vi]   = p.x - p.ty*mw; markPos[vi+1] = 0.13; markPos[vi+2] = p.y + p.tx*mw;
+      markPos[vi+3] = p.x + p.ty*mw; markPos[vi+4] = 0.13; markPos[vi+5] = p.y - p.tx*mw;
+    } else {
+      markPos[vi]   = p.x; markPos[vi+1] = 0.13; markPos[vi+2] = p.y;
+      markPos[vi+3] = p.x; markPos[vi+4] = 0.13; markPos[vi+5] = p.y;
     }
-    lastAccum=accum;
+    if (i > 0) accum += ROAD_STEP;
   }
-  if (mi>0) {
-    const mg=new THREE.BufferGeometry();
-    mg.setAttribute('position',new THREE.Float32BufferAttribute(mVerts,3));
-    mg.setIndex(mIdx); mg.computeVertexNormals();
-    scene.add(new THREE.Mesh(mg, MAT.marking));
-  }
+
+  roadMeshDynamic.geometry.attributes.position.needsUpdate = true;
+  roadMeshDynamic.geometry.setDrawRange(0, Math.max(0, (N-1)*6));
+  roadMarkMesh.geometry.attributes.position.needsUpdate = true;
+  roadMarkMesh.geometry.setDrawRange(0, Math.max(0, (N-1)*6));
 }
 
 function buildGroundPlane() {
@@ -509,7 +570,6 @@ function buildBuilding(x, y, w, d, h, col) {
   g.position.set(x, 0, y);
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), MAT.building(col));
   body.position.y = h/2; body.castShadow=true; body.receiveShadow=true;
-  // Window grid on sides (just a slightly lighter face tinting - keep it plain)
   g.add(body);
   return g;
 }
@@ -517,21 +577,18 @@ function buildBuilding(x, y, w, d, h, col) {
 function buildCarMesh(role) {
   const g = new THREE.Group();
 
-  // ── Main body
   const bodyCol  = role==='cop' ? 0x1a1e2a : role==='suspect' ? 0xd8cfc0 : 0xaaaaaa;
   const bodyMat  = new THREE.MeshPhongMaterial({ color:bodyCol, shininess:60 });
   const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(CAR_W, CAR_H, CAR_L), bodyMat);
   bodyMesh.position.y = 0.35 + CAR_H/2; bodyMesh.castShadow=true;
   g.add(bodyMesh);
 
-  // ── Windshield + rear glass (dark tinted)
   const winFront = new THREE.Mesh(new THREE.BoxGeometry(CAR_W-0.3, CAR_H*0.48, 0.08), MAT.glass);
   winFront.position.set(0, 0.35+CAR_H*0.72, -(CAR_L/2)+0.04);
   const winRear  = winFront.clone();
   winRear.position.z = (CAR_L/2)-0.04;
   g.add(winFront, winRear);
 
-  // ── Wheels (cylinder, axis along X so flat top shows)
   const wheelGeo = new THREE.CylinderGeometry(0.36,0.36,0.28,14);
   const wPositions = [
     [-CAR_W/2-0.04, 0.36, -CAR_L*0.32],
@@ -545,7 +602,6 @@ function buildCarMesh(role) {
     g.add(w);
   });
 
-  // ── Wheel arch (slightly darker panel strip)
   const archMat = new THREE.MeshPhongMaterial({ color:0x111111, shininess:10 });
   const archGeo = new THREE.BoxGeometry(0.12, 0.38, CAR_L*0.52);
   [-CAR_W/2-0.06, CAR_W/2+0.06].forEach(ax => {
@@ -554,13 +610,11 @@ function buildCarMesh(role) {
   });
 
   if (role==='cop') {
-    // ── Police livery: white panel on side
     const liveryMat = new THREE.MeshPhongMaterial({ color:0xf0f0f0, shininess:50 });
     const livery    = new THREE.Mesh(new THREE.BoxGeometry(CAR_W+0.02, CAR_H*0.40, CAR_L*0.55), liveryMat);
     livery.position.set(0, 0.35+CAR_H*0.28, 0);
     g.add(livery);
 
-    // ── Light bar (emissive strips that we'll flash)
     const lbBase = new THREE.Mesh(new THREE.BoxGeometry(CAR_W*0.75, 0.18, 0.52),
       new THREE.MeshPhongMaterial({ color:0x222222 }));
     lbBase.position.set(0, 0.35+CAR_H+0.09, -0.2); g.add(lbBase);
@@ -574,7 +628,6 @@ function buildCarMesh(role) {
     g.userData.lightBar = [lbR, lbB];
 
   } else if (role==='suspect') {
-    // ── Coloured stripe (seeded)
     const stripeCol = [0xaa2222,0x226688,0x887722,0x228855][Math.floor(rng()*4)];
     const stripeMat = new THREE.MeshPhongMaterial({ color:stripeCol });
     const stripe    = new THREE.Mesh(new THREE.BoxGeometry(0.35, CAR_H+0.02, CAR_L*0.7), stripeMat);
@@ -595,7 +648,7 @@ function buildSkidSystem() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  PHYSICS WORLD SETUP
+//  PHYSICS WORLD
 // ═══════════════════════════════════════════════════════
 let crashFlag = false;
 
@@ -603,7 +656,6 @@ function buildPhysWorld() {
   physWorld = World({ gravity: Vec2(0, 0) });
   crashFlag = false;
 
-  // Collision listener — detect cop crash
   physWorld.on('begin-contact', contact => {
     if (crashFlag || state!=='playing') return;
     const ba = contact.getFixtureA().getBody();
@@ -613,7 +665,6 @@ function buildPhysWorld() {
     if (!isCop) return;
     const other = ua==='cop' ? ub : ua;
     if (other==='static') {
-      // Cop hit static scenery: crash at any speed
       const vel = copBody.getLinearVelocity();
       if (Math.hypot(vel.x,vel.y) > 4) crashFlag = true;
     } else if (other==='traffic') {
@@ -647,7 +698,7 @@ function makeStaticCircle(x, y, r) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  VEHICLE PHYSICS (applied each frame before world.step)
+//  VEHICLE PHYSICS
 // ═══════════════════════════════════════════════════════
 function vehicleStep(body, input, engineMul, maxSpeedKph) {
   const fwd = bodyFwd(body);
@@ -656,19 +707,16 @@ function vehicleStep(body, input, engineMul, maxSpeedKph) {
   const fwdSpd = vel.x*fwd.x + vel.y*fwd.y;
   const latSpd = vel.x*rt.x  + vel.y*rt.y;
 
-  // 1. Lateral grip — kill sideways velocity
   const grip = input.handbrake ? 0.22 : 0.88;
   body.setLinearVelocity(Vec2(vel.x - rt.x*latSpd*grip, vel.y - rt.y*latSpd*grip));
 
-  // 2. Engine / brake / drag
   const m   = body.getMass();
   let force = 0;
   if (input.throttle) force  = m * 8.0 * engineMul;
   if (input.brake)    force -= m * 13.5;
-  force -= fwdSpd * m * 0.15; // drag → top speed = 8×mul/0.15
+  force -= fwdSpd * m * 0.15;
   body.applyForceToCenter(Vec2(fwd.x*force, fwd.y*force), true);
 
-  // 3. Speed cap
   const maxSpd = maxSpeedKph / 3.6;
   const curSpd = Math.hypot(vel.x, vel.y);
   if (curSpd > maxSpd) {
@@ -676,85 +724,236 @@ function vehicleStep(body, input, engineMul, maxSpeedKph) {
     body.setLinearVelocity(Vec2(v.x*maxSpd/curSpd, v.y*maxSpd/curSpd));
   }
 
-  // 4. Steering (angular velocity)
   if (Math.abs(fwdSpd) > 0.5) {
     const steerRad = input.steer * MAX_STEER;
     const turnRate = fwdSpd * Math.tan(steerRad) / WHEELBASE;
-    body.setAngularVelocity(turnRate); // positive = CCW in Planck = screen-right (camera faces -X as right)
+    body.setAngularVelocity(turnRate);
   }
+}
+
+// ═══════════════════════════════════════════════════════
+//  AI HELPERS
+// ═══════════════════════════════════════════════════════
+function closestCarAhead(body, lane, cars) {
+  const pos = body.getPosition();
+  const fwd = bodyFwd(body);
+  let minDist = Infinity;
+  for (const c of cars) {
+    if (c.body === body) continue;
+    if (c.lane !== lane) continue;
+    const cp = c.body.getPosition();
+    const dx = cp.x - pos.x, dy = cp.y - pos.y;
+    const ahead = dx*fwd.x + dy*fwd.y;
+    if (ahead < 1 || ahead > 60) continue;
+    const lat = Math.abs(dx*(-fwd.y) + dy*fwd.x);
+    if (lat < CAR_W + 1.5) minDist = Math.min(minDist, ahead);
+  }
+  return minDist;
 }
 
 // ═══════════════════════════════════════════════════════
 //  SUSPECT AI
 // ═══════════════════════════════════════════════════════
-let suspRoadIdx = 0;
-
 function suspectAI(dt) {
   const ds  = DIFF_SETTINGS[diff];
   const pos = suspBody.getPosition();
   const vel = suspBody.getLinearVelocity();
   const spd = Math.hypot(vel.x, vel.y);
 
-  // Update road index
-  const nr = findNearRoad(pos.x, pos.y, suspRoadIdx);
-  suspRoadIdx = nr.idx;
+  const nr = findNearRoad(pos.x, pos.y, suspRoadSeq);
+  suspRoadSeq = nr.seq;
 
-  // Look-ahead steer
-  const look = Math.round((15 + spd*0.5) / ROAD_STEP);
-  const N    = roadPts.length;
-  const tgt  = roadPts[(suspRoadIdx + look) % N];
-  const dx   = tgt.x - pos.x, dy = tgt.y - pos.y;
-  const targetAngle = Math.atan2(-dx, dy); // note: in game space, forward=(−sinθ,cosθ) → atan2(dx,−dy)
-  // Wait: cop body angle θ, forward = (-sinθ, cosθ). Target at (dx,dy) from cop.
-  // Angle to face target: we want bodyFwd to point at (dx,dy)
-  // bodyFwd = (-sinθ,cosθ). For bodyFwd = (dx/d,dy/d): sinθ=-dx/d, cosθ=dy/d → θ=atan2(-dx,dy)? Let me just use:
-  const wantAngle = Math.atan2(-dx, dy); // This gives the Planck angle to face (dx,dy)
-  // Actually: bodyFwd=(-sinθ,cosθ). To get fwd=(dx,dy)/d: -sinθ=dx/d → sinθ=-dx/d; cosθ=dy/d → θ=atan2(-dx,dy) (since sinθ=-dx/d and cosθ=dy/d, using atan2(sin,cos))
-  // Hmm wait: atan2(y,x) = atan2(sin, cos) = atan2(-dx/d, dy/d). So θ = atan2(-dx/d, dy/d) = atan2(-dx, dy).
-  const curAngle = suspBody.getAngle();
+  const lookM = 15 + spd * 0.5;
+  const tgt   = laneLookAhead(suspRoadSeq, 1, lookM);
+  if (!tgt) return;
+
+  // Avoid traffic ahead — shift laterally within lane
+  const aheadDist = closestCarAhead(suspBody, 1, trafficArr);
+  suspectLatShift += (((aheadDist < 25) ? -1.0 : 0) - suspectLatShift) * clamp(3 * dt, 0, 1);
+  const tp = tgt.p;
+  const sx = tgt.x - (tp ? tp.ty : 0) * suspectLatShift * (LANE_HALF - 1.5);
+  const sy = tgt.y + (tp ? tp.tx : 0) * suspectLatShift * (LANE_HALF - 1.5);
+
+  const dx = sx - pos.x, dy = sy - pos.y;
+  const wantAngle = Math.atan2(-dx, dy);
+  const curAngle  = suspBody.getAngle();
   const err = angleDiff(wantAngle, curAngle);
   let steer = clamp(err * 1.8, -1, 1);
 
-  // Evasion: push away from cop when close
+  // Evasion: push away from cop
   const cp = copBody.getPosition();
-  const distToCop = Math.hypot(cp.x-pos.x, cp.y-pos.y);
+  const distToCop = Math.hypot(cp.x - pos.x, cp.y - pos.y);
   if (distToCop < 30) {
-    const toCopX = cp.x-pos.x, toCopY = cp.y-pos.y;
-    const toCopAngle = Math.atan2(-toCopX, toCopY);
-    const relAngle   = angleDiff(toCopAngle, curAngle);
-    steer -= relAngle * ds.evasion * 1.2;
+    const toCopAngle = Math.atan2(-(cp.x-pos.x), cp.y-pos.y);
+    steer -= angleDiff(toCopAngle, curAngle) * ds.evasion * 1.2;
     steer  = clamp(steer, -1, 1);
   }
 
   const aidInp = { throttle:true, brake:false, handbrake:false, steer };
+
   // Brake on tight bends
-  const fIdx = (suspRoadIdx + Math.round(10/ROAD_STEP)) % N;
-  const fAngle = Math.atan2(-(roadPts[fIdx].x-pos.x), (roadPts[fIdx].y-pos.y));
-  const bend   = Math.abs(angleDiff(fAngle, curAngle));
-  if (bend > 0.45 && spd > 25*ds.aiSpd) aidInp.brake = true;
-  if (spd > 44*ds.aiSpd) aidInp.throttle = false;
+  const bSeq = suspRoadSeq + Math.round(10 / ROAD_STEP);
+  const bp   = getRoadPt(bSeq);
+  if (bp) {
+    const bAngle = Math.atan2(-(bp.x-pos.x), bp.y-pos.y);
+    if (Math.abs(angleDiff(bAngle, curAngle)) > 0.45 && spd > 25*ds.aiSpd) aidInp.brake = true;
+  }
+  if (spd > 44 * ds.aiSpd) aidInp.throttle = false;
 
   vehicleStep(suspBody, aidInp, ds.aiSpd, 50*ds.aiSpd);
 }
 
-// Traffic AI
+// ═══════════════════════════════════════════════════════
+//  TRAFFIC AI
+// ═══════════════════════════════════════════════════════
 function trafficStep(car, dt) {
   const pos = car.body.getPosition();
   const vel = car.body.getLinearVelocity();
   const spd = Math.hypot(vel.x, vel.y);
-  const nr  = findNearRoad(pos.x, pos.y, car.roadIdx || 0);
-  car.roadIdx = nr.idx;
-  const N   = roadPts.length;
-  const lk  = Math.round((10+spd*0.3)/ROAD_STEP);
-  const tp  = roadPts[(car.roadIdx+lk)%N];
-  // Offset perpendicular to road for lane
-  const sx  = tp.x + tp.ty * LANE_HALF * car.lane;
-  const sy  = tp.y - tp.tx * LANE_HALF * car.lane;
-  const dx  = sx - pos.x, dy = sy - pos.y;
+
+  const nr = findNearRoad(pos.x, pos.y, car.roadSeq);
+  car.roadSeq = nr.seq;
+
+  const lookM = 12 + spd * 0.35;
+  const tgt   = laneLookAhead(car.roadSeq, car.lane, lookM);
+  if (!tgt) return;
+
+  const dx  = tgt.x - pos.x, dy = tgt.y - pos.y;
   const wa  = Math.atan2(-dx, dy);
   const err = angleDiff(wa, car.body.getAngle());
-  const ainp= { throttle:spd<car.spd, brake:spd>car.spd+3, handbrake:false, steer:clamp(err*2,-1,1) };
-  vehicleStep(car.body, ainp, 0.62, car.spd*3.6);
+
+  const aheadDist = closestCarAhead(car.body, car.lane, trafficArr);
+  const tooClose  = aheadDist < 15;
+
+  const ainp = {
+    throttle: !tooClose && spd < car.spd,
+    brake:    tooClose || spd > car.spd + 3,
+    handbrake: false,
+    steer:    clamp(err * 2, -1, 1)
+  };
+  vehicleStep(car.body, ainp, 0.62, car.spd * 3.6);
+}
+
+// ═══════════════════════════════════════════════════════
+//  STREAMING — TRAFFIC
+// ═══════════════════════════════════════════════════════
+function trafficSpawnProb() {
+  // Cars per road-point per lane, scaled by difficulty
+  return DIFF_SETTINGS[diff].traffic /
+         ((ROAD_BUFFER_AHEAD + ROAD_BUFFER_BEHIND) / ROAD_STEP * 2);
+}
+
+function spawnTrafficCar(seq, lane) {
+  const p = getRoadPt(seq); if (!p) return;
+  const lx    = p.x - p.ty * LANE_HALF * lane;
+  const ly    = p.y + p.tx * LANE_HALF * lane;
+  const angle = roadFwdAngle(p, lane);
+  const tb    = makeCarBody(lx, ly, angle, 'traffic');
+  const tm    = buildCarMesh('traffic');
+  tm.children.forEach(c => {
+    if (c.material && c.material !== MAT.wheel && c.material !== MAT.glass) {
+      c.material = c.material.clone();
+      c.material.color.setHex(TRAFFIC_COLS[Math.floor(rng() * TRAFFIC_COLS.length)]);
+    }
+  });
+  scene.add(tm);
+  const tspd = 10 + rng() * 18;
+  const fwd  = bodyFwd(tb);
+  tb.setLinearVelocity(Vec2(fwd.x * tspd, fwd.y * tspd));
+  trafficArr.push({ mesh:tm, body:tb, spd:tspd, lane, roadSeq:seq });
+}
+
+function streamTraffic() {
+  const prob = trafficSpawnProb();
+  const fwdTarget = roadGenSeq - 10;
+
+  while (trafficSpawnSeq.fwd < fwdTarget) {
+    const seq = trafficSpawnSeq.fwd;
+    if (getRoadPt(seq) && rng() < prob) spawnTrafficCar(seq, 1);
+    trafficSpawnSeq.fwd++;
+  }
+  while (trafficSpawnSeq.onc < fwdTarget) {
+    const seq = trafficSpawnSeq.onc;
+    if (getRoadPt(seq) && rng() < prob) spawnTrafficCar(seq, -1);
+    trafficSpawnSeq.onc++;
+  }
+
+  // Cull traffic far behind player
+  const cullSeq = copRoadSeq - Math.ceil(ROAD_BUFFER_BEHIND / ROAD_STEP) - 80;
+  for (let i = trafficArr.length - 1; i >= 0; i--) {
+    const t = trafficArr[i];
+    if (t.roadSeq < cullSeq) {
+      scene.remove(t.mesh);
+      t.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+      try { physWorld.destroyBody(t.body); } catch(e) {}
+      trafficArr.splice(i, 1);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  STREAMING — SCENERY
+// ═══════════════════════════════════════════════════════
+function tryPlaceScenery(p) {
+  for (const side of [-1, 1]) {
+    const minOff = ROAD_HALF + 3;
+    const maxOff = ROAD_HALF + (p.zone === 'city' ? 38 : 58);
+    const off = minOff + rng() * (maxOff - minOff);
+    const sx  = p.x + p.ty * off * side + (rng()-0.5) * 6;
+    const sy  = p.y - p.tx * off * side + (rng()-0.5) * 6;
+
+    if (p.zone === 'country') {
+      if (rng() < 0.75) {
+        const h    = 3 + rng() * 4;
+        const mesh = buildTree(sx, sy, h);
+        scene.add(mesh);
+        const body = makeStaticCircle(sx, sy, h * 0.4);
+        scenery.push({ mesh, body });
+      } else {
+        const w=7+rng()*6, d=6+rng()*5, h=3+rng()*2;
+        const col=new THREE.Color().setHSL(0.08+rng()*0.05, 0.2+rng()*0.1, 0.28+rng()*0.12).getHex();
+        const mesh = buildBuilding(sx, sy, w, d, h, col);
+        scene.add(mesh);
+        const body = makeStaticBody(sx, sy, w/2, d/2);
+        scenery.push({ mesh, body });
+      }
+    } else {
+      const w=12+rng()*24, d=10+rng()*18, h=5+rng()*15;
+      const grey = 0.20 + rng() * 0.15;
+      const col  = new THREE.Color(grey, grey, grey+0.02).getHex();
+      const mesh = buildBuilding(sx, sy, w, d, h, col);
+      scene.add(mesh);
+      const body = makeStaticBody(sx, sy, w/2, d/2);
+      scenery.push({ mesh, body });
+    }
+  }
+}
+
+function streamScenery() {
+  const target = roadGenSeq - 5;
+  while (scenerySeedSeq < target) {
+    if (scenerySeedSeq % SCENERY_SKIP === 0) {
+      const p = getRoadPt(scenerySeedSeq);
+      if (p) tryPlaceScenery(p);
+    }
+    scenerySeedSeq++;
+  }
+
+  // Cull scenery far behind player
+  if (copBody) {
+    const cop = copBody.getPosition();
+    const cullDist = ROAD_BUFFER_BEHIND + 400;
+    for (let i = scenery.length - 1; i >= 0; i--) {
+      const s  = scenery[i];
+      const sp = s.mesh.position;
+      if (Math.hypot(sp.x - cop.x, sp.z - cop.y) > cullDist) {
+        scene.remove(s.mesh);
+        s.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+        try { physWorld.destroyBody(s.body); } catch(e) {}
+        scenery.splice(i, 1);
+      }
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -771,9 +970,8 @@ function checkPIT(dt) {
   const suspAngle = susp.getAngle();
   const adiff     = Math.abs(angleDiff(copAngle, suspAngle));
 
-  if (adiff < 0.12 || adiff > 1.05) return; // angle check: 7-60°
+  if (adiff < 0.12 || adiff > 1.05) return;
 
-  // Check cop front corners against suspect rear zone
   const copFwd = bodyFwd(cop);
   const copRt  = bodyRt(cop);
   const copPos = cop.getPosition();
@@ -789,11 +987,9 @@ function checkPIT(dt) {
 
   for (const corner of frontCorners) {
     const local = susp.getLocalPoint(corner);
-    // local.y < 0 = rear of suspect, |local.x| > outer quarter
-    if (local.y > -CAR_L*0.05) continue; // must be at rear 95%
-    if (Math.abs(local.x) < CAR_W*0.15) continue; // must be in outer portion
+    if (local.y > -CAR_L*0.05) continue;
+    if (Math.abs(local.x) < CAR_W*0.15) continue;
 
-    // Valid PIT! Apply spin + lateral push
     const dir    = Math.sign(local.x);
     const pushA  = copAngle + Math.PI/2 * dir;
     const spinMag = relSpd * 0.30;
@@ -802,10 +998,7 @@ function checkPIT(dt) {
     susp.setAngularVelocity(susp.getAngularVelocity() + dir * spinMag);
     susp.applyLinearImpulse(Vec2(Math.sin(pushA)*pushMag*susp.getMass(), -Math.cos(pushA)*pushMag*susp.getMass()),
       susp.getWorldCenter(), true);
-    // Reduce suspect's angular damping so spin persists
-    // (can't change fixture properties at runtime easily, just let damping handle it)
 
-    // Rating
     const q = (relSpd/18)*0.45 + (1-Math.abs(adiff-0.45)/0.5)*0.55;
     if (q>0.78) pitRating='TEXTBOOK';
     else if (q>0.55) pitRating='GOOD';
@@ -874,25 +1067,21 @@ const wCtx = document.getElementById('wheel-cvs').getContext('2d');
 const mCtx = document.getElementById('minimap-cvs').getContext('2d');
 
 function updateHUD(dt) {
-  // Timer
   const secs = Math.ceil(timer);
   const tel  = document.getElementById('hud-timer');
   tel.textContent = secs + 's';
   tel.className   = timer<5?'crit':timer<15?'warn':'';
 
-  // Speed
   const vel = copBody.getLinearVelocity();
   const kph = Math.round(Math.hypot(vel.x,vel.y)*3.6);
   document.getElementById('hud-speed').textContent = kph + ' km/h';
 
-  // AI state
   const sv = suspBody.getLinearVelocity();
   const suspSpd = Math.round(Math.hypot(sv.x,sv.y)*3.6);
-  const nr  = findNearRoad(suspBody.getPosition().x, suspBody.getPosition().y, suspRoadIdx);
-  const onRoad = nr.dist < ROAD_HALF+2;
+  const nr  = findNearRoad(suspBody.getPosition().x, suspBody.getPosition().y, suspRoadSeq);
+  const onRoad = nr.dist < ROAD_HALF + 2;
   document.getElementById('hud-state').textContent = 'SUSPECT ' + suspSpd + ' · ' + (onRoad?'ON ROAD':'OFF ROAD');
 
-  // Toast fade
   toastTimer -= dt;
   if (toastTimer <= 0) document.getElementById('toast').style.opacity='0';
 
@@ -910,26 +1099,36 @@ function updateHUD(dt) {
   wCtx.fillStyle='#5a4838'; wCtx.beginPath(); wCtx.arc(0,0,5,0,Math.PI*2); wCtx.fill();
   wCtx.restore();
 
-  // Mini-map
-  mCtx.fillStyle='#080c10'; mCtx.fillRect(0,0,160,100);
-  const rw=roadBounds.maxX-roadBounds.minX||1, rh=roadBounds.maxY-roadBounds.minY||1;
-  const ms=Math.min(154/rw,92/rh)*0.92;
-  const ox=80-(roadBounds.minX+rw/2)*ms, oy=50-(roadBounds.minY+rh/2)*ms;
-  // Road
+  // Minimap — player-relative 400m window
+  const mmW=160, mmH=100;
+  mCtx.fillStyle='#080c10'; mCtx.fillRect(0,0,mmW,mmH);
+
+  const ms  = 0.12; // pixels per metre
+  const cop = copBody.getPosition();
+  const ox  = mmW/2 - cop.x*ms;
+  const oy  = mmH/2 + cop.y*ms;  // +cop.y so that world +Y (north) maps to canvas up
+
+  const WIN  = Math.ceil(400/ROAD_STEP);
+  const si   = Math.max(0, copRoadSeq - roadBaseSeq - WIN);
+  const ei   = Math.min(roadPts.length-1, copRoadSeq - roadBaseSeq + WIN);
+
   mCtx.beginPath();
-  const SK=6;
-  for (let i=0;i<roadPts.length;i+=SK) {
-    const p=roadPts[i], sx=p.x*ms+ox, sy=p.y*ms+oy;
-    i===0?mCtx.moveTo(sx,sy):mCtx.lineTo(sx,sy);
+  for (let i=si; i<=ei; i+=4) {
+    const p=roadPts[i];
+    const sx=p.x*ms+ox, sy=-p.y*ms+oy;  // negate y to flip axis
+    i===si ? mCtx.moveTo(sx,sy) : mCtx.lineTo(sx,sy);
   }
-  mCtx.strokeStyle='#3a3530'; mCtx.lineWidth=4; mCtx.stroke();
-  // Dots
+  mCtx.strokeStyle='#3a3530';
+  mCtx.lineWidth = Math.max(4, Math.round(ROAD_HALF*2*ms));
+  mCtx.stroke();
+
   function mmDot(body, col) {
     const p=body.getPosition();
-    mCtx.beginPath(); mCtx.arc(p.x*ms+ox,p.y*ms+oy,3,0,Math.PI*2);
+    mCtx.beginPath(); mCtx.arc(p.x*ms+ox,-p.y*ms+oy,3,0,Math.PI*2);
     mCtx.fillStyle=col; mCtx.fill();
   }
-  mmDot(copBody,'#4488ff'); mmDot(suspBody,'#ff4422');
+  mmDot(copBody,'#4488ff');
+  mmDot(suspBody,'#ff4422');
   for (const t of trafficArr) mmDot(t.body,'#5a4838');
 }
 
@@ -939,11 +1138,9 @@ function updateHUD(dt) {
 function updateCamera(dt) {
   const pos = copBody.getPosition();
   const ang = copBody.getAngle();
-  const fx  = -Math.sin(ang), fy = Math.cos(ang); // forward in game space
+  const fx  = -Math.sin(ang), fy = Math.cos(ang);
 
-  // Position: 30m behind, 38m high
   const tPos = new THREE.Vector3(pos.x - fx*30, 38, pos.y - fy*30);
-  // Look at: 15m ahead at height 3
   const tLook= new THREE.Vector3(pos.x + fx*15, 3, pos.y + fy*15);
 
   camPos.lerp(tPos,  7*dt);
@@ -968,9 +1165,6 @@ function updateLightBar(dt) {
   lb[1].material.emissiveIntensity = lbFlash ? 0.05: 1.2;
 }
 
-// ═══════════════════════════════════════════════════════
-//  SYNC MESHES FROM PHYSICS
-// ═══════════════════════════════════════════════════════
 function syncMesh(mesh, body) {
   const pos = body.getPosition();
   mesh.position.set(pos.x, 0, pos.y);
@@ -981,46 +1175,40 @@ function syncMesh(mesh, body) {
 //  MAIN GAME LOOP
 // ═══════════════════════════════════════════════════════
 let lastT=0;
-function loop(ts) {
-  requestAnimationFrame(loop);
-  const dt = Math.min((ts-lastT)/1000, 0.05); lastT=ts;
-
-  if (state==='playing') {
-    gameUpdate(dt);
-  } else if (state==='countdown') {
-    countdownUpdate(dt, ts);
-  }
-
-  renderer.render(scene, camera);
-}
 
 function gameUpdate(dt) {
-  if (!locked) return; // paused
+  if (!locked) return;
 
-  // Auto-recenter steering wheel toward 0
+  // Road management — extend and cull buffer
+  const prevLen = roadPts.length;
+  manageRoadBuffer();
+  if (roadPts.length !== prevLen) updateRoadMesh();
+  streamTraffic();
+  streamScenery();
+
+  // Update cop road sequence
+  const copNr = findNearRoad(copBody.getPosition().x, copBody.getPosition().y, copRoadSeq);
+  copRoadSeq = copNr.seq;
+
+  // Auto-recenter steering
   if (steerCfg.recenter > 0) {
     inp.steer *= Math.max(0, 1 - steerCfg.recenter * dt);
     if (Math.abs(inp.steer) < 0.001) inp.steer = 0;
   }
 
-  // Vehicle physics
   vehicleStep(copBody, inp, 1.0, 190);
   suspectAI(dt);
   for (const t of trafficArr) trafficStep(t, dt);
 
-  // Physics step
   physWorld.step(Math.min(dt, 1/30), 8, 3);
 
-  // Sync Three.js meshes
   syncMesh(copMesh,  copBody);
   syncMesh(suspMesh, suspBody);
   for (const t of trafficArr) syncMesh(t.mesh, t.body);
 
-  // Skid marks for cop and suspect
   addSkids(copBody);
   addSkids(suspBody);
 
-  // Lights, camera
   updateLightBar(dt);
   updateCamera(dt);
   updateAudio(dt);
@@ -1028,19 +1216,15 @@ function gameUpdate(dt) {
   maybeChatUpdate(dt);
   checkPIT(dt);
 
-  // Win/loss
   timer -= dt;
   if (timer <= 0) { endGame('time_up'); return; }
+  if (crashFlag)  { endGame('cop_crash'); return; }
 
-  if (crashFlag) { endGame('cop_crash'); return; }
-
-  // Check if suspect is stopped off-road (after PIT)
-  const nr    = findNearRoad(suspBody.getPosition().x, suspBody.getPosition().y, suspRoadIdx);
+  const nr    = findNearRoad(suspBody.getPosition().x, suspBody.getPosition().y, suspRoadSeq);
   const sv    = suspBody.getLinearVelocity();
-  const sspd  = Math.hypot(sv.x,sv.y);
-  const offRoad = nr.dist > ROAD_HALF+1.5;
+  const sspd  = Math.hypot(sv.x, sv.y);
+  const offRoad = nr.dist > ROAD_HALF + 1.5;
   if (offRoad && sspd < 2.5 && pitCooldown < 0) {
-    // Only cop win if PIT was attempted (pitCooldown was set from 1.5)
     if (pitCooldown > -5) { endGame('cop_wins'); return; }
   }
 }
@@ -1054,7 +1238,6 @@ function countdownUpdate(dt) {
     const cdEl=document.getElementById('cd-overlay');
     if (cdEl) cdEl.style.display='none';
   }
-  // Still update camera to follow cop during countdown
   if (copBody) updateCamera(dt);
 }
 
@@ -1062,92 +1245,44 @@ function countdownUpdate(dt) {
 //  WORLD CONSTRUCTION
 // ═══════════════════════════════════════════════════════
 function buildWorld() {
-  // Clear old scene objects (not lights)
+  // Clear Three.js scene (lights stay)
   scene.children.filter(c=>c.type!=='DirectionalLight'&&c.type!=='AmbientLight')
     .forEach(c=>scene.remove(c));
-  skidCount=0;
+  roadMeshDynamic = null;
+  roadMarkMesh    = null;
+  skidMesh        = null;
+  scenery    = [];
+  trafficArr = [];
+  skidCount  = 0;
 
   buildGroundPlane();
-  buildRoadMesh();
+  initRoadMesh();
+  updateRoadMesh();
   buildSkidSystem();
 
-  // ── Scenery
-  scenery=[];
-  const N=roadPts.length, SKIP=10;
-  for (let i=0; i<N; i+=SKIP) {
-    const p=roadPts[i];
-    for (const side of [-1,1]) {
-      const minOff = ROAD_HALF+3, maxOff = ROAD_HALF+(p.zone==='city'?36:55);
-      const off = minOff + rng()*(maxOff-minOff);
-      const sx  = p.x + p.ty*off*side + (rng()-0.5)*5;
-      const sy  = p.y - p.tx*off*side + (rng()-0.5)*5;
-      // Don't place on road
-      const nr2=findNearRoad(sx,sy,i);
-      if (nr2.dist<ROAD_HALF+1) continue;
+  // Populate initial scenery
+  scenerySeedSeq = 0;
+  streamScenery();
 
-      if (p.zone==='country') {
-        if (rng()<0.75) {
-          const h=3+rng()*4;
-          const mesh=buildTree(sx,sy,h);
-          scene.add(mesh);
-          const phBody=makeStaticCircle(sx,sy,h*0.4);
-          scenery.push({mesh,body:phBody});
-        } else {
-          const w=7+rng()*6, d=6+rng()*5, h=3+rng()*2;
-          const col=new THREE.Color().setHSL(0.08+rng()*0.05, 0.2+rng()*0.1, 0.28+rng()*0.12).getHex();
-          const mesh=buildBuilding(sx,sy,w,d,h,col);
-          scene.add(mesh);
-          const phBody=makeStaticBody(sx,sy,w/2,d/2);
-          scenery.push({mesh,body:phBody});
-        }
-      } else {
-        const w=12+rng()*24, d=10+rng()*18, h=5+rng()*15;
-        const grey=0.20+rng()*0.15;
-        const col=new THREE.Color(grey,grey,grey+0.02).getHex();
-        const mesh=buildBuilding(sx,sy,w,d,h,col);
-        scene.add(mesh);
-        const phBody=makeStaticBody(sx,sy,w/2,d/2);
-        scenery.push({mesh,body:phBody});
-      }
-    }
-  }
-
-  // ── Cars
+  // Player cars
   copMesh  = buildCarMesh('cop');
   suspMesh = buildCarMesh('suspect');
   scene.add(copMesh, suspMesh);
 
-  const p0=roadPts[0], p30=roadPts[Math.min(35,roadPts.length-1)];
-  copBody  = makeCarBody(p0.x,  p0.y,  Math.atan2(-p0.tx,  p0.ty),  'cop');
-  suspBody = makeCarBody(p30.x, p30.y, Math.atan2(-p30.tx, p30.ty), 'suspect');
-  suspRoadIdx=35;
+  const p0  = getRoadPt(roadBaseSeq) || roadPts[0];
+  const p35 = getRoadPt(roadBaseSeq + 35) || roadPts[Math.min(35, roadPts.length-1)];
 
-  // Give suspect initial velocity (already running)
-  const sfwd=bodyFwd(suspBody);
+  copBody  = makeCarBody(p0.x,  p0.y,  roadFwdAngle(p0,  1), 'cop');
+  suspBody = makeCarBody(p35.x, p35.y, roadFwdAngle(p35, 1), 'suspect');
+  copRoadSeq  = roadBaseSeq;
+  suspRoadSeq = roadBaseSeq + 35;
+
+  const sfwd = bodyFwd(suspBody);
   suspBody.setLinearVelocity(Vec2(sfwd.x*20, sfwd.y*20));
 
-  // ── Traffic
-  trafficArr=[];
-  const tCount=DIFF_SETTINGS[diff].traffic;
-  for (let i=0; i<tCount; i++) {
-    const ri=Math.floor((i/tCount)*N + rng()*80)%N;
-    const tp=roadPts[ri];
-    const lane = rng()<0.5 ? 1 : -1;
-    // Offset perpendicular to road for lane
-    const lx=tp.x + tp.ty*LANE_HALF*lane;
-    const ly=tp.y - tp.tx*LANE_HALF*lane;
-    const tangle=Math.atan2(-tp.tx, tp.ty);
-    const tb=makeCarBody(lx,ly,tangle,'traffic');
-    const tm=buildCarMesh('traffic');
-    tm.children.forEach(c=>{ if (c.material && c.material!==MAT.wheel && c.material!==MAT.glass) {
-      c.material=c.material.clone(); c.material.color.setHex(TRAFFIC_COLS[i%TRAFFIC_COLS.length]);
-    }});
-    scene.add(tm);
-    const tspd=10+rng()*18;
-    const tfwd=bodyFwd(tb);
-    tb.setLinearVelocity(Vec2(tfwd.x*tspd, tfwd.y*tspd));
-    trafficArr.push({mesh:tm, body:tb, spd:tspd, lane, roadIdx:ri});
-  }
+  // Initial traffic — start spawning 60 seqs ahead (past cop/suspect)
+  trafficSpawnSeq = { fwd: roadBaseSeq + 60, onc: roadBaseSeq + 60 };
+  streamTraffic();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1161,17 +1296,17 @@ function startGame() {
   rng=mkRNG(seed);
 
   buildPhysWorld();
-  generateRoad();
+  initRoad();
   buildWorld();
 
   timer=DIFF_SETTINGS[diff].time;
   cdCount=3; cdTimer=1;
   pitDone=false; pitRating=''; endReason=''; pitCooldown=0; crashFlag=false;
   inp.throttle=inp.brake=inp.handbrake=false; inp.steer=0;
+  suspectLatShift=0;
   locked=false; chatCooldown=8;
   skidCount=0;
 
-  // Snap camera
   if (copBody) {
     const p=copBody.getPosition();
     camPos.set(p.x-20, 38, p.y-20);
@@ -1190,8 +1325,8 @@ function endGame(reason) {
   document.exitPointerLock&&document.exitPointerLock();
   locked=false;
 
-  if (engGain) engGain.gain.value=0;
-  if (sirenG)  sirenG.gain.value=0;
+  if (engGain)  engGain.gain.value=0;
+  if (sirenG)   sirenG.gain.value=0;
   if (screechG) screechG.gain.value=0;
 
   const elapsed=DIFF_SETTINGS[diff].time - timer;
@@ -1216,7 +1351,6 @@ function endGame(reason) {
   document.getElementById('result-meta').textContent=meta+'\nSeed: '+seed;
   document.getElementById('ov-end').classList.remove('hidden');
 
-  // Auto-return to main menu after 3 seconds
   let secs = 3;
   const cdEl2 = document.getElementById('return-countdown');
   cdEl2.textContent = 'Returning to menu in ' + secs + 's…';
@@ -1271,14 +1405,13 @@ document.addEventListener('pointerlockchange', () => {
 // ═══════════════════════════════════════════════════════
 document.addEventListener('mousemove', e => {
   if (!locked || state!=='playing') return;
-  // Non-linear: steering rate scales up the further the wheel is from centre
-  const MAX_STEER_DELTA = 0.045; // hard cap — prevents light-speed wheel jerks
+  const MAX_STEER_DELTA = 0.045;
   const nlFactor = 1 + steerCfg.nonlin * inp.steer * inp.steer;
   const delta = clamp(e.movementX * steerCfg.sensitivity * nlFactor, -MAX_STEER_DELTA, MAX_STEER_DELTA);
   inp.steer = clamp(inp.steer + delta, -1, 1);
 });
 document.addEventListener('mousedown', e => {
-  if (e.button===0) inp.throttle=true; // tracked always — LMB held before GO is honoured
+  if (e.button===0) inp.throttle=true;
   if (state!=='playing' || !locked) return;
   if (e.button===2) inp.brake=true;
   if (e.button===1) { e.preventDefault(); inp.handbrake=true; }
@@ -1297,11 +1430,10 @@ document.addEventListener('keydown', e => {
 });
 
 // ═══════════════════════════════════════════════════════
-//  COUNTDOWN OVERLAY (canvas-drawn)
+//  COUNTDOWN OVERLAY
 // ═══════════════════════════════════════════════════════
 function drawCountdown(ts) {
   if (state!=='countdown') return;
-  // Use a fixed overlay div temporarily
   let cdEl = document.getElementById('cd-overlay');
   if (!cdEl) {
     cdEl=document.createElement('div');
@@ -1313,12 +1445,9 @@ function drawCountdown(ts) {
   const label = cdCount>0 ? cdCount : 'GO!';
   const col   = cdCount>0 ? '#e8a020' : '#44dd88';
   cdEl.innerHTML=`<span style="font-size:110px;color:${col};letter-spacing:.12em">${label}</span>`;
-
   if (state!=='countdown') cdEl.style.display='none';
 }
 
-// Patch loop to draw countdown
-const _loop = loop;
 function loopEx(ts) {
   requestAnimationFrame(loopEx);
   const dt = Math.min((ts-lastT)/1000, 0.05); lastT=ts;
@@ -1354,9 +1483,7 @@ document.getElementById('sl-recenter').addEventListener('input', function() {
   steerCfg.recenter = parseFloat(this.value);
   document.getElementById('lbl-recenter').textContent = steerCfg.recenter === 0 ? 'off' : (+this.value).toFixed(2).replace(/\.?0+$/,'');
 });
-// ── Pause overlay
 document.getElementById('ov-pause').addEventListener('click', e => {
-  // Background / text clicks resume — ignore button and range input clicks
   if (!e.target.closest('button, input[type=range]')) renderer.domElement.requestPointerLock();
 });
 document.getElementById('btn-pause-resume').addEventListener('click', () => {
@@ -1377,7 +1504,6 @@ document.getElementById('btn-pause-exit').addEventListener('click', () => {
   document.getElementById('ov-start').classList.remove('hidden');
 });
 
-// Pause steering sliders (mirror steerCfg in real-time)
 document.getElementById('p-sl-sens').addEventListener('input', function() {
   steerCfg.sensitivity = parseFloat(this.value);
   document.getElementById('p-lbl-sens').textContent = (+this.value).toFixed(4).replace(/\.?0+$/, '');
@@ -1401,29 +1527,24 @@ document.getElementById('p-sl-recenter').addEventListener('input', function() {
 document.getElementById('btn-copy-seed').addEventListener('click',
   ()=>navigator.clipboard.writeText(String(seed)).catch(()=>{}));
 
-// Pre-fill seed from URL
 (()=>{ const p=new URLSearchParams(location.search); if (p.has('seed')) document.getElementById('seed-input').value=p.get('seed'); })();
 
 // ═══════════════════════════════════════════════════════
 //  INIT — generate preview scene for start screen
 // ═══════════════════════════════════════════════════════
 function initPreview() {
-  rng=mkRNG(Math.random()*999999999|0);
+  rng = mkRNG(Math.random()*999999999|0);
   buildPhysWorld();
-  generateRoad();
+  initRoad();
   buildWorld();
-  // Orbit camera slowly
-  let previewAngle=0;
-  camPos.set(60,40,60); camLook.set(0,0,0);
-  // Auto-animate camera around circuit centre
-  const cx=(roadBounds.minX+roadBounds.maxX)/2;
-  const cy=(roadBounds.minY+roadBounds.maxY)/2;
-  camera.position.set(cx+80,55,cy+50);
-  camera.lookAt(cx,0,cy);
+
+  // Camera looks down along the road start
+  const p = roadPts[Math.min(60, roadPts.length-1)];
+  camera.position.set(p.x + 80, 55, p.y + 60);
+  camera.lookAt(p.x, 0, p.y);
 }
 initPreview();
 
-// ── Start the render loop
 requestAnimationFrame(loopEx);
 
 </script>
