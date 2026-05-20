@@ -4,9 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PIT — Police Intercept</title>
-<script src="https://cdn.jsdelivr.net/npm/planck@1.0.0/dist/planck.min.js"></script>
 <script type="importmap">
-{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/","cannon-es":"https://esm.sh/cannon-es@0.20.0"}}
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -109,6 +108,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
       <span class="steer-val" id="lbl-recenter">0.6</span>
     </div>
   </div>
+  <div class="steer-section">
+    <div class="steer-section-lbl">Traffic</div>
+    <div class="steer-row">
+      <label>Density</label>
+      <input type="range" id="sl-density" min="0" max="3" step="0.1" value="1">
+      <span class="steer-val" id="lbl-density">1.0</span>
+    </div>
+  </div>
   <button class="start-btn" id="btn-start">▶ BEGIN PURSUIT</button>
   <div class="ov-tip">
     LMB — Throttle &nbsp;·&nbsp; RMB — Brake &nbsp;·&nbsp; MMB — Handbrake<br>
@@ -148,6 +155,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
       <span class="steer-val" id="p-lbl-recenter">0.6</span>
     </div>
   </div>
+  <div class="steer-section">
+    <div class="steer-section-lbl">Traffic</div>
+    <div class="steer-row">
+      <label>Density</label>
+      <input type="range" id="p-sl-density" min="0" max="3" step="0.1" value="1">
+      <span class="steer-val" id="p-lbl-density">1.0</span>
+    </div>
+  </div>
   <button class="start-btn" id="btn-pause-resume" style="margin-top:8px">▶ Resume</button>
   <div style="display:flex;gap:10px;margin-top:2px">
     <button class="ov-btn" id="btn-pause-restart">↺ Restart</button>
@@ -159,9 +174,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 
 <script type="module">
 'use strict';
-import * as THREE from 'three';
-
-const { World, Vec2, Box, Circle } = planck;
+import * as THREE   from 'three';
+import * as CANNON  from 'cannon-es';
 
 // ═══════════════════════════════════════════════════════
 //  THREE.JS SCENE SETUP
@@ -213,9 +227,12 @@ const SCENERY_SKIP       = 10;    // road points between scenery placements
 const ROAD_MESH_CAP      = 1100;  // max pts in dynamic road mesh buffer
 
 const DIFF_SETTINGS = {
-  easy:   { time:90, aiSpd:0.80, traffic:8,  evasion:0.25 },
-  normal: { time:60, aiSpd:1.00, traffic:14, evasion:0.60 },
-  hard:   { time:45, aiSpd:1.15, traffic:20, evasion:0.90 },
+  //          time  speed  traffic  evasion  angDamp  spdMulMax
+  // angDamp: low = spins easily (easy to PIT), high = resists spin (hard to PIT)
+  // spdMulMax: per-seed speed range; higher = more unpredictable on hard
+  easy:   { time:90, aiSpd:0.65, traffic:8,  evasion:0.25, angDamp:0.12, spdMulMax:0.10 },
+  normal: { time:60, aiSpd:1.00, traffic:14, evasion:0.60, angDamp:0.30, spdMulMax:0.45 },
+  hard:   { time:45, aiSpd:1.35, traffic:20, evasion:0.90, angDamp:0.55, spdMulMax:0.70 },
 };
 const CHATTER_LINES = [
   'All units — suspect is running','PIT manoeuvre authorised',
@@ -244,8 +261,23 @@ function mkRNG(seed) {
 const clamp = (v,a,b) => v<a?a:v>b?b:v;
 const lerp  = (a,b,t) => a+(b-a)*t;
 function angleDiff(a,b){ let d=((a-b)%(Math.PI*2)+Math.PI*3)%(Math.PI*2)-Math.PI; return d; }
-function bodyFwd(body){ const a=body.getAngle(); return {x:-Math.sin(a),y:Math.cos(a)}; }
-function bodyRt(body) { const a=body.getAngle(); return {x: Math.cos(a),y:Math.sin(a)}; }
+
+// Extract Y-axis rotation angle from a cannon-es/Three.js quaternion
+function getYAngle(q) {
+  return Math.atan2(2*(q.w*q.y + q.x*q.z), 1 - 2*(q.y*q.y + q.z*q.z));
+}
+// Forward and right vectors in XZ plane (road coord space) from a cannon-es body.
+// Returns same {x,y} convention as old Planck helpers so AI code is unchanged.
+function bodyFwd(body) {
+  const a = -getYAngle(body.quaternion);
+  return { x: -Math.sin(a), y: Math.cos(a) };
+}
+function bodyRt(body) {
+  const a = -getYAngle(body.quaternion);
+  return { x: Math.cos(a), y: Math.sin(a) };
+}
+// Convert Planck-convention angle θ to cannon-es Y-Euler (negated)
+function roadFwdAngle_3D(theta) { return -theta; }
 
 // ═══════════════════════════════════════════════════════
 //  GAME STATE
@@ -280,17 +312,26 @@ let suspectLatShift = 0;
 // Dynamic road mesh
 let roadPosBuf = null, roadMeshDynamic = null, roadMarkMesh = null;
 
-// World objects
-let physWorld  = null;
-let copBody    = null, suspBody = null;
-let copMesh    = null, suspMesh = null;
-let copLights  = null;
+// World objects — cannon-es
+let cannonWorld = null, groundMat = null, carMat = null;
+let copBody = null, suspBody = null;
+let copMesh = null, suspMesh = null;
+let copLights = null;
 
 const camPos  = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 
 const inp = { throttle:false, brake:false, handbrake:false, steer:0 };
-const steerCfg = { sensitivity: 0.0007, nonlin: 0.2, recenter: 0.6 };
+const steerCfg   = { sensitivity: 0.0007, nonlin: 0.2, recenter: 0.6 };
+const trafficCfg = { density: 1.0 };
+
+let suspStopTimer      = 0;    // seconds suspect has been nearly stopped after a PIT
+let suspSpdMul         = 1.0;  // per-seed speed multiplier for the suspect
+let suspEngineDisabled = false; // set true when PIT condition is met
+let pitTrackActive     = false; // tracking suspect rotation after a PIT contact
+let pitAccumRot        = 0;    // accumulated suspect Y rotation (radians) since contact
+let pitLastAngle       = 0;    // last frame's suspect Y angle for delta computation
+let suspOvertakeTimer  = 0;        // seconds remaining in active overtake pass
 
 const SKID_MAX = 2000;
 const skidPositions = new Float32Array(SKID_MAX * 3);
@@ -358,8 +399,8 @@ function playJingle(win) {
 
 function updateAudio(dt) {
   if (!aCtx || !copBody) return;
-  const vel = copBody.getLinearVelocity();
-  const spd = Math.hypot(vel.x, vel.y);
+  const vel = copBody.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
   engOsc.frequency.value = 75 + spd * 3.5;
   engGain.gain.value += ((inp.throttle ? 0.10 + spd*0.0005 : 0.03) - engGain.gain.value) * 0.12;
 
@@ -367,7 +408,7 @@ function updateAudio(dt) {
   if (sirenT > 0.42) { sirenT=0; sirenPhase^=1; sirenG.gain.value=spd>1 ? (sirenPhase?0.13:0.07) : 0; }
 
   const rt  = bodyRt(copBody);
-  const lat = Math.abs(vel.x*rt.x + vel.y*rt.y);
+  const lat = Math.abs(vel.x*rt.x + vel.z*rt.y);
   screechG.gain.value += (clamp((lat-2)/9,0,1)*(inp.handbrake?1.4:1)*0.16 - screechG.gain.value)*0.14;
 }
 
@@ -653,96 +694,223 @@ function buildSkidSystem() {
 let crashFlag = false;
 
 function buildPhysWorld() {
-  physWorld = World({ gravity: Vec2(0, 0) });
+  cannonWorld = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+  cannonWorld.broadphase = new CANNON.SAPBroadphase(cannonWorld);
+  cannonWorld.allowSleep = true;
   crashFlag = false;
 
-  physWorld.on('begin-contact', contact => {
-    if (crashFlag || state!=='playing') return;
-    const ba = contact.getFixtureA().getBody();
-    const bb = contact.getFixtureB().getBody();
-    const ua = ba.getUserData(), ub = bb.getUserData();
-    const isCop = ua==='cop' || ub==='cop';
-    if (!isCop) return;
-    const other = ua==='cop' ? ub : ua;
-    if (other==='static') {
-      const vel = copBody.getLinearVelocity();
-      if (Math.hypot(vel.x,vel.y) > 4) crashFlag = true;
-    } else if (other==='traffic') {
-      const vel = copBody.getLinearVelocity();
-      if (Math.hypot(vel.x,vel.y) > 3) crashFlag = true;
-    }
-  });
+  groundMat = new CANNON.Material('ground');
+  carMat    = new CANNON.Material('car');
+  // Very low ground friction — lateral grip comes from our custom thruster model
+  cannonWorld.addContactMaterial(new CANNON.ContactMaterial(groundMat, carMat, {
+    friction: 0.005, restitution: 0.08,
+  }));
+  cannonWorld.addContactMaterial(new CANNON.ContactMaterial(carMat, carMat, {
+    friction: 0.15, restitution: 0.25,
+  }));
+
+  const gBody = new CANNON.Body({ mass: 0, material: groundMat });
+  gBody.addShape(new CANNON.Plane());
+  gBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+  cannonWorld.addBody(gBody);
 }
 
-function makeCarBody(x, y, angle, tag) {
-  const body = physWorld.createBody({
-    type:'dynamic', position:Vec2(x,y), angle, linearDamping:0.08, angularDamping:2.5
-  });
-  body.createFixture({ shape:Box(CAR_W/2, CAR_L/2), density:1, friction:0.3, restitution:0.15 });
-  body.setUserData(tag);
+// All cars are simple low-friction boxes — propulsion via explicit thruster forces
+function makeBoxCar(x, y_road, angle, tag) {
+  const mass = tag === 'traffic' ? 120 : 150;
+  const body = new CANNON.Body({ mass, material: carMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(CAR_W/2, CAR_H/2, CAR_L/2)));
+  body.position.set(x, CAR_H / 2, y_road);        // center sits one half-height above ground
+  body.quaternion.setFromEuler(0, roadFwdAngle_3D(angle), 0);
+  body.linearDamping  = 0.06;
+  body.angularDamping = tag === 'suspect' ? 0.35 : 0.7;
+  body.userData = tag;
+  cannonWorld.addBody(body);
   return body;
 }
 
 function makeStaticBody(x, y, hw, hh) {
-  const body = physWorld.createBody({ type:'static', position:Vec2(x,y) });
-  body.createFixture({ shape:Box(hw,hh), friction:0.4, restitution:0.2 });
-  body.setUserData('static');
+  const body = new CANNON.Body({ mass: 0, material: groundMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(hw, 5, hh)));
+  body.position.set(x, 0, y);
+  body.userData = 'static';
+  cannonWorld.addBody(body);
   return body;
 }
 
 function makeStaticCircle(x, y, r) {
-  const body = physWorld.createBody({ type:'static', position:Vec2(x,y) });
-  body.createFixture({ shape:Circle(r), friction:0.4, restitution:0.3 });
-  body.setUserData('static');
+  const body = new CANNON.Body({ mass: 0, material: groundMat });
+  body.addShape(new CANNON.Cylinder(r, r, 10, 8));
+  body.position.set(x, 0, y);
+  body.userData = 'static';
+  cannonWorld.addBody(body);
   return body;
 }
 
 // ═══════════════════════════════════════════════════════
-//  VEHICLE PHYSICS
+//  THRUSTER PHYSICS
 // ═══════════════════════════════════════════════════════
-function vehicleStep(body, input, engineMul, maxSpeedKph) {
-  const fwd = bodyFwd(body);
-  const rt  = bodyRt(body);
-  const vel = body.getLinearVelocity();
-  const fwdSpd = vel.x*fwd.x + vel.y*fwd.y;
-  const latSpd = vel.x*rt.x  + vel.y*rt.y;
 
-  const grip = input.handbrake ? 0.22 : 0.88;
-  body.setLinearVelocity(Vec2(vel.x - rt.x*latSpd*grip, vel.y - rt.y*latSpd*grip));
+// Propel a box car using direct force + bicycle-model yaw rate.
+// Lateral grip, longitudinal thrust, and steering are all independent.
+function applyThrusters(body, input, engineForce, maxSpeedKph, hintRoadSeq) {
+  body.wakeUp();
 
-  const m   = body.getMass();
-  let force = 0;
-  if (input.throttle) force  = m * 8.0 * engineMul;
-  if (input.brake)    force -= m * 13.5;
-  force -= fwdSpd * m * 0.15;
-  body.applyForceToCenter(Vec2(fwd.x*force, fwd.y*force), true);
+  const theta = -getYAngle(body.quaternion);
+  const fwdX = -Math.sin(theta), fwdZ = Math.cos(theta);
+  const rtX  =  Math.cos(theta), rtZ  = Math.sin(theta);
 
+  const nr = findNearRoad(body.position.x, body.position.z, hintRoadSeq || 0);
+  const onRoad = nr.dist < ROAD_HALF + 1.5;
+  const pitLoose = (body === suspBody && pitTrackActive);
+  const GRIP = input.handbrake ? 0.8
+             : pitLoose        ? 1.5
+             : onRoad          ? 16
+             : 4;
+
+  // Damp lateral (sideways) velocity each frame
+  const vel = body.velocity;
+  const latV = vel.x * rtX + vel.z * rtZ;
+  body.force.x -= rtX * latV * body.mass * GRIP;
+  body.force.z -= rtZ * latV * body.mass * GRIP;
+
+  const fwdSpd = vel.x * fwdX + vel.z * fwdZ;
+  const curSpd = Math.hypot(vel.x, vel.z);
   const maxSpd = maxSpeedKph / 3.6;
-  const curSpd = Math.hypot(vel.x, vel.y);
-  if (curSpd > maxSpd) {
-    const v = body.getLinearVelocity();
-    body.setLinearVelocity(Vec2(v.x*maxSpd/curSpd, v.y*maxSpd/curSpd));
+
+  // Longitudinal thrust along body's current forward axis.
+  // Factor of 2 matches the old 4-thruster model (2 front + 2 rear each at engineForce/2).
+  if (input.throttle && curSpd < maxSpd) {
+    body.force.x += fwdX * engineForce * 2;
+    body.force.z += fwdZ * engineForce * 2;
+  } else if (input.brake) {
+    // RMB = reverse/brake: stronger thrust, higher speed cap for snappier feel
+    const MAX_REV = 30 / 3.6;
+    if (fwdSpd > -MAX_REV) {
+      body.force.x -= fwdX * engineForce * 2.5;
+      body.force.z -= fwdZ * engineForce * 2.5;
+    }
   }
 
-  if (Math.abs(fwdSpd) > 0.5) {
+  // Bicycle-model steering: drive yaw rate toward kinematic target.
+  // Skipped during PIT spin so collision angular momentum accumulates freely.
+  // In reverse (fwdSpd < 0) the formula naturally inverts turn direction.
+  // Extra yaw boost applied in reverse so it steers as crisply as forward.
+  if (!pitLoose) {
     const steerRad = input.steer * MAX_STEER;
-    const turnRate = fwdSpd * Math.tan(steerRad) / WHEELBASE;
-    body.setAngularVelocity(turnRate);
+    const speedFactor = Math.min(Math.abs(fwdSpd) / 3.0, 1.0);
+    const MAX_YAW = 2.5;
+    const raw = speedFactor > 0.05 ? -fwdSpd * Math.tan(steerRad) / WHEELBASE : 0;
+    // In reverse, boost yaw authority 3× and widen cap; forward uses normal ±MAX_YAW
+    const reversing = fwdSpd < -0.5;
+    const targetAngVel = reversing
+      ? clamp(raw * 3.0, -MAX_YAW * 2, MAX_YAW * 2)
+      : clamp(raw, -MAX_YAW, MAX_YAW);
+    body.angularVelocity.y += (targetAngVel - body.angularVelocity.y) * 0.4;
   }
+}
+
+// ═══════════════════════════════════════════════════════
+//  DEBUG ARROWS — show thruster directions/forces
+// ═══════════════════════════════════════════════════════
+let copArrows = [], suspArrows = [];
+
+function makeDebugArrows(frontCol, rearCol) {
+  const arr = [];
+  for (let i = 0; i < 4; i++) {
+    const a = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1,
+      i < 2 ? frontCol : rearCol, 0.5, 0.25
+    );
+    a.visible = false;
+    scene.add(a);
+    arr.push(a);
+  }
+  return arr;
+}
+
+function updateDebugArrows(arrows, body, input, engineForce, maxSpeedKph) {
+  if (!arrows.length) return;
+  const theta = -getYAngle(body.quaternion);
+  const fwdX = -Math.sin(theta), fwdZ = Math.cos(theta);
+  const rtX  =  Math.cos(theta), rtZ  = Math.sin(theta);
+  const steerRad = input.steer * MAX_STEER;
+  const ts = theta + steerRad;   // +steerRad: arrows correctly point toward intended turn direction
+  const sfwdX = -Math.sin(ts), sfwdZ = Math.cos(ts);
+
+  const vel = body.velocity;
+  const curSpd = Math.hypot(vel.x, vel.z);
+  const maxSpd = maxSpeedKph / 3.6;
+
+  let thrustMag = 0;
+  if (input.throttle && curSpd < maxSpd) thrustMag =  engineForce;
+  else if (input.brake)                  thrustMag = -engineForce * 0.6;
+
+  const fz = CAR_L * 0.38, rz = -CAR_L * 0.38, sx = CAR_W * 0.42;
+  const cx = body.position.x, cy = body.position.y + CAR_H * 0.55, cz = body.position.z;
+
+  const positions = [
+    [cx + fwdX*fz - rtX*sx, cy, cz + fwdZ*fz - rtZ*sx],
+    [cx + fwdX*fz + rtX*sx, cy, cz + fwdZ*fz + rtZ*sx],
+    [cx + fwdX*rz - rtX*sx, cy, cz + fwdZ*rz - rtZ*sx],
+    [cx + fwdX*rz + rtX*sx, cy, cz + fwdZ*rz + rtZ*sx],
+  ];
+  const sign = thrustMag >= 0 ? 1 : -1;
+  const dirs = [
+    [sfwdX * sign, sfwdZ * sign],
+    [sfwdX * sign, sfwdZ * sign],
+    [fwdX  * sign, fwdZ  * sign],
+    [fwdX  * sign, fwdZ  * sign],
+  ];
+
+  const F = Math.abs(thrustMag * 0.5);
+  const arrowLen = Math.min(F * 0.004, 7);
+
+  const _dir = new THREE.Vector3();
+  for (let i = 0; i < 4; i++) {
+    if (F < 5 || arrowLen < 0.05) { arrows[i].visible = false; continue; }
+    arrows[i].visible = true;
+    arrows[i].position.set(positions[i][0], positions[i][1], positions[i][2]);
+    _dir.set(dirs[i][0], 0, dirs[i][1]);
+    if (_dir.lengthSq() > 0.0001) {
+      _dir.normalize();
+      arrows[i].setDirection(_dir);
+    }
+    arrows[i].setLength(arrowLen, Math.min(arrowLen * 0.3, 1.0), Math.min(arrowLen * 0.15, 0.5));
+  }
+}
+
+// For traffic: simpler 2-arrow visualization (just front + rear combined)
+function makeTrafficArrows() {
+  const arr = [];
+  for (let i = 0; i < 4; i++) {
+    const a = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1,
+      i < 2 ? 0x44ff88 : 0xff8844, 0.4, 0.2
+    );
+    a.visible = false;
+    scene.add(a);
+    arr.push(a);
+  }
+  return arr;
+}
+
+function removeArrows(arrows) {
+  for (const a of arrows) scene.remove(a);
 }
 
 // ═══════════════════════════════════════════════════════
 //  AI HELPERS
 // ═══════════════════════════════════════════════════════
 function closestCarAhead(body, lane, cars) {
-  const pos = body.getPosition();
+  const pos = body.position;
   const fwd = bodyFwd(body);
   let minDist = Infinity;
   for (const c of cars) {
     if (c.body === body) continue;
     if (c.lane !== lane) continue;
-    const cp = c.body.getPosition();
-    const dx = cp.x - pos.x, dy = cp.y - pos.y;
+    const cp = c.body.position;
+    const dx = cp.x - pos.x, dy = cp.z - pos.z;
     const ahead = dx*fwd.x + dy*fwd.y;
     if (ahead < 1 || ahead > 60) continue;
     const lat = Math.abs(dx*(-fwd.y) + dy*fwd.x);
@@ -751,95 +919,193 @@ function closestCarAhead(body, lane, cars) {
   return minDist;
 }
 
+// True if no lane-(-1) traffic car is within clearDist metres of pos
+function isOncomingClear(pos, clearDist) {
+  for (const c of trafficArr) {
+    if (c.lane !== -1) continue;
+    if (Math.hypot(c.body.position.x - pos.x, c.body.position.z - pos.z) < clearDist) return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════
+//  COP ROAD-FOLLOW (used during countdown so cop stays on road)
+// ═══════════════════════════════════════════════════════
+function copRoadFollowAI() {
+  const pos = copBody.position;
+  const vel = copBody.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
+
+  const nr = findNearRoad(pos.x, pos.z, copRoadSeq);
+  copRoadSeq = nr.seq;
+
+  const tgt = laneLookAhead(copRoadSeq, 1, 14 + spd * 0.4);
+  if (!tgt) return;
+
+  const dx = tgt.x - pos.x, dy = tgt.y - pos.z;
+  const wantAngle = Math.atan2(-dx, dy);
+  const curAngle  = -getYAngle(copBody.quaternion);
+  const steer = clamp(angleDiff(wantAngle, curAngle) * 2.0, -1, 1);
+  applyThrusters(copBody,
+    { throttle: true, brake: false, handbrake: false, steer },
+    1800, 120, copRoadSeq);
+}
+
 // ═══════════════════════════════════════════════════════
 //  SUSPECT AI
 // ═══════════════════════════════════════════════════════
 function suspectAI(dt) {
   const ds  = DIFF_SETTINGS[diff];
-  const pos = suspBody.getPosition();
-  const vel = suspBody.getLinearVelocity();
-  const spd = Math.hypot(vel.x, vel.y);
+  const pos = suspBody.position;
+  const vel = suspBody.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
 
-  const nr = findNearRoad(pos.x, pos.y, suspRoadSeq);
+  const nr = findNearRoad(pos.x, pos.z, suspRoadSeq);
   suspRoadSeq = nr.seq;
 
-  const lookM = 15 + spd * 0.5;
+  // ── Overtake decision ────────────────────────────────────────────────────
+  // Use road-sequence comparison so detection works regardless of suspect lane.
+  // Tight window (8 seqs = 16 m) → suspect waits until nearly on the bumper,
+  // then swerves aggressively — looks urgent and cinematic.
+  let blockerSeq = -1;
+  for (const c of trafficArr) {
+    if (c.lane !== 1) continue;
+    const seqDiff = c.roadSeq - suspRoadSeq;
+    if (seqDiff > 14 && seqDiff < 18) {           // 0–16 m ahead — last moment
+      if (blockerSeq === -1 || c.roadSeq < blockerSeq) blockerSeq = c.roadSeq;
+    }
+  }
+  const oncomingClear = isOncomingClear(pos, 60);
+
+  // Initiate pass when a blocker is detected and the other lane is clear
+  if (blockerSeq !== -1 && oncomingClear && suspOvertakeTimer <= 0) {
+    suspOvertakeTimer = 5.0;
+  }
+  // Abort immediately if oncoming traffic appears
+  if (!oncomingClear) suspOvertakeTimer = 0;
+  // Once we've road-seq-passed the blocker, allow early return with a small buffer
+  if (suspOvertakeTimer > 0) {
+    suspOvertakeTimer -= dt;
+    if (blockerSeq === -1) suspOvertakeTimer = Math.min(suspOvertakeTimer, 0.8);
+  }
+
+  // suspectLatShift: 0 = own lane, -1 = fully in oncoming lane
+  const targetLatShift = suspOvertakeTimer > 0 ? -1.0 : 0.0;
+  // Very fast lerp (~0.15 s to full lane change) for maniac urgency
+  suspectLatShift += (targetLatShift - suspectLatShift) * Math.min(8 * dt, 1);
+
+  // ── Road-following target ─────────────────────────────────────────────────
+  // Short lookahead while changing lanes → steep angle → full steer input
+  const lookM = suspOvertakeTimer > 0 ? 10 + spd * 0.15 : 18 + spd * 0.4;
   const tgt   = laneLookAhead(suspRoadSeq, 1, lookM);
   if (!tgt) return;
-
-  // Avoid traffic ahead — shift laterally within lane
-  const aheadDist = closestCarAhead(suspBody, 1, trafficArr);
-  suspectLatShift += (((aheadDist < 25) ? -1.0 : 0) - suspectLatShift) * clamp(3 * dt, 0, 1);
   const tp = tgt.p;
-  const sx = tgt.x - (tp ? tp.ty : 0) * suspectLatShift * (LANE_HALF - 1.5);
-  const sy = tgt.y + (tp ? tp.tx : 0) * suspectLatShift * (LANE_HALF - 1.5);
+  const sx = tgt.x - tp.ty * suspectLatShift * LANE_HALF * 2;
+  const sy = tgt.y + tp.tx * suspectLatShift * LANE_HALF * 2;
 
-  const dx = sx - pos.x, dy = sy - pos.y;
+  const dx = sx - pos.x, dy = sy - pos.z;
   const wantAngle = Math.atan2(-dx, dy);
-  const curAngle  = suspBody.getAngle();
-  const err = angleDiff(wantAngle, curAngle);
-  let steer = clamp(err * 1.8, -1, 1);
+  const curAngle  = -getYAngle(suspBody.quaternion);
+  const headingErr = angleDiff(wantAngle, curAngle);
+  // High gain (3.0) for aggressive, snappy steering toward offset target
+  let steer = clamp(headingErr * 3.0, -1, 1);
 
-  // Evasion: push away from cop
-  const cp = copBody.getPosition();
-  const distToCop = Math.hypot(cp.x - pos.x, cp.y - pos.y);
-  if (distToCop < 30) {
-    const toCopAngle = Math.atan2(-(cp.x-pos.x), cp.y-pos.y);
-    steer -= angleDiff(toCopAngle, curAngle) * ds.evasion * 1.2;
-    steer  = clamp(steer, -1, 1);
+  const suspTopSpd = 38 * ds.aiSpd * suspSpdMul;
+  const suspForce  = 1200 * ds.aiSpd * suspSpdMul;
+
+  if (suspEngineDisabled) {
+    applyThrusters(suspBody, { throttle:false, brake:false, handbrake:false, steer:0 },
+                   0, suspTopSpd * 3.6, suspRoadSeq);
+    return;
   }
 
-  const aidInp = { throttle:true, brake:false, handbrake:false, steer };
+  const aidInp = { throttle: true, brake: false, handbrake: false, steer };
 
-  // Brake on tight bends
+  // Emergency brake only when jammed behind a blocker and not yet overtaking
+  if (blockerSeq !== -1 && suspOvertakeTimer <= 0) {
+    const distM = (blockerSeq - suspRoadSeq) * ROAD_STEP;
+    if (distM < 12) { aidInp.throttle = false; aidInp.brake = true; }
+  }
+
+  // ── Off-road / post-PIT recovery ─────────────────────────────────────────
+  // If heading is badly wrong (>80°) AND speed is low, the bicycle model
+  // produces near-zero yaw (it's speed-dependent). Force-spin the body
+  // directly so the suspect can recover even from a dead stop.
+  if (Math.abs(headingErr) > Math.PI * 0.45 && spd < 6) {
+    suspBody.angularVelocity.y = clamp(-headingErr * 2.0, -2.5, 2.5);
+    if (spd > 1.5) { aidInp.throttle = false; } // slow down so spin takes effect
+  }
+  // If significantly off-road, override target to steer back to nearest road point
+  if (nr.dist > ROAD_HALF + 4 && Math.abs(headingErr) < Math.PI * 0.5) {
+    const rp = getRoadPt(suspRoadSeq);
+    if (rp) {
+      const rx = rp.x - pos.x, ry = rp.y - pos.z;
+      const recovAngle = Math.atan2(-rx, ry);
+      steer = clamp(angleDiff(recovAngle, curAngle) * 3.0, -1, 1);
+      aidInp.steer = steer;
+    }
+  }
+
+  // Brake on tight bend ahead
   const bSeq = suspRoadSeq + Math.round(10 / ROAD_STEP);
   const bp   = getRoadPt(bSeq);
-  if (bp) {
-    const bAngle = Math.atan2(-(bp.x-pos.x), bp.y-pos.y);
-    if (Math.abs(angleDiff(bAngle, curAngle)) > 0.45 && spd > 25*ds.aiSpd) aidInp.brake = true;
+  if (bp && !aidInp.brake) {
+    const bAngle = Math.atan2(-(bp.x - pos.x), bp.y - pos.z);
+    if (Math.abs(angleDiff(bAngle, curAngle)) > 0.45 && spd > suspTopSpd * 0.55) {
+      aidInp.brake = true; aidInp.throttle = false;
+    }
   }
-  if (spd > 44 * ds.aiSpd) aidInp.throttle = false;
+  if (spd > suspTopSpd) aidInp.throttle = false;
 
-  vehicleStep(suspBody, aidInp, ds.aiSpd, 50*ds.aiSpd);
+  applyThrusters(suspBody, aidInp, suspForce, suspTopSpd * 3.6, suspRoadSeq);
 }
 
 // ═══════════════════════════════════════════════════════
 //  TRAFFIC AI
 // ═══════════════════════════════════════════════════════
 function trafficStep(car, dt) {
-  const pos = car.body.getPosition();
-  const vel = car.body.getLinearVelocity();
-  const spd = Math.hypot(vel.x, vel.y);
+  const pos = car.body.position;
+  const vel = car.body.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
 
-  const nr = findNearRoad(pos.x, pos.y, car.roadSeq);
+  const nr = findNearRoad(pos.x, pos.z, car.roadSeq);
   car.roadSeq = nr.seq;
 
   const lookM = 12 + spd * 0.35;
   const tgt   = laneLookAhead(car.roadSeq, car.lane, lookM);
   if (!tgt) return;
 
-  const dx  = tgt.x - pos.x, dy = tgt.y - pos.y;
-  const wa  = Math.atan2(-dx, dy);
-  const err = angleDiff(wa, car.body.getAngle());
-
+  // Passing: shift toward shoulder when car ahead is close
+  if (car.latShift === undefined) car.latShift = 0;
   const aheadDist = closestCarAhead(car.body, car.lane, trafficArr);
-  const tooClose  = aheadDist < 15;
+  const wantShift = aheadDist < 30 ? 1.0 : 0.0;
+  car.latShift += (wantShift - car.latShift) * clamp(2 * dt, 0, 1);
 
+  const tp = tgt.p;
+  const shiftScale = ROAD_HALF - LANE_HALF - 0.5;
+  const sx = tgt.x - tp.ty * car.latShift * shiftScale * car.lane;
+  const sy = tgt.y + tp.tx * car.latShift * shiftScale * car.lane;
+
+  const dx  = sx - pos.x, dy = sy - pos.z;
+  const wa  = Math.atan2(-dx, dy);
+  const err = angleDiff(wa, -getYAngle(car.body.quaternion));
+
+  const tooClose = aheadDist < 12;
   const ainp = {
-    throttle: !tooClose && spd < car.spd,
-    brake:    tooClose || spd > car.spd + 3,
+    throttle: !tooClose && spd < car.spd * 1.05,
+    brake:    tooClose || spd > car.spd * 1.1,
     handbrake: false,
-    steer:    clamp(err * 2, -1, 1)
+    steer:    clamp(err * 1.2, -0.6, 0.6)   // gentler steer → less yaw-induced drag
   };
-  vehicleStep(car.body, ainp, 0.62, car.spd * 3.6);
+  applyThrusters(car.body, ainp, 1200, car.spd * 3.6, car.roadSeq);
+  updateDebugArrows(car.arrows, car.body, ainp, 1200, car.spd * 3.6);
 }
 
 // ═══════════════════════════════════════════════════════
 //  STREAMING — TRAFFIC
 // ═══════════════════════════════════════════════════════
 function trafficSpawnProb() {
-  // Cars per road-point per lane, scaled by difficulty
-  return DIFF_SETTINGS[diff].traffic /
+  return DIFF_SETTINGS[diff].traffic * trafficCfg.density /
          ((ROAD_BUFFER_AHEAD + ROAD_BUFFER_BEHIND) / ROAD_STEP * 2);
 }
 
@@ -848,7 +1114,7 @@ function spawnTrafficCar(seq, lane) {
   const lx    = p.x - p.ty * LANE_HALF * lane;
   const ly    = p.y + p.tx * LANE_HALF * lane;
   const angle = roadFwdAngle(p, lane);
-  const tb    = makeCarBody(lx, ly, angle, 'traffic');
+  const tb    = makeBoxCar(lx, ly, angle, 'traffic');
   const tm    = buildCarMesh('traffic');
   tm.children.forEach(c => {
     if (c.material && c.material !== MAT.wheel && c.material !== MAT.glass) {
@@ -858,9 +1124,8 @@ function spawnTrafficCar(seq, lane) {
   });
   scene.add(tm);
   const tspd = 10 + rng() * 18;
-  const fwd  = bodyFwd(tb);
-  tb.setLinearVelocity(Vec2(fwd.x * tspd, fwd.y * tspd));
-  trafficArr.push({ mesh:tm, body:tb, spd:tspd, lane, roadSeq:seq });
+  const arrows = makeTrafficArrows();
+  trafficArr.push({ mesh:tm, body:tb, spd:tspd, lane, roadSeq:seq, arrows });
 }
 
 function streamTraffic() {
@@ -885,7 +1150,8 @@ function streamTraffic() {
     if (t.roadSeq < cullSeq) {
       scene.remove(t.mesh);
       t.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-      try { physWorld.destroyBody(t.body); } catch(e) {}
+      try { cannonWorld.removeBody(t.body); } catch(e) {}
+      if (t.arrows) removeArrows(t.arrows);
       trafficArr.splice(i, 1);
     }
   }
@@ -896,11 +1162,15 @@ function streamTraffic() {
 // ═══════════════════════════════════════════════════════
 function tryPlaceScenery(p) {
   for (const side of [-1, 1]) {
-    const minOff = ROAD_HALF + 3;
-    const maxOff = ROAD_HALF + (p.zone === 'city' ? 38 : 58);
-    const off = minOff + rng() * (maxOff - minOff);
-    const sx  = p.x + p.ty * off * side + (rng()-0.5) * 6;
-    const sy  = p.y - p.tx * off * side + (rng()-0.5) * 6;
+    // minOff accounts for road half-width plus max building half-depth so nothing
+    // can overlap the road surface regardless of building size or road curvature.
+    const minOff = ROAD_HALF + (p.zone === 'city' ? 22 : 12);
+    const maxOff = ROAD_HALF + (p.zone === 'city' ? 70 : 80);
+    const off   = minOff + rng() * (maxOff - minOff);
+    // Jitter along the road tangent only — perpendicular distance stays exactly `off`.
+    const along = (rng() - 0.5) * 14;
+    const sx = p.x + p.ty * off * side + p.tx * along;
+    const sy = p.y - p.tx * off * side + p.ty * along;
 
     if (p.zone === 'country') {
       if (rng() < 0.75) {
@@ -941,15 +1211,15 @@ function streamScenery() {
 
   // Cull scenery far behind player
   if (copBody) {
-    const cop = copBody.getPosition();
+    const cop = copBody.position;
     const cullDist = ROAD_BUFFER_BEHIND + 400;
     for (let i = scenery.length - 1; i >= 0; i--) {
       const s  = scenery[i];
       const sp = s.mesh.position;
-      if (Math.hypot(sp.x - cop.x, sp.z - cop.y) > cullDist) {
+      if (Math.hypot(sp.x - cop.x, sp.z - cop.z) > cullDist) {
         scene.remove(s.mesh);
         s.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-        try { physWorld.destroyBody(s.body); } catch(e) {}
+        try { cannonWorld.removeBody(s.body); } catch(e) {}
         scenery.splice(i, 1);
       }
     }
@@ -961,68 +1231,90 @@ function streamScenery() {
 // ═══════════════════════════════════════════════════════
 let pitCooldown = 0;
 
+// Called by cop body's collide event when it hits the suspect
+function tryPITContact(evt) {
+  if (pitDone || pitCooldown > 0) return;
+
+  const copAngle  = -getYAngle(copBody.quaternion);
+  const suspAngle = -getYAngle(suspBody.quaternion);
+  const adiff     = Math.abs(angleDiff(copAngle, suspAngle));
+  if (adiff < 0.12 || adiff > 1.1) return;
+
+  const copFwd = bodyFwd(copBody);
+  const copV   = copBody.velocity, suspV = suspBody.velocity;
+  const relSpd = (copV.x - suspV.x)*copFwd.x + (copV.z - suspV.z)*copFwd.y;
+  if (relSpd < 2.0) return;
+
+  // Valid PIT contact — start rotation tracking
+  pitTrackActive = true;
+  pitAccumRot    = 0;
+  pitLastAngle   = -getYAngle(suspBody.quaternion);
+  pitCooldown    = 1.5;
+
+  const q = (relSpd/20)*0.45 + (1 - Math.abs(adiff - 0.45)/0.5)*0.55;
+  pitRating = q>0.78 ? 'TEXTBOOK' : q>0.55 ? 'GOOD' : q>0.35 ? 'ROUGH' : 'LUCKY';
+  playImpact(42, 0.75);
+}
+
+// Setup cop collision listener — called after buildWorld creates the bodies
+function setupCollisionListeners() {
+  copBody.addEventListener('collide', evt => {
+    if (state !== 'playing' || crashFlag) return;
+    const tag = evt.body.userData;
+    const spd = copBody.velocity.length();
+    if (tag === 'static'  && spd > 4) crashFlag = true;
+    if (tag === 'traffic' && spd > 3) crashFlag = true;
+    if (tag === 'suspect' && !pitDone && pitCooldown <= 0) tryPITContact(evt);
+  });
+
+  // Suspect crashes hard into traffic or scenery → engine disabled (player wins)
+  suspBody.addEventListener('collide', evt => {
+    if (state !== 'playing' || suspEngineDisabled) return;
+    const tag = evt.body.userData;
+    if (tag === 'traffic' || tag === 'static') {
+      const sv = suspBody.velocity, ov = evt.body.velocity;
+      const relSpd = Math.hypot(sv.x - ov.x, sv.z - ov.z);
+      if (relSpd > 8) {   // ~29 km/h relative — serious crash
+        suspEngineDisabled = true;
+        pitDone = true;
+        playImpact(55, 1.0);
+      }
+    }
+  });
+}
+
+// Per-frame PIT tracking — accumulates suspect rotation after a valid contact
 function checkPIT(dt) {
   pitCooldown -= dt;
-  if (pitCooldown > 0) return;
+  if (!pitTrackActive) return;
 
-  const cop = copBody, susp = suspBody;
-  const copAngle  = cop.getAngle();
-  const suspAngle = susp.getAngle();
-  const adiff     = Math.abs(angleDiff(copAngle, suspAngle));
+  const angle = -getYAngle(suspBody.quaternion);
+  pitAccumRot += Math.abs(angleDiff(angle, pitLastAngle));
+  pitLastAngle  = angle;
 
-  if (adiff < 0.12 || adiff > 1.05) return;
-
-  const copFwd = bodyFwd(cop);
-  const copRt  = bodyRt(cop);
-  const copPos = cop.getPosition();
-  const frontCorners = [
-    Vec2(copPos.x + copFwd.x*CAR_L/2 + copRt.x*CAR_W/2, copPos.y + copFwd.y*CAR_L/2 + copRt.y*CAR_W/2),
-    Vec2(copPos.x + copFwd.x*CAR_L/2 - copRt.x*CAR_W/2, copPos.y + copFwd.y*CAR_L/2 - copRt.y*CAR_W/2),
-  ];
-
-  const copVel  = cop.getLinearVelocity();
-  const suspVel = susp.getLinearVelocity();
-  const relSpd  = (copVel.x-suspVel.x)*copFwd.x + (copVel.y-suspVel.y)*copFwd.y;
-  if (relSpd < 1.5) return;
-
-  for (const corner of frontCorners) {
-    const local = susp.getLocalPoint(corner);
-    if (local.y > -CAR_L*0.05) continue;
-    if (Math.abs(local.x) < CAR_W*0.15) continue;
-
-    const dir    = Math.sign(local.x);
-    const pushA  = copAngle + Math.PI/2 * dir;
-    const spinMag = relSpd * 0.30;
-    const pushMag = relSpd * 0.55;
-
-    susp.setAngularVelocity(susp.getAngularVelocity() + dir * spinMag);
-    susp.applyLinearImpulse(Vec2(Math.sin(pushA)*pushMag*susp.getMass(), -Math.cos(pushA)*pushMag*susp.getMass()),
-      susp.getWorldCenter(), true);
-
-    const q = (relSpd/18)*0.45 + (1-Math.abs(adiff-0.45)/0.5)*0.55;
-    if (q>0.78) pitRating='TEXTBOOK';
-    else if (q>0.55) pitRating='GOOD';
-    else if (q>0.35) pitRating='ROUGH';
-    else pitRating='LUCKY';
-
-    playImpact(42, 0.75);
-    pitCooldown = 1.5;
-    break;
+  // 160° spin = engine disabled (no wheels to check anymore — rotation alone is the condition)
+  if (pitAccumRot >= Math.PI * (160 / 180)) {
+    suspEngineDisabled = true;
+    pitDone            = true;
+    pitTrackActive     = false;
   }
+
+  // Timeout: reset tracking after 10 s if not triggered
+  if (pitCooldown < -10) { pitTrackActive = false; pitAccumRot = 0; }
 }
 
 // ═══════════════════════════════════════════════════════
 //  SKID MARKS
 // ═══════════════════════════════════════════════════════
 function addSkids(body) {
-  const vel = body.getLinearVelocity();
+  const vel = body.velocity;
   const rt  = bodyRt(body);
-  const lat = Math.abs(vel.x*rt.x + vel.y*rt.y);
+  const lat = Math.abs(vel.x*rt.x + vel.z*rt.y);
   if (lat < 1.5 && !inp.handbrake) return;
-  const pos = body.getPosition();
+  const pos = body.position;
   const fwd = bodyFwd(body);
   const bx  = pos.x - fwd.x*CAR_L*0.3;
-  const by  = pos.y - fwd.y*CAR_L*0.3;
+  const by  = pos.z - fwd.y*CAR_L*0.3;
   const hw  = CAR_W*0.42;
   for (const side of [-1,1]) {
     if (skidCount < SKID_MAX) {
@@ -1072,13 +1364,13 @@ function updateHUD(dt) {
   tel.textContent = secs + 's';
   tel.className   = timer<5?'crit':timer<15?'warn':'';
 
-  const vel = copBody.getLinearVelocity();
-  const kph = Math.round(Math.hypot(vel.x,vel.y)*3.6);
+  const vel = copBody.velocity;
+  const kph = Math.round(Math.hypot(vel.x, vel.z)*3.6);
   document.getElementById('hud-speed').textContent = kph + ' km/h';
 
-  const sv = suspBody.getLinearVelocity();
-  const suspSpd = Math.round(Math.hypot(sv.x,sv.y)*3.6);
-  const nr  = findNearRoad(suspBody.getPosition().x, suspBody.getPosition().y, suspRoadSeq);
+  const sv = suspBody.velocity;
+  const suspSpd = Math.round(Math.hypot(sv.x, sv.z)*3.6);
+  const nr  = findNearRoad(suspBody.position.x, suspBody.position.z, suspRoadSeq);
   const onRoad = nr.dist < ROAD_HALF + 2;
   document.getElementById('hud-state').textContent = 'SUSPECT ' + suspSpd + ' · ' + (onRoad?'ON ROAD':'OFF ROAD');
 
@@ -1104,9 +1396,9 @@ function updateHUD(dt) {
   mCtx.fillStyle='#080c10'; mCtx.fillRect(0,0,mmW,mmH);
 
   const ms  = 0.12; // pixels per metre
-  const cop = copBody.getPosition();
-  const ox  = mmW/2 - cop.x*ms;
-  const oy  = mmH/2 + cop.y*ms;  // +cop.y so that world +Y (north) maps to canvas up
+  const cop = copBody.position;
+  const ox  = mmW/2 + cop.x*ms;
+  const oy  = mmH/2 + cop.z*ms;
 
   const WIN  = Math.ceil(400/ROAD_STEP);
   const si   = Math.max(0, copRoadSeq - roadBaseSeq - WIN);
@@ -1115,7 +1407,7 @@ function updateHUD(dt) {
   mCtx.beginPath();
   for (let i=si; i<=ei; i+=4) {
     const p=roadPts[i];
-    const sx=p.x*ms+ox, sy=-p.y*ms+oy;  // negate y to flip axis
+    const sx=-p.x*ms+ox, sy=-p.y*ms+oy;  // negate both to match camera orientation
     i===si ? mCtx.moveTo(sx,sy) : mCtx.lineTo(sx,sy);
   }
   mCtx.strokeStyle='#3a3530';
@@ -1123,8 +1415,8 @@ function updateHUD(dt) {
   mCtx.stroke();
 
   function mmDot(body, col) {
-    const p=body.getPosition();
-    mCtx.beginPath(); mCtx.arc(p.x*ms+ox,-p.y*ms+oy,3,0,Math.PI*2);
+    const p = body.position;
+    mCtx.beginPath(); mCtx.arc(-p.x*ms+ox, -p.z*ms+oy, 3, 0, Math.PI*2);
     mCtx.fillStyle=col; mCtx.fill();
   }
   mmDot(copBody,'#4488ff');
@@ -1136,12 +1428,11 @@ function updateHUD(dt) {
 //  CAMERA
 // ═══════════════════════════════════════════════════════
 function updateCamera(dt) {
-  const pos = copBody.getPosition();
-  const ang = copBody.getAngle();
-  const fx  = -Math.sin(ang), fy = Math.cos(ang);
+  const pos = copBody.position;
+  const fwd = bodyFwd(copBody);
 
-  const tPos = new THREE.Vector3(pos.x - fx*30, 38, pos.y - fy*30);
-  const tLook= new THREE.Vector3(pos.x + fx*15, 3, pos.y + fy*15);
+  const tPos = new THREE.Vector3(pos.x - fwd.x*30, 38, pos.z - fwd.y*30);
+  const tLook= new THREE.Vector3(pos.x + fwd.x*15,  3, pos.z + fwd.y*15);
 
   camPos.lerp(tPos,  7*dt);
   camLook.lerp(tLook, 7*dt);
@@ -1159,16 +1450,20 @@ function updateLightBar(dt) {
   if (lbTimer>0.25) { lbTimer=0; lbFlash=!lbFlash; }
   const lb = copMesh.userData.lightBar;
   if (!lb) return;
-  const spd = Math.hypot(copBody.getLinearVelocity().x, copBody.getLinearVelocity().y);
+  const cv = copBody.velocity;
+  const spd = Math.hypot(cv.x, cv.z);
   if (spd<0.5) { lb[0].material.emissiveIntensity=0.1; lb[1].material.emissiveIntensity=0.1; return; }
   lb[0].material.emissiveIntensity = lbFlash ? 1.2 : 0.05;
   lb[1].material.emissiveIntensity = lbFlash ? 0.05: 1.2;
 }
 
-function syncMesh(mesh, body) {
-  const pos = body.getPosition();
-  mesh.position.set(pos.x, 0, pos.y);
-  mesh.rotation.y = -body.getAngle();
+// yOff: vertical shift from physics body center to Three.js mesh group origin.
+// RaycastVehicle chassis center ≈ 1.16m → offset -1.0 puts mesh group near ground.
+// Traffic box center ≈ 0.65m (CAR_H/2) → offset -0.65 puts mesh group at ground.
+function syncMesh(mesh, body, yOff = -1.0) {
+  mesh.position.copy(body.position);
+  mesh.position.y += yOff;
+  mesh.quaternion.copy(body.quaternion);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1187,7 +1482,7 @@ function gameUpdate(dt) {
   streamScenery();
 
   // Update cop road sequence
-  const copNr = findNearRoad(copBody.getPosition().x, copBody.getPosition().y, copRoadSeq);
+  const copNr = findNearRoad(copBody.position.x, copBody.position.z, copRoadSeq);
   copRoadSeq = copNr.seq;
 
   // Auto-recenter steering
@@ -1196,15 +1491,19 @@ function gameUpdate(dt) {
     if (Math.abs(inp.steer) < 0.001) inp.steer = 0;
   }
 
-  vehicleStep(copBody, inp, 1.0, 190);
+  applyThrusters(copBody, inp, 1800, 250, copRoadSeq);
+  updateDebugArrows(copArrows, copBody, inp, 1800, 250);
   suspectAI(dt);
+  updateDebugArrows(suspArrows, suspBody,
+    { throttle: !suspEngineDisabled, brake: false, handbrake: false, steer: 0 },
+    1200, 38 * DIFF_SETTINGS[diff].aiSpd * suspSpdMul * 3.6);
   for (const t of trafficArr) trafficStep(t, dt);
 
-  physWorld.step(Math.min(dt, 1/30), 8, 3);
+  cannonWorld.step(1/60, Math.min(dt, 1/30), 3);
 
-  syncMesh(copMesh,  copBody);
-  syncMesh(suspMesh, suspBody);
-  for (const t of trafficArr) syncMesh(t.mesh, t.body);
+  syncMesh(copMesh,  copBody, -CAR_H / 2);
+  syncMesh(suspMesh, suspBody, -CAR_H / 2);
+  for (const t of trafficArr) syncMesh(t.mesh, t.body, -CAR_H / 2);
 
   addSkids(copBody);
   addSkids(suspBody);
@@ -1220,25 +1519,43 @@ function gameUpdate(dt) {
   if (timer <= 0) { endGame('time_up'); return; }
   if (crashFlag)  { endGame('cop_crash'); return; }
 
-  const nr    = findNearRoad(suspBody.getPosition().x, suspBody.getPosition().y, suspRoadSeq);
-  const sv    = suspBody.getLinearVelocity();
-  const sspd  = Math.hypot(sv.x, sv.y);
-  const offRoad = nr.dist > ROAD_HALF + 1.5;
-  if (offRoad && sspd < 2.5 && pitCooldown < 0) {
-    if (pitCooldown > -5) { endGame('cop_wins'); return; }
+  const sv   = suspBody.velocity;
+  const sspd = Math.hypot(sv.x, sv.z);
+  // Win if suspect is nearly stopped for 4 s for ANY reason
+  // (successful PIT, crash into traffic, crash into scenery, etc.)
+  if ((suspEngineDisabled || pitDone) && sspd < 1.0) {
+    suspStopTimer += dt;
+    if (suspStopTimer >= 4.0) { endGame('cop_wins'); return; }
+  } else {
+    suspStopTimer = 0;
   }
 }
 
 function countdownUpdate(dt) {
   cdTimer-=dt;
-  if (cdTimer<=0 && cdCount>0) { cdCount--; cdTimer=1; }
+  if (cdTimer<=0 && cdCount>0) { cdCount--; cdTimer=0.5; }  // "GET READY" → "GO!"
   if (cdCount<=0 && cdTimer<=0) {
     state='playing';
     canvas_requestLock();
     const cdEl=document.getElementById('cd-overlay');
     if (cdEl) cdEl.style.display='none';
   }
-  if (copBody) updateCamera(dt);
+
+  // Rolling start: auto-drive both cars on the road during countdown
+  if (copBody && suspBody) {
+    copRoadFollowAI();   // cop follows road at up to 120 km/h; player takes over at GO!
+    suspectAI(dt);
+    for (const t of trafficArr) trafficStep(t, dt);
+    cannonWorld.step(1/60, Math.min(dt, 1/30), 3);
+    syncMesh(copMesh, copBody, -CAR_H/2); syncMesh(suspMesh, suspBody, -CAR_H/2);
+    for (const t of trafficArr) syncMesh(t.mesh, t.body, -CAR_H / 2);
+    updateLightBar(dt);
+    const prevLen = roadPts.length;
+    manageRoadBuffer();
+    if (roadPts.length !== prevLen) updateRoadMesh();
+    streamTraffic(); streamScenery();
+  }
+  if (copBody) { updateHUD(dt); updateCamera(dt); }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1254,6 +1571,8 @@ function buildWorld() {
   scenery    = [];
   trafficArr = [];
   skidCount  = 0;
+  if (copArrows.length)  { removeArrows(copArrows);  copArrows  = []; }
+  if (suspArrows.length) { removeArrows(suspArrows); suspArrows = []; }
 
   buildGroundPlane();
   initRoadMesh();
@@ -1272,16 +1591,28 @@ function buildWorld() {
   const p0  = getRoadPt(roadBaseSeq) || roadPts[0];
   const p35 = getRoadPt(roadBaseSeq + 35) || roadPts[Math.min(35, roadPts.length-1)];
 
-  copBody  = makeCarBody(p0.x,  p0.y,  roadFwdAngle(p0,  1), 'cop');
-  suspBody = makeCarBody(p35.x, p35.y, roadFwdAngle(p35, 1), 'suspect');
+  copBody  = makeBoxCar(p0.x,  p0.y,  roadFwdAngle(p0,  1), 'cop');
+  suspBody = makeBoxCar(p35.x, p35.y, roadFwdAngle(p35, 1), 'suspect');
+  suspBody.angularDamping = DIFF_SETTINGS[diff].angDamp;  // spin resistance per difficulty
   copRoadSeq  = roadBaseSeq;
   suspRoadSeq = roadBaseSeq + 35;
 
-  const sfwd = bodyFwd(suspBody);
-  suspBody.setLinearVelocity(Vec2(sfwd.x*20, sfwd.y*20));
+  // Debug arrows: green=front thrusters, orange=rear thrusters
+  copArrows  = makeDebugArrows(0x00ff88, 0xff8800);
+  suspArrows = makeDebugArrows(0x44aaff, 0xff4488);
 
-  // Initial traffic — start spawning 60 seqs ahead (past cop/suspect)
-  trafficSpawnSeq = { fwd: roadBaseSeq + 60, onc: roadBaseSeq + 60 };
+  setupCollisionListeners();
+
+  // Rolling start: both cars begin with forward velocity
+  const cfwd = bodyFwd(copBody);
+  copBody.velocity.set(cfwd.x * 14, 0, cfwd.y * 14);
+  const sfwd = bodyFwd(suspBody);
+  const sStart = 38 * DIFF_SETTINGS[diff].aiSpd * suspSpdMul * 0.6;
+  suspBody.velocity.set(sfwd.x * sStart, 0, sfwd.y * sStart);
+
+  // Start traffic well ahead so player doesn't immediately crash into a stopped car.
+  // 160 seqs = 320 m gives plenty of run-up space before first bystander.
+  trafficSpawnSeq = { fwd: roadBaseSeq + 160, onc: roadBaseSeq + 160 };
   streamTraffic();
 }
 
@@ -1294,23 +1625,25 @@ function startGame() {
   seed=rawSeed ? (parseInt(rawSeed,10)||hashStr(rawSeed)) : (Math.random()*999999999|0);
   document.getElementById('seed-input').value=seed;
   rng=mkRNG(seed);
+  suspSpdMul = 1.0 + rng() * DIFF_SETTINGS[diff].spdMulMax;  // speed varies per seed+diff
 
   buildPhysWorld();
   initRoad();
   buildWorld();
 
   timer=DIFF_SETTINGS[diff].time;
-  cdCount=3; cdTimer=1;
+  cdCount=1; cdTimer=1.0;  // "GET READY" (1 s) → "GO!" (0.5 s)
   pitDone=false; pitRating=''; endReason=''; pitCooldown=0; crashFlag=false;
   inp.throttle=inp.brake=inp.handbrake=false; inp.steer=0;
-  suspectLatShift=0;
+  suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0;
+  suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0;
   locked=false; chatCooldown=8;
   skidCount=0;
 
   if (copBody) {
-    const p=copBody.getPosition();
-    camPos.set(p.x-20, 38, p.y-20);
-    camLook.set(p.x+10, 3, p.y+10);
+    const p = copBody.position;
+    camPos.set(p.x-20, 38, p.z-20);
+    camLook.set(p.x+10, 3, p.z+10);
   }
 
   state='countdown';
@@ -1388,6 +1721,8 @@ function syncPauseSliders() {
   document.getElementById('p-lbl-nonlin').textContent = fmt(s.nonlin, 2);
   document.getElementById('p-sl-recenter').value = s.recenter;
   document.getElementById('p-lbl-recenter').textContent = s.recenter === 0 ? 'off' : fmt(s.recenter, 2);
+  document.getElementById('p-sl-density').value  = trafficCfg.density;
+  document.getElementById('p-lbl-density').textContent = trafficCfg.density.toFixed(1);
 }
 
 document.addEventListener('pointerlockchange', () => {
@@ -1442,9 +1777,10 @@ function drawCountdown(ts) {
     document.body.appendChild(cdEl);
   }
   cdEl.style.display='flex';
-  const label = cdCount>0 ? cdCount : 'GO!';
-  const col   = cdCount>0 ? '#e8a020' : '#44dd88';
-  cdEl.innerHTML=`<span style="font-size:110px;color:${col};letter-spacing:.12em">${label}</span>`;
+  const label = cdCount>0 ? 'GET READY' : 'GO!';
+  const col   = cdCount>0 ? '#e8a020'   : '#44dd88';
+  const sz    = cdCount>0 ? '52px'      : '110px';
+  cdEl.innerHTML=`<span style="font-size:${sz};color:${col};letter-spacing:.18em">${label}</span>`;
   if (state!=='countdown') cdEl.style.display='none';
 }
 
@@ -1482,6 +1818,10 @@ document.getElementById('sl-nonlin').addEventListener('input', function() {
 document.getElementById('sl-recenter').addEventListener('input', function() {
   steerCfg.recenter = parseFloat(this.value);
   document.getElementById('lbl-recenter').textContent = steerCfg.recenter === 0 ? 'off' : (+this.value).toFixed(2).replace(/\.?0+$/,'');
+});
+document.getElementById('sl-density').addEventListener('input', function() {
+  trafficCfg.density = parseFloat(this.value);
+  document.getElementById('lbl-density').textContent = (+this.value).toFixed(1);
 });
 document.getElementById('ov-pause').addEventListener('click', e => {
   if (!e.target.closest('button, input[type=range]')) renderer.domElement.requestPointerLock();
@@ -1523,7 +1863,13 @@ document.getElementById('p-sl-recenter').addEventListener('input', function() {
   document.getElementById('sl-recenter').value = this.value;
   document.getElementById('lbl-recenter').textContent = txt;
 });
-
+document.getElementById('p-sl-density').addEventListener('input', function() {
+  trafficCfg.density = parseFloat(this.value);
+  const txt = (+this.value).toFixed(1);
+  document.getElementById('p-lbl-density').textContent = txt;
+  document.getElementById('sl-density').value = this.value;
+  document.getElementById('lbl-density').textContent = txt;
+});
 document.getElementById('btn-copy-seed').addEventListener('click',
   ()=>navigator.clipboard.writeText(String(seed)).catch(()=>{}));
 
