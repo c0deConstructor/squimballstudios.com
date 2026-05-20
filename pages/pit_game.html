@@ -971,7 +971,7 @@ function suspectAI(dt) {
   for (const c of trafficArr) {
     if (c.lane !== 1) continue;
     const seqDiff = c.roadSeq - suspRoadSeq;
-    if (seqDiff > 14 && seqDiff < 18) {           // 0–16 m ahead — last moment
+    if (seqDiff > 10 && seqDiff < 15) {           // 0–16 m ahead — last moment
       if (blockerSeq === -1 || c.roadSeq < blockerSeq) blockerSeq = c.roadSeq;
     }
   }
