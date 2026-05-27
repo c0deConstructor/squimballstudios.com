@@ -199,7 +199,7 @@
 
 <div id="hud">
   <div id="hud-title">Wildlife Globe</div>
-  <div id="hud-subtitle">hover a country · see local wildlife</div>
+  <div id="hud-subtitle">click a country · see local wildlife</div>
 </div>
 
 <div id="card-container"></div>
@@ -489,10 +489,8 @@ for (let i = 0; i < COUNTRIES.length; i++) {
 const raycaster = new THREE.Raycaster();
 const mouse     = new THREE.Vector2(-99, -99);
 let mouseX = -999, mouseY = -999;
-let isDragging       = false;
-let hoveredCountry   = null;
-let activeHoverDot   = null;
-let dismissTimer     = null;
+let isDragging        = false;
+let hoveredCountry    = null;
 let clearContentTimer = null;
 
 controls.addEventListener('start', () => { isDragging = true; });
@@ -508,13 +506,19 @@ window.addEventListener('mousemove', e => {
 let clickStartX = 0, clickStartY = 0;
 window.addEventListener('mousedown', e => { clickStartX = e.clientX; clickStartY = e.clientY; });
 renderer.domElement.addEventListener('click', e => {
-  if (!hoveredCountry) return;
   if (Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY) > 5) return;
   const nx = (e.clientX / window.innerWidth) * 2 - 1;
   const ny = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(new THREE.Vector2(nx, ny), camera);
-  if (raycaster.intersectObjects(dotMeshes.map(d => d.sphere), false).length > 0) return;
-  hideCards();
+  const hits = raycaster.intersectObjects(dotMeshes.map(d => d.sphere), false);
+  if (hits.length > 0) {
+    const dot = dotMeshes.find(d => d.sphere === hits[0].object);
+    if (dot) {
+      if (dot.country === hoveredCountry) { hideCards(); } else { onCountryClick(dot.country, dot.pos3); }
+      return;
+    }
+  }
+  if (hoveredCountry) hideCards();
 });
 
 /* ─────────────────────────────────────────────
@@ -598,7 +602,6 @@ function showCards() {
 
 function hideCards() {
   hoveredCountry = null;
-  activeHoverDot = null;
   cards.forEach((card, i) => {
     card.style.transitionDelay = ((9 - i) * 45) + 'ms';
     card.classList.remove('visible');
@@ -689,25 +692,9 @@ async function fetchWildlife(country) {
 }
 
 /* ─────────────────────────────────────────────
-   Hover logic
+   Card loading — triggered by dot click
 ───────────────────────────────────────────── */
-function isMouseInHoverZone() {
-  const el = document.elementFromPoint(mouseX, mouseY);
-  if (el && el.closest('.yt-card')) return true;
-  if (!activeHoverDot) return false;
-  const sc = worldToScreen(activeHoverDot.pos3);
-  return Math.hypot(mouseX - sc.x, mouseY - sc.y) < CIRCLE_R + 160;
-}
-
-function scheduleCardDismiss() {
-  if (dismissTimer) return;
-  dismissTimer = setTimeout(() => {
-    dismissTimer = null;
-    if (!isDragging && !isMouseInHoverZone()) hideCards();
-  }, 180);
-}
-
-async function onCountryHover(country, pos3) {
+async function onCountryClick(country, pos3) {
   hoveredCountry = country;
   positionCards(pos3);
   countryLabel.textContent = country.name;
@@ -734,7 +721,7 @@ async function onCountryHover(country, pos3) {
 }
 
 /* ─────────────────────────────────────────────
-   Hover detection (every frame)
+   Hover detection (every frame) — label + cursor only
 ───────────────────────────────────────────── */
 function checkHover() {
   if (isDragging) return;
@@ -745,22 +732,18 @@ function checkHover() {
   if (hits.length > 0) {
     const dot = dotMeshes.find(d => d.sphere === hits[0].object);
     if (dot) {
-      if (dismissTimer) { clearTimeout(dismissTimer); dismissTimer = null; }
-      activeHoverDot = dot;
-      if (dot.country !== hoveredCountry) onCountryHover(dot.country, dot.pos3);
+      const sc = worldToScreen(dot.pos3);
+      countryLabel.textContent = dot.country.name;
+      countryLabel.style.left  = sc.x + 'px';
+      countryLabel.style.top   = (sc.y - 20) + 'px';
+      countryLabel.classList.add('visible');
       renderer.domElement.style.cursor = 'pointer';
       return;
     }
   }
 
   renderer.domElement.style.cursor = '';
-  if (hoveredCountry) {
-    if (isMouseInHoverZone()) {
-      if (dismissTimer) { clearTimeout(dismissTimer); dismissTimer = null; }
-    } else {
-      scheduleCardDismiss();
-    }
-  }
+  if (!hoveredCountry) countryLabel.classList.remove('visible');
 }
 
 /* ─────────────────────────────────────────────
