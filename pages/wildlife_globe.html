@@ -217,16 +217,31 @@ const EARTH_R   = 2.0;
 const INIT_DIST = EARTH_R * 3.3;
 
 const COUNTRIES = [
-  { name: 'China',      code: 'CN', lat:  35.0, lon: 104.0, color: '#FF4444', radius: 2000 },
-  { name: 'India',      code: 'IN', lat:  20.0, lon:  78.0, color: '#FF8C00', radius: 1500 },
-  { name: 'USA',        code: 'US', lat:  37.0, lon: -95.0, color: '#4488FF', radius: 2500 },
-  { name: 'Indonesia',  code: 'ID', lat:  -2.0, lon: 118.0, color: '#44CC44', radius: 2000 },
-  { name: 'Pakistan',   code: 'PK', lat:  29.0, lon:  69.0, color: '#00C8C8', radius:  900 },
-  { name: 'Brazil',     code: 'BR', lat: -10.0, lon: -51.0, color: '#22EE88', radius: 2500 },
-  { name: 'Nigeria',    code: 'NG', lat:  10.0, lon:   8.0, color: '#FF6B35', radius:  800 },
-  { name: 'Bangladesh', code: 'BD', lat:  23.5, lon:  90.0, color: '#CC44CC', radius:  350 },
-  { name: 'Russia',     code: 'RU', lat:  60.0, lon:  90.0, color: '#8888FF', radius: 4000 },
-  { name: 'Ethiopia',   code: 'ET', lat:   8.0, lon:  38.0, color: '#FFD700', radius:  800 },
+  { name: 'China',        code: 'CN', lat:  35.0, lon: 104.0, color: '#FF4444', radius: 2000 },
+  { name: 'India',        code: 'IN', lat:  20.0, lon:  78.0, color: '#FF8C00', radius: 1500 },
+  { name: 'USA',          code: 'US', lat:  37.0, lon: -95.0, color: '#4488FF', radius: 2500 },
+  { name: 'Indonesia',    code: 'ID', lat:  -2.0, lon: 118.0, color: '#44CC44', radius: 2000 },
+  { name: 'Pakistan',     code: 'PK', lat:  29.0, lon:  69.0, color: '#00C8C8', radius:  900 },
+  { name: 'Brazil',       code: 'BR', lat: -10.0, lon: -51.0, color: '#22EE88', radius: 2500 },
+  { name: 'Nigeria',      code: 'NG', lat:  10.0, lon:   8.0, color: '#FF6B35', radius:  800 },
+  { name: 'Bangladesh',   code: 'BD', lat:  23.5, lon:  90.0, color: '#CC44CC', radius:  350 },
+  { name: 'Russia',       code: 'RU', lat:  60.0, lon:  90.0, color: '#8888FF', radius: 4000 },
+  { name: 'Ethiopia',     code: 'ET', lat:   8.0, lon:  38.0, color: '#FFD700', radius:  800 },
+  { name: 'Mexico',       code: 'MX', lat:  23.0, lon:-102.0, color: '#FF55AA', radius: 1200 },
+  { name: 'Philippines',  code: 'PH', lat:  12.8, lon: 122.0, color: '#00EEBB', radius:  700 },
+  { name: 'Egypt',        code: 'EG', lat:  26.8, lon:  30.8, color: '#FFAA33', radius: 1000 },
+  { name: 'DR Congo',     code: 'CD', lat:  -4.0, lon:  22.0, color: '#88FF44', radius: 1000 },
+  { name: 'Vietnam',      code: 'VN', lat:  16.0, lon: 107.0, color: '#FF3388', radius:  800 },
+  { name: 'Iran',         code: 'IR', lat:  32.0, lon:  53.0, color: '#0099FF', radius: 1200 },
+  { name: 'Turkey',       code: 'TR', lat:  39.0, lon:  35.0, color: '#FF9944', radius:  800 },
+  { name: 'Germany',      code: 'DE', lat:  51.0, lon:  10.0, color: '#99CCFF', radius:  400 },
+  { name: 'Tanzania',     code: 'TZ', lat:  -6.0, lon:  35.0, color: '#FF44DD', radius:  700 },
+  { name: 'South Africa', code: 'ZA', lat: -29.0, lon:  25.0, color: '#AAFFAA', radius:  800 },
+  { name: 'France',       code: 'FR', lat:  46.0, lon:   2.0, color: '#BB66FF', radius:  500 },
+  { name: 'Kenya',        code: 'KE', lat:   0.5, lon:  38.0, color: '#FFCC88', radius:  600 },
+  { name: 'Thailand',     code: 'TH', lat:  15.0, lon: 101.0, color: '#AAFF44', radius:  600 },
+  { name: 'Japan',        code: 'JP', lat:  36.0, lon: 138.0, color: '#FF7788', radius:  700 },
+  { name: 'Argentina',    code: 'AR', lat: -34.0, lon: -65.0, color: '#44DDDD', radius: 1500 },
 ];
 
 /* Per-country wildlife cache */
@@ -474,10 +489,11 @@ for (let i = 0; i < COUNTRIES.length; i++) {
 const raycaster = new THREE.Raycaster();
 const mouse     = new THREE.Vector2(-99, -99);
 let mouseX = -999, mouseY = -999;
-let isDragging     = false;
-let hoveredCountry = null;
-let activeHoverDot = null;
-let dismissTimer   = null;
+let isDragging       = false;
+let hoveredCountry   = null;
+let activeHoverDot   = null;
+let dismissTimer     = null;
+let clearContentTimer = null;
 
 controls.addEventListener('start', () => { isDragging = true; });
 controls.addEventListener('end',   () => setTimeout(() => { isDragging = false; }, 80));
@@ -487,6 +503,18 @@ window.addEventListener('mousemove', e => {
   mouseY  = e.clientY;
   mouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+let clickStartX = 0, clickStartY = 0;
+window.addEventListener('mousedown', e => { clickStartX = e.clientX; clickStartY = e.clientY; });
+renderer.domElement.addEventListener('click', e => {
+  if (!hoveredCountry) return;
+  if (Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY) > 5) return;
+  const nx = (e.clientX / window.innerWidth) * 2 - 1;
+  const ny = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(new THREE.Vector2(nx, ny), camera);
+  if (raycaster.intersectObjects(dotMeshes.map(d => d.sphere), false).length > 0) return;
+  hideCards();
 });
 
 /* ─────────────────────────────────────────────
@@ -543,6 +571,7 @@ function positionCards(pos3) {
    Card state management
 ───────────────────────────────────────────── */
 function setCardsLoading() {
+  if (clearContentTimer) { clearTimeout(clearContentTimer); clearContentTimer = null; }
   cards.forEach(card => {
     const thumb   = card.querySelector('.yt-card__thumb');
     const title   = card.querySelector('.yt-card__title');
@@ -575,7 +604,7 @@ function hideCards() {
     card.classList.remove('visible');
   });
   countryLabel.classList.remove('visible');
-  setTimeout(clearCardContent, 700);
+  clearContentTimer = setTimeout(clearCardContent, 700);
 }
 
 function clearCardContent() {
