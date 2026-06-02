@@ -56,6 +56,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 .result-title{font-size:54px;font-weight:900;letter-spacing:.1em}
 .result-meta{font-size:11px;letter-spacing:.18em;color:#4a5a6a;text-transform:uppercase;text-align:center;line-height:2.2}
 .result-btns{display:flex;gap:12px;margin-top:8px}
+#cal-wheel-cvs{display:block}
+#cal-readout{font-size:12px;letter-spacing:.2em;color:#5a8ab0;text-transform:uppercase;transition:color .15s}
+#cal-readout.full{color:#44dd88}
 </style>
 </head>
 <body>
@@ -90,6 +93,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
     <input type="text" id="seed-input" maxlength="9" placeholder="random">
     <button class="ov-btn" id="btn-rng">⟳</button>
   </div>
+  <button class="ov-btn" id="btn-calibrate" style="margin-top:2px">⊕ Calibrate Steering</button>
   <div class="steer-section">
     <div class="steer-section-lbl">Steering</div>
     <div class="steer-row">
@@ -97,10 +101,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
       <input type="range" id="sl-sens" min="0.0001" max="0.002" step="0.0001" value="0.0007">
       <span class="steer-val" id="lbl-sens">0.0007</span>
     </div>
-    <div class="steer-row">
+    <div class="steer-row" style="display:none">
       <label>Non-Linearity</label>
-      <input type="range" id="sl-nonlin" min="0" max="0.75" step="0.025" value="0.2">
-      <span class="steer-val" id="lbl-nonlin">0.2</span>
+      <input type="range" id="sl-nonlin" min="0" max="0.75" step="0.025" value="0.0">
+      <span class="steer-val" id="lbl-nonlin">0.0</span>
     </div>
     <div class="steer-row">
       <label>Auto-Recenter</label>
@@ -112,8 +116,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
     <div class="steer-section-lbl">Traffic</div>
     <div class="steer-row">
       <label>Density</label>
-      <input type="range" id="sl-density" min="0" max="3" step="0.1" value="1">
-      <span class="steer-val" id="lbl-density">1.0</span>
+      <input type="range" id="sl-density" min="0" max="3" step="0.1" value="2">
+      <span class="steer-val" id="lbl-density">2.0</span>
     </div>
   </div>
   <button class="start-btn" id="btn-start">▶ BEGIN PURSUIT</button>
@@ -129,7 +133,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
   <div class="result-meta" id="result-meta"></div>
   <div class="result-btns">
     <button class="ov-btn" id="btn-copy-seed">⧉ Copy Seed</button>
-    <button class="ov-btn" id="btn-home">⌂ Home</button>
   </div>
   <div class="ov-sub" id="return-countdown" style="margin-top:10px"></div>
 </div>
@@ -144,7 +147,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
       <input type="range" id="p-sl-sens" min="0.0001" max="0.002" step="0.0001" value="0.0007">
       <span class="steer-val" id="p-lbl-sens">0.0007</span>
     </div>
-    <div class="steer-row">
+    <div class="steer-row" style="display:none">
       <label>Non-Linearity</label>
       <input type="range" id="p-sl-nonlin" min="0" max="0.75" step="0.025" value="0.2">
       <span class="steer-val" id="p-lbl-nonlin">0.2</span>
@@ -159,8 +162,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
     <div class="steer-section-lbl">Traffic</div>
     <div class="steer-row">
       <label>Density</label>
-      <input type="range" id="p-sl-density" min="0" max="3" step="0.1" value="1">
-      <span class="steer-val" id="p-lbl-density">1.0</span>
+      <input type="range" id="p-sl-density" min="0" max="3" step="0.1" value="2">
+      <span class="steer-val" id="p-lbl-density">2.0</span>
     </div>
   </div>
   <button class="start-btn" id="btn-pause-resume" style="margin-top:8px">▶ Resume</button>
@@ -170,6 +173,37 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
     <button class="ov-btn" id="btn-pause-exit">⌂ Exit</button>
   </div>
   <div class="ov-sub" style="margin-top:10px">ESC or click background to resume</div>
+</div>
+
+<!-- Calibration overlay -->
+<div id="ov-calibrate" class="overlay hidden">
+  <div style="font-size:30px;font-weight:900;letter-spacing:.22em;color:#c08020">STEERING CALIBRATION</div>
+  <canvas id="cal-wheel-cvs" width="220" height="220"></canvas>
+  <div id="cal-readout">Centered</div>
+  <div class="ov-tip" style="max-width:360px">
+    Move your mouse left and right to test your steering.<br>
+    Adjust the sliders until you can steer the about <b>+-25%</b> smoothly without it jerking around.
+  </div>
+  <div class="steer-section">
+    <div class="steer-section-lbl">Steering</div>
+    <div class="steer-row">
+      <label>Sensitivity</label>
+      <input type="range" id="c-sl-sens" min="0.0001" max="0.002" step="0.0001" value="0.0007">
+      <span class="steer-val" id="c-lbl-sens">0.0007</span>
+    </div>
+    <div class="steer-row" style="display:none">
+      <label>Non-Linearity</label>
+      <input type="range" id="c-sl-nonlin" min="0" max="0.75" step="0.025" value="0.2">
+      <span class="steer-val" id="c-lbl-nonlin">0.2</span>
+    </div>
+    <div class="steer-row">
+      <label>Auto-Recenter</label>
+      <input type="range" id="c-sl-recenter" min="0" max="3" step="0.05" value="0.6">
+      <span class="steer-val" id="c-lbl-recenter">0.6</span>
+    </div>
+  </div>
+  <button class="ov-btn" id="btn-cal-done" style="margin-top:6px">✓ Return to Menu</button>
+  <div class="ov-sub" style="margin-top:2px">ESC or click "Return to Menu" to go back</div>
 </div>
 
 <script type="module">
@@ -230,9 +264,9 @@ const DIFF_SETTINGS = {
   //          time  speed  traffic  evasion  angDamp  spdMulMax
   // angDamp: low = spins easily (easy to PIT), high = resists spin (hard to PIT)
   // spdMulMax: per-seed speed range; higher = more unpredictable on hard
-  easy:   { time:90, aiSpd:0.65, traffic:8,  evasion:0.25, angDamp:0.12, spdMulMax:0.10 },
+  easy:   { time:90, aiSpd:0.80, traffic:8,  evasion:0.25, angDamp:0.12, spdMulMax:0.10 },
   normal: { time:60, aiSpd:1.00, traffic:14, evasion:0.60, angDamp:0.30, spdMulMax:0.45 },
-  hard:   { time:45, aiSpd:1.35, traffic:20, evasion:0.90, angDamp:0.55, spdMulMax:0.70 },
+  hard:   { time:45, aiSpd:1.50, traffic:20, evasion:0.90, angDamp:0.55, spdMulMax:0.25 },
 };
 const CHATTER_LINES = [
   'All units — suspect is running','PIT manoeuvre authorised',
@@ -322,8 +356,9 @@ const camPos  = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 
 const inp = { throttle:false, brake:false, handbrake:false, steer:0 };
-const steerCfg   = { sensitivity: 0.0007, nonlin: 0.2, recenter: 0.6 };
-const trafficCfg = { density: 1.0 };
+let   calSteer = 0;  // steering value while in the calibration screen
+const steerCfg   = { sensitivity: 0.0007, nonlin: 0.0, recenter: 0.6 };
+const trafficCfg = { density: 2.0 };
 
 let suspStopTimer      = 0;    // seconds suspect has been nearly stopped after a PIT
 let suspSpdMul         = 1.0;  // per-seed speed multiplier for the suspect
@@ -1358,6 +1393,82 @@ function maybeChatUpdate(dt) {
 const wCtx = document.getElementById('wheel-cvs').getContext('2d');
 const mCtx = document.getElementById('minimap-cvs').getContext('2d');
 
+// ═══════════════════════════════════════════════════════
+//  STEERING CALIBRATION
+// ═══════════════════════════════════════════════════════
+const calCvs = document.getElementById('cal-wheel-cvs');
+const calCtx = calCvs.getContext('2d');
+const calReadout = document.getElementById('cal-readout');
+
+function drawCalWheel() {
+  const S = calCvs.width, c = S / 2, R = S * 0.36;
+  const atFull = Math.abs(calSteer) >= 0.985;
+  calCtx.clearRect(0, 0, S, S);
+
+  // Faint full-lock reference ring
+  calCtx.strokeStyle = 'rgba(90,138,176,.18)';
+  calCtx.lineWidth = 1;
+  calCtx.beginPath(); calCtx.arc(c, c, R + S * 0.05, 0, Math.PI * 2); calCtx.stroke();
+
+  calCtx.save();
+  calCtx.translate(c, c);
+  calCtx.rotate(calSteer * MAX_STEER * 2.2);
+  calCtx.strokeStyle = atFull ? '#44dd88' : '#5a4838';
+  calCtx.lineWidth = S * 0.06;
+  calCtx.beginPath(); calCtx.arc(0, 0, R, 0, Math.PI * 2); calCtx.stroke();
+  calCtx.lineWidth = S * 0.035;
+  for (let i = 0; i < 3; i++) {
+    calCtx.save(); calCtx.rotate(i * Math.PI * 2 / 3);
+    calCtx.beginPath(); calCtx.moveTo(0, 0); calCtx.lineTo(0, -R * 0.9); calCtx.stroke();
+    calCtx.restore();
+  }
+  calCtx.fillStyle = atFull ? '#44dd88' : '#5a4838';
+  calCtx.beginPath(); calCtx.arc(0, 0, S * 0.06, 0, Math.PI * 2); calCtx.fill();
+  calCtx.restore();
+
+  const pct = Math.round(Math.abs(calSteer) * 100);
+  const dir = calSteer > 0.01 ? 'Right' : calSteer < -0.01 ? 'Left' : '';
+  calReadout.textContent = atFull ? 'Full Lock · ' + dir
+                         : pct > 0 ? 'Steer ' + dir + ' ' + pct + '%'
+                         : 'Centered';
+  calReadout.classList.toggle('full', atFull);
+}
+
+function calibrationUpdate(dt) {
+  // Mirror the in-game auto-recenter so the feel matches exactly.
+  if (steerCfg.recenter > 0) {
+    calSteer *= Math.max(0, 1 - steerCfg.recenter * dt);
+    if (Math.abs(calSteer) < 0.001) calSteer = 0;
+  }
+  drawCalWheel();
+}
+
+function syncCalSliders() {
+  const s = steerCfg;
+  const fmt = (v, d) => v === 0 ? 'off' : (+v).toFixed(d).replace(/\.?0+$/, '');
+  document.getElementById('c-sl-sens').value = s.sensitivity;
+  document.getElementById('c-lbl-sens').textContent = fmt(s.sensitivity, 4);
+  document.getElementById('c-sl-nonlin').value = s.nonlin;
+  document.getElementById('c-lbl-nonlin').textContent = fmt(s.nonlin, 2);
+  document.getElementById('c-sl-recenter').value = s.recenter;
+  document.getElementById('c-lbl-recenter').textContent = s.recenter === 0 ? 'off' : fmt(s.recenter, 2);
+}
+
+function openCalibration() {
+  calSteer = 0;
+  syncCalSliders();
+  drawCalWheel();
+  state = 'calibrating';
+  document.getElementById('ov-start').classList.add('hidden');
+  document.getElementById('ov-calibrate').classList.remove('hidden');
+}
+
+function closeCalibration() {
+  state = 'start';
+  document.getElementById('ov-calibrate').classList.add('hidden');
+  document.getElementById('ov-start').classList.remove('hidden');
+}
+
 function updateHUD(dt) {
   const secs = Math.ceil(timer);
   const tel  = document.getElementById('hud-timer');
@@ -1739,8 +1850,14 @@ document.addEventListener('pointerlockchange', () => {
 //  INPUT
 // ═══════════════════════════════════════════════════════
 document.addEventListener('mousemove', e => {
-  if (!locked || state!=='playing') return;
   const MAX_STEER_DELTA = 0.045;
+  if (state==='calibrating') {
+    const nlFactor = 1 + steerCfg.nonlin * calSteer * calSteer;
+    const delta = clamp(e.movementX * steerCfg.sensitivity * nlFactor, -MAX_STEER_DELTA, MAX_STEER_DELTA);
+    calSteer = clamp(calSteer + delta, -1, 1);
+    return;
+  }
+  if (!locked || state!=='playing') return;
   const nlFactor = 1 + steerCfg.nonlin * inp.steer * inp.steer;
   const delta = clamp(e.movementX * steerCfg.sensitivity * nlFactor, -MAX_STEER_DELTA, MAX_STEER_DELTA);
   inp.steer = clamp(inp.steer + delta, -1, 1);
@@ -1758,6 +1875,7 @@ document.addEventListener('mouseup', e => {
 });
 renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
 document.addEventListener('keydown', e => {
+  if (e.key==='Escape' && state==='calibrating') { closeCalibration(); return; }
   if (e.key==='Escape' && state==='playing') {
     if (locked) document.exitPointerLock();
     else renderer.domElement.requestPointerLock();
@@ -1790,6 +1908,7 @@ function loopEx(ts) {
 
   if (state==='playing') gameUpdate(dt);
   else if (state==='countdown') { countdownUpdate(dt); drawCountdown(ts); }
+  else if (state==='calibrating') calibrationUpdate(dt);
 
   renderer.render(scene, camera);
 }
@@ -1805,8 +1924,29 @@ document.getElementById('diff-group').addEventListener('click', e => {
 document.getElementById('btn-rng').addEventListener('click',
   ()=>document.getElementById('seed-input').value=(Math.random()*999999999|0));
 document.getElementById('btn-start').addEventListener('click', startGame);
-document.getElementById('btn-home').addEventListener('click',
-  ()=>window.parent.postMessage({sq:'show',page:0},'*'));
+document.getElementById('btn-calibrate').addEventListener('click', openCalibration);
+document.getElementById('btn-cal-done').addEventListener('click', closeCalibration);
+document.getElementById('c-sl-sens').addEventListener('input', function() {
+  steerCfg.sensitivity = parseFloat(this.value);
+  const t = (+this.value).toFixed(4).replace(/\.?0+$/, '');
+  document.getElementById('c-lbl-sens').textContent = t;
+  document.getElementById('sl-sens').value = this.value;
+  document.getElementById('lbl-sens').textContent = t;
+});
+document.getElementById('c-sl-nonlin').addEventListener('input', function() {
+  steerCfg.nonlin = parseFloat(this.value);
+  const t = (+this.value).toFixed(2).replace(/\.?0+$/, '');
+  document.getElementById('c-lbl-nonlin').textContent = t;
+  document.getElementById('sl-nonlin').value = this.value;
+  document.getElementById('lbl-nonlin').textContent = t;
+});
+document.getElementById('c-sl-recenter').addEventListener('input', function() {
+  steerCfg.recenter = parseFloat(this.value);
+  const t = steerCfg.recenter === 0 ? 'off' : (+this.value).toFixed(2).replace(/\.?0+$/, '');
+  document.getElementById('c-lbl-recenter').textContent = t;
+  document.getElementById('sl-recenter').value = this.value;
+  document.getElementById('lbl-recenter').textContent = t;
+});
 document.getElementById('sl-sens').addEventListener('input', function() {
   steerCfg.sensitivity = parseFloat(this.value);
   document.getElementById('lbl-sens').textContent = (+this.value).toFixed(4).replace(/0+$/,'');
