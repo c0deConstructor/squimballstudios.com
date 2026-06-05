@@ -181,13 +181,13 @@
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" stroke-width="1.2"/><line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.2"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>
         Pick on Map
       </button>
-      <div class="q-field"><label>Center Latitude</label><input type="number" id="q-lat" value="-19.3066" step="0.001" min="-90" max="90"></div>
-      <div class="q-field"><label>Center Longitude</label><input type="number" id="q-lon" value="151.2126" step="0.001" min="-180" max="180"></div>
-      <div class="q-field full"><label>Search Radius (km)</label><input type="number" id="q-radius" value="4781" min="1" max="20000"></div>
+      <div class="q-field"><label>Center Latitude</label><input type="number" id="q-lat" value="41.3794" step="0.001" min="-90" max="90"></div>
+      <div class="q-field"><label>Center Longitude</label><input type="number" id="q-lon" value="-114.2228" step="0.001" min="-180" max="180"></div>
+      <div class="q-field full"><label>Search Radius (km)</label><input type="number" id="q-radius" value="7000" min="1" max="20000"></div>
       <div class="q-divider"></div>
       <div class="q-section-label">// Magnitude Filter</div>
-      <div class="q-field"><label>Min Magnitude</label><input type="number" id="q-minmag" value="1.0" step="0.1" min="0" max="10"></div>
-      <div class="q-field"><label>Max Magnitude</label><input type="number" id="q-maxmag" value="9.5" step="0.1" min="0" max="10"></div>
+      <div class="q-field"><label>Min Magnitude</label><input type="number" id="q-minmag" value="0.1" step="0.1" min="0" max="10"></div>
+      <div class="q-field"><label>Max Magnitude</label><input type="number" id="q-maxmag" value="9.9" step="0.1" min="0" max="10"></div>
     </div>
     <button id="fetch-btn">▶ Fetch &amp; Animate</button>
     <div id="fetch-error"></div>
@@ -219,9 +219,9 @@
     <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.25em;color:var(--accent);text-transform:uppercase;margin-bottom:11px;">⚙ Settings</div>
     <div class="panel-section">
       <div class="panel-section-title">Animation</div>
-      <div class="slider-row"><div class="slider-label"><span>Speed Multiplier</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="1" max="10000000" step="1" value="100000"></div>
+      <div class="slider-row"><div class="slider-label"><span>Animation Length</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="3" max="60" step="0.5" value="20"></div>
       <div class="slider-row"><div class="slider-label"><span>Fade Out (s)</span><span id="lbl-fade">1.0s</span></div><input type="range" id="sl-fade" min="0.3" max="15" step="0.1" value="1"></div>
-      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">3</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="3"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">1</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="1"></div>
       <div class="slider-row"><div class="slider-label"><span>Ripple Line Width</span><span id="lbl-ringWidth">0.04</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.04"></div>
     </div>
     <div class="panel-section">
@@ -236,9 +236,9 @@
     </div>
     <div class="panel-section">
       <div class="panel-section-title">Colors</div>
-      <div class="color-row"><label>Low Mag (≤4)</label><input type="color" id="col-low" value="#00c8b4"></div>
-      <div class="color-row"><label>Mid Mag (4–6)</label><input type="color" id="col-mid" value="#ffd166"></div>
-      <div class="color-row"><label>High Mag (≥6)</label><input type="color" id="col-high" value="#ff6b35"></div>
+      <div class="color-row"><label>Low Mag (≤4)</label><input type="color" id="col-low" value="#ffffff"></div>
+      <div class="color-row"><label>Mid Mag (4–6)</label><input type="color" id="col-mid" value="#ff0000"></div>
+      <div class="color-row"><label>High Mag (≥6)</label><input type="color" id="col-high" value="#0000ff"></div>
       <div class="color-row"><label>Border Lines</label><input type="color" id="col-borders" value="#00c8b4"></div>
     </div>
     <div class="panel-section">
@@ -288,9 +288,9 @@
 <!-- ── Legend ── -->
 <div id="legend" style="display:none">
   <div class="legend-title">Magnitude</div>
-  <div class="legend-row"><span class="legend-label">≥ 7</span><div class="legend-circle" style="width:22px;height:22px;background:#ff6b35;"></div></div>
-  <div class="legend-row"><span class="legend-label">5 – 7</span><div class="legend-circle" style="width:14px;height:14px;background:#ffd166;"></div></div>
-  <div class="legend-row"><span class="legend-label">3 – 5</span><div class="legend-circle" style="width:8px;height:8px;background:#00c8b4;"></div></div>
+  <div class="legend-row"><span class="legend-label">≥ 6</span><div class="legend-circle" id="legend-c-high" style="width:22px;height:22px;background:#0000ff;"></div></div>
+  <div class="legend-row"><span class="legend-label">4 – 6</span><div class="legend-circle" id="legend-c-mid" style="width:14px;height:14px;background:#ff0000;"></div></div>
+  <div class="legend-row"><span class="legend-label">≤ 4</span><div class="legend-circle" id="legend-c-low" style="width:8px;height:8px;background:#ffffff;"></div></div>
 </div>
 
 <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
@@ -310,17 +310,18 @@ const UP_Z = new THREE.Vector3(0, 0, 1);
 
 /* ── Settings ── */
 const settings = {
-  speed: 100000, fadeTime: 1, rings: 3, ringWidth: 0.04, pulseOpacity: 0.9,
+  speed: 100000, fadeTime: 1, rings: 1, ringWidth: 0.04, pulseOpacity: 0.9,
   baseR: 1, magScale: 2.0, maxR: 200, depthScale: 0.5,
   audioVol: 0.1, audioFreq: 0.2,
   glow: true, depth: true, atmos: true, grat: true, borders: true, autorot: false,
-  colLow: '#00c8b4', colMid: '#ffd166', colHigh: '#ff6b35', colBorders: '#00c8b4',
+  colLow: '#ffffff', colMid: '#ff0000', colHigh: '#0000ff', colBorders: '#00c8b4',
 };
 
 /* ── Sim state ── */
 let earthquakes = [], activeCircles = [];
 let animActive = false, animPaused = false;
 let lastRealTs = null, simTime = 0, eqIndex = 0, totalSimDuration = 0;
+let dataSpanMs = 0;   // real time span of the loaded dataset (first→last quake), ms
 let queryParams = {};
 let worldGeoReady = false;
 
@@ -802,7 +803,19 @@ function bindSlider(id, lblId, key, fmt) {
   lbl.textContent = fmt(settings[key]);
 }
 function fmtSpeed(v) { return v>=1e6?(v/1e6).toFixed(1)+'M×':v>=1000?(v/1000).toFixed(0)+'K×':v.toFixed(0)+'×'; }
-bindSlider('sl-speed',    'lbl-speed',    'speed',    fmtSpeed);
+// The speed slider is expressed as the target ANIMATION LENGTH (3–60 s). The
+// actual playback speed is derived from the loaded dataset's time span so the
+// whole sequence always plays in exactly that many seconds, whatever range is
+// selected:  speed = dataSpanMs / (seconds * 1000).
+const _slSpeed  = document.getElementById('sl-speed');
+const _lblSpeed = document.getElementById('lbl-speed');
+function applyAnimLength() {
+  const secs = parseFloat(_slSpeed.value);
+  if (dataSpanMs > 0) settings.speed = dataSpanMs / (secs * 1000);
+  _lblSpeed.textContent = secs.toFixed(1) + 's';
+}
+_slSpeed.addEventListener('input', applyAnimLength);
+applyAnimLength();
 bindSlider('sl-fade',     'lbl-fade',     'fadeTime', v=>v.toFixed(1)+'s');
 bindSlider('sl-rings',        'lbl-rings',        'rings',        v=>v);
 bindSlider('sl-ringWidth',    'lbl-ringWidth',    'ringWidth',    v=>v.toFixed(2));
@@ -829,10 +842,26 @@ function bindColor(id, key, cb) {
   const el = document.getElementById(id);
   el.addEventListener('input', () => { settings[key] = el.value; if(cb) cb(); });
 }
-bindColor('col-low',     'colLow');
-bindColor('col-mid',     'colMid');
-bindColor('col-high',    'colHigh');
+// Keep the magnitude legend swatches in sync with the active mag colors.
+function updateLegend() {
+  document.getElementById('legend-c-low').style.background  = settings.colLow;
+  document.getElementById('legend-c-mid').style.background  = settings.colMid;
+  document.getElementById('legend-c-high').style.background = settings.colHigh;
+}
+bindColor('col-low',     'colLow',  updateLegend);
+bindColor('col-mid',     'colMid',  updateLegend);
+bindColor('col-high',    'colHigh', updateLegend);
 bindColor('col-borders', 'colBorders', () => { if(borderLines) borderLines.material.color.set(settings.colBorders); });
+updateLegend();
+
+/* ── Default the date range to the past 7 days ── */
+(() => {
+  const end = new Date();
+  const start = new Date(end.getTime() - 7 * 86400000);
+  const iso = d => d.toISOString().slice(0, 10);
+  document.getElementById('q-start').value = iso(start);
+  document.getElementById('q-end').value   = iso(end);
+})();
 
 /* ── Panel toggle ── */
 document.getElementById('panel-toggle').addEventListener('click', () => {
@@ -887,11 +916,12 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
       return;
     }
     document.getElementById('loader-count').textContent = `${earthquakes.length} events found`;
-    // Auto-set speed: full dataset in ~40 real seconds
+    // Adapt playback speed to the dataset's actual time span so the whole
+    // sequence plays back in the chosen Animation Length (3–60 s slider),
+    // regardless of how wide the selected time range is.
     const dur = earthquakes[earthquakes.length-1].time - earthquakes[0].time;
-    settings.speed = Math.max(1000, dur / (40 * 1000));
-    document.getElementById('sl-speed').value = settings.speed;
-    document.getElementById('lbl-speed').textContent = fmtSpeed(settings.speed);
+    dataSpanMs = Math.max(dur, 1000);   // guard tiny/zero spans
+    applyAnimLength();
     await new Promise(r => setTimeout(r, 500));
     loading.style.display = 'none';
     // Orient camera toward earthquake center
