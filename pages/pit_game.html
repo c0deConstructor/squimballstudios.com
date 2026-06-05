@@ -108,8 +108,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
     </div>
     <div class="steer-row">
       <label>Auto-Recenter</label>
-      <input type="range" id="sl-recenter" min="0" max="3" step="0.05" value="0.6">
-      <span class="steer-val" id="lbl-recenter">0.6</span>
+      <input type="range" id="sl-recenter" min="0" max="3" step="0.05" value="2">
+      <span class="steer-val" id="lbl-recenter">2</span>
     </div>
   </div>
   <div class="steer-section">
@@ -154,8 +154,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
     </div>
     <div class="steer-row">
       <label>Auto-Recenter</label>
-      <input type="range" id="p-sl-recenter" min="0" max="3" step="0.05" value="0.6">
-      <span class="steer-val" id="p-lbl-recenter">0.6</span>
+      <input type="range" id="p-sl-recenter" min="0" max="3" step="0.05" value="2">
+      <span class="steer-val" id="p-lbl-recenter">2</span>
     </div>
   </div>
   <div class="steer-section">
@@ -182,7 +182,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
   <div id="cal-readout">Centered</div>
   <div class="ov-tip" style="max-width:360px">
     Move your mouse left and right to test your steering.<br>
-    Adjust the sliders until you can steer the about <b>+-25%</b> smoothly without it jerking around.
+    Adjust the sliders until you can steer the about <b>+-50%</b> smoothly without it jerking around.
   </div>
   <div class="steer-section">
     <div class="steer-section-lbl">Steering</div>
@@ -198,8 +198,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
     </div>
     <div class="steer-row">
       <label>Auto-Recenter</label>
-      <input type="range" id="c-sl-recenter" min="0" max="3" step="0.05" value="0.6">
-      <span class="steer-val" id="c-lbl-recenter">0.6</span>
+      <input type="range" id="c-sl-recenter" min="0" max="3" step="0.05" value="2">
+      <span class="steer-val" id="c-lbl-recenter">2</span>
     </div>
   </div>
   <button class="ov-btn" id="btn-cal-done" style="margin-top:6px">✓ Return to Menu</button>
@@ -357,7 +357,7 @@ const camLook = new THREE.Vector3();
 
 const inp = { throttle:false, brake:false, handbrake:false, steer:0 };
 let   calSteer = 0;  // steering value while in the calibration screen
-const steerCfg   = { sensitivity: 0.0007, nonlin: 0.0, recenter: 0.6 };
+const steerCfg   = { sensitivity: 0.0007, nonlin: 0.0, recenter: 2.0 };
 const trafficCfg = { density: 2.0 };
 
 let suspStopTimer      = 0;    // seconds suspect has been nearly stopped after a PIT
@@ -367,6 +367,8 @@ let pitTrackActive     = false; // tracking suspect rotation after a PIT contact
 let pitAccumRot        = 0;    // accumulated suspect Y rotation (radians) since contact
 let pitLastAngle       = 0;    // last frame's suspect Y angle for delta computation
 let suspOvertakeTimer  = 0;        // seconds remaining in active overtake pass
+let suspPanicTimer     = 0;        // seconds remaining in a head-on panic swerve-back
+let suspHitCivilian    = false;    // set true when the suspect strikes a civilian → player loses
 
 const SKID_MAX = 2000;
 const skidPositions = new Float32Array(SKID_MAX * 3);
@@ -1000,24 +1002,39 @@ function suspectAI(dt) {
 
   // ── Overtake decision ────────────────────────────────────────────────────
   // Use road-sequence comparison so detection works regardless of suspect lane.
-  // Tight window (8 seqs = 16 m) → suspect waits until nearly on the bumper,
-  // then swerves aggressively — looks urgent and cinematic.
+  // Generous window (~4–60 m ahead) so a pass is ALWAYS initiated in time and the
+  // suspect never gets stuck tailgating a slower car.
   let blockerSeq = -1;
   for (const c of trafficArr) {
     if (c.lane !== 1) continue;
     const seqDiff = c.roadSeq - suspRoadSeq;
-    if (seqDiff > 10 && seqDiff < 15) {           // 0–16 m ahead — last moment
+    if (seqDiff > 2 && seqDiff < 30) {            // anything ahead in our lane
       if (blockerSeq === -1 || c.roadSeq < blockerSeq) blockerSeq = c.roadSeq;
     }
   }
-  const oncomingClear = isOncomingClear(pos, 60);
 
-  // Initiate pass when a blocker is detected and the other lane is clear
-  if (blockerSeq !== -1 && oncomingClear && suspOvertakeTimer <= 0) {
+  // Is a car bearing down on us in the oncoming lane, just ahead? (head-on risk)
+  let headOnThreat = false;
+  for (const c of trafficArr) {
+    if (c.lane !== -1) continue;
+    const sd = c.roadSeq - suspRoadSeq;
+    if (sd > 0 && sd < 26) { headOnThreat = true; break; }   // within ~52 m ahead
+  }
+  if (suspPanicTimer > 0) suspPanicTimer -= dt;
+
+  // ── Panic swerve-back ─────────────────────────────────────────────────────
+  // If we're already out in the oncoming lane and a car comes head-on, abandon
+  // the pass and jerk the wheel back toward our own lane. May or may not make it.
+  if (headOnThreat && suspectLatShift < -0.2) {
+    suspOvertakeTimer = 0;     // give up the pass
+    suspPanicTimer    = 0.7;   // hard correction window
+  }
+
+  // Commit to a pass when a slower car is ahead — but only when the oncoming lane
+  // is clear enough to pull out, and never while recovering from a panic swerve.
+  if (blockerSeq !== -1 && suspOvertakeTimer <= 0 && suspPanicTimer <= 0 && !headOnThreat) {
     suspOvertakeTimer = 5.0;
   }
-  // Abort immediately if oncoming traffic appears
-  if (!oncomingClear) suspOvertakeTimer = 0;
   // Once we've road-seq-passed the blocker, allow early return with a small buffer
   if (suspOvertakeTimer > 0) {
     suspOvertakeTimer -= dt;
@@ -1026,12 +1043,16 @@ function suspectAI(dt) {
 
   // suspectLatShift: 0 = own lane, -1 = fully in oncoming lane
   const targetLatShift = suspOvertakeTimer > 0 ? -1.0 : 0.0;
-  // Very fast lerp (~0.15 s to full lane change) for maniac urgency
-  suspectLatShift += (targetLatShift - suspectLatShift) * Math.min(8 * dt, 1);
+  // Snap back extra-fast during a panic swerve, otherwise normal maniac urgency.
+  const shiftRate = suspPanicTimer > 0 ? 14 : 8;
+  suspectLatShift += (targetLatShift - suspectLatShift) * Math.min(shiftRate * dt, 1);
 
   // ── Road-following target ─────────────────────────────────────────────────
-  // Short lookahead while changing lanes → steep angle → full steer input
-  const lookM = suspOvertakeTimer > 0 ? 10 + spd * 0.15 : 18 + spd * 0.4;
+  // Short lookahead while changing lanes → steep angle → full steer input.
+  // Shortest of all during a panic swerve so the wheel yanks hard to the right.
+  const lookM = suspPanicTimer > 0   ? 8
+              : suspOvertakeTimer > 0 ? 10 + spd * 0.15
+              :                         18 + spd * 0.4;
   const tgt   = laneLookAhead(suspRoadSeq, 1, lookM);
   if (!tgt) return;
   const tp = tgt.p;
@@ -1056,10 +1077,11 @@ function suspectAI(dt) {
 
   const aidInp = { throttle: true, brake: false, handbrake: false, steer };
 
-  // Emergency brake only when jammed behind a blocker and not yet overtaking
+  // Back off the blocker when we can't pull out to pass. Rear-ending a civilian
+  // now loses the round, so brake early and scale the gap with our speed.
   if (blockerSeq !== -1 && suspOvertakeTimer <= 0) {
     const distM = (blockerSeq - suspRoadSeq) * ROAD_STEP;
-    if (distM < 12) { aidInp.throttle = false; aidInp.brake = true; }
+    if (distM < 10 + spd * 0.8) { aidInp.throttle = false; aidInp.brake = true; }
   }
 
   // ── Off-road / post-PIT recovery ─────────────────────────────────────────
@@ -1103,6 +1125,15 @@ function trafficStep(car, dt) {
   const vel = car.body.velocity;
   const spd = Math.hypot(vel.x, vel.z);
 
+  // Knocked out: no engine/steering. Bleed off velocity so it coasts to a stop
+  // and just sits there as an obstacle (collisions still shove it around).
+  if (car.disabled) {
+    const d = Math.max(0, 1 - 0.9 * dt);
+    vel.x *= d; vel.z *= d;
+    car.body.angularVelocity.y *= Math.max(0, 1 - 1.2 * dt);
+    return;
+  }
+
   const nr = findNearRoad(pos.x, pos.z, car.roadSeq);
   car.roadSeq = nr.seq;
 
@@ -1144,6 +1175,14 @@ function trafficSpawnProb() {
          ((ROAD_BUFFER_AHEAD + ROAD_BUFFER_BEHIND) / ROAD_STEP * 2);
 }
 
+// Knock a civilian car out of action: engine + steering die, it coasts to a stop
+// and remains a physical obstacle. Triggered by being rammed (see spawnTrafficCar).
+function disableTrafficCar(car) {
+  if (car.disabled) return;
+  car.disabled = true;
+  playImpact(34, 0.5);
+}
+
 function spawnTrafficCar(seq, lane) {
   const p = getRoadPt(seq); if (!p) return;
   const lx    = p.x - p.ty * LANE_HALF * lane;
@@ -1160,7 +1199,19 @@ function spawnTrafficCar(seq, lane) {
   scene.add(tm);
   const tspd = 10 + rng() * 18;
   const arrows = makeTrafficArrows();
-  trafficArr.push({ mesh:tm, body:tb, spd:tspd, lane, roadSeq:seq, arrows });
+  const car = { mesh:tm, body:tb, spd:tspd, lane, roadSeq:seq, arrows, disabled:false };
+
+  // Disable this civilian when rammed hard by the suspect or another car.
+  tb.addEventListener('collide', evt => {
+    if (car.disabled || state !== 'playing') return;
+    const otherTag = evt.body.userData;
+    if (otherTag !== 'suspect' && otherTag !== 'traffic') return;  // ignore cop / ground
+    const a = tb.velocity, b = evt.body.velocity;
+    const relSpd = Math.hypot(a.x - b.x, a.z - b.z);
+    if (relSpd > 6) disableTrafficCar(car);
+  });
+
+  trafficArr.push(car);
 }
 
 function streamTraffic() {
@@ -1302,17 +1353,24 @@ function setupCollisionListeners() {
     if (tag === 'suspect' && !pitDone && pitCooldown <= 0) tryPITContact(evt);
   });
 
-  // Suspect crashes hard into traffic or scenery → engine disabled (player wins)
+  // Suspect crashes hard into scenery → engine disabled (player wins).
+  // Suspect strikes a CIVILIAN (on its own, or because the player pushed it into
+  // one) → the round is lost. The civilian is also knocked out by its own listener.
   suspBody.addEventListener('collide', evt => {
-    if (state !== 'playing' || suspEngineDisabled) return;
+    if (state !== 'playing' || suspEngineDisabled || suspHitCivilian) return;
     const tag = evt.body.userData;
-    if (tag === 'traffic' || tag === 'static') {
-      const sv = suspBody.velocity, ov = evt.body.velocity;
-      const relSpd = Math.hypot(sv.x - ov.x, sv.z - ov.z);
+    const sv = suspBody.velocity, ov = evt.body.velocity;
+    const relSpd = Math.hypot(sv.x - ov.x, sv.z - ov.z);
+    if (tag === 'static') {
       if (relSpd > 8) {   // ~29 km/h relative — serious crash
         suspEngineDisabled = true;
         pitDone = true;
         playImpact(55, 1.0);
+      }
+    } else if (tag === 'traffic') {
+      if (relSpd > 3) {   // any real contact with a civilian → player loses
+        suspHitCivilian = true;
+        playImpact(50, 0.9);
       }
     }
   });
@@ -1627,8 +1685,9 @@ function gameUpdate(dt) {
   checkPIT(dt);
 
   timer -= dt;
-  if (timer <= 0) { endGame('time_up'); return; }
-  if (crashFlag)  { endGame('cop_crash'); return; }
+  if (timer <= 0)      { endGame('time_up');   return; }
+  if (crashFlag)       { endGame('cop_crash'); return; }
+  if (suspHitCivilian) { endGame('susp_hit_civ'); return; }
 
   const sv   = suspBody.velocity;
   const sspd = Math.hypot(sv.x, sv.z);
@@ -1746,7 +1805,7 @@ function startGame() {
   cdCount=1; cdTimer=1.0;  // "GET READY" (1 s) → "GO!" (0.5 s)
   pitDone=false; pitRating=''; endReason=''; pitCooldown=0; crashFlag=false;
   inp.throttle=inp.brake=inp.handbrake=false; inp.steer=0;
-  suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0;
+  suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0; suspPanicTimer=0; suspHitCivilian=false;
   suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0;
   locked=false; chatCooldown=8;
   skidCount=0;
@@ -1783,6 +1842,10 @@ function endGame(reason) {
   } else if (reason==='cop_crash') {
     title='MISSION FAILED'; col='#ff4422';
     meta='Cop crashed\nTime: '+elapsed.toFixed(1)+'s';
+    playJingle(false);
+  } else if (reason==='susp_hit_civ') {
+    title='MISSION FAILED'; col='#ff4422';
+    meta='Suspect struck a civilian\nTime: '+elapsed.toFixed(1)+'s';
     playJingle(false);
   } else {
     title="TIME'S UP"; col='#ff8820';
