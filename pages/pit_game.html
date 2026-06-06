@@ -368,6 +368,7 @@ let pitAccumRot        = 0;    // accumulated suspect Y rotation (radians) since
 let pitLastAngle       = 0;    // last frame's suspect Y angle for delta computation
 let suspOvertakeTimer  = 0;        // seconds remaining in active overtake pass
 let suspPanicTimer     = 0;        // seconds remaining in a head-on panic swerve-back
+let suspUrgencyTimer   = 0;        // seconds of boosted aggression after a panic swerve
 let suspHitCivilian    = false;    // set true when the suspect strikes a civilian → player loses
 
 const SKID_MAX = 2000;
@@ -1000,6 +1001,15 @@ function suspectAI(dt) {
   const nr = findNearRoad(pos.x, pos.z, suspRoadSeq);
   suspRoadSeq = nr.seq;
 
+  const curAngle = -getYAngle(suspBody.quaternion);
+  // Has the player knocked us off course — shoved us off the road, or spun us far
+  // from the road's heading? If so we drop everything and cut straight back.
+  let roadAng = curAngle;
+  { const ra = getRoadPt(suspRoadSeq), rb = getRoadPt(suspRoadSeq + 2);
+    if (ra && rb) roadAng = Math.atan2(-(rb.x - ra.x), rb.y - ra.y); }
+  const knocked = nr.dist > ROAD_HALF + 3 ||
+                  Math.abs(angleDiff(roadAng, curAngle)) > Math.PI * 0.33;   // >60° off
+
   // ── Overtake decision ────────────────────────────────────────────────────
   // Use road-sequence comparison so detection works regardless of suspect lane.
   // Generous window (~4–60 m ahead) so a pass is ALWAYS initiated in time and the
@@ -1020,20 +1030,28 @@ function suspectAI(dt) {
     const sd = c.roadSeq - suspRoadSeq;
     if (sd > 0 && sd < 26) { headOnThreat = true; break; }   // within ~52 m ahead
   }
-  if (suspPanicTimer > 0) suspPanicTimer -= dt;
+  if (suspPanicTimer > 0)   suspPanicTimer   -= dt;
+  if (suspUrgencyTimer > 0) suspUrgencyTimer -= dt;
 
-  // ── Panic swerve-back ─────────────────────────────────────────────────────
-  // If we're already out in the oncoming lane and a car comes head-on, abandon
-  // the pass and jerk the wheel back toward our own lane. May or may not make it.
-  if (headOnThreat && suspectLatShift < -0.2) {
-    suspOvertakeTimer = 0;     // give up the pass
-    suspPanicTimer    = 0.7;   // hard correction window
-  }
-
-  // Commit to a pass when a slower car is ahead — but only when the oncoming lane
-  // is clear enough to pull out, and never while recovering from a panic swerve.
-  if (blockerSeq !== -1 && suspOvertakeTimer <= 0 && suspPanicTimer <= 0 && !headOnThreat) {
-    suspOvertakeTimer = 5.0;
+  if (knocked) {
+    // Knocked off course → drop the pass and any panic state. The short-lookahead
+    // recovery steering below cuts us straight back to our own lane immediately.
+    suspOvertakeTimer = 0;
+    suspPanicTimer    = 0;
+  } else {
+    // ── Panic swerve-back ─────────────────────────────────────────────────────
+    // Already out in the oncoming lane and a car comes head-on → abandon the pass,
+    // jerk back toward our own lane, and ramp up aggression to escape.
+    if (headOnThreat && suspectLatShift < -0.2) {
+      suspOvertakeTimer = 0;     // give up the pass
+      suspPanicTimer    = 0.7;   // hard correction window
+      suspUrgencyTimer  = Math.max(suspUrgencyTimer, 3.5);  // floor it once clear
+    }
+    // Commit to a pass when a slower car is ahead — but only when the oncoming lane
+    // is clear enough to pull out, and never while recovering from a panic swerve.
+    if (blockerSeq !== -1 && suspOvertakeTimer <= 0 && suspPanicTimer <= 0 && !headOnThreat) {
+      suspOvertakeTimer = 5.0;
+    }
   }
   // Once we've road-seq-passed the blocker, allow early return with a small buffer
   if (suspOvertakeTimer > 0) {
@@ -1043,14 +1061,15 @@ function suspectAI(dt) {
 
   // suspectLatShift: 0 = own lane, -1 = fully in oncoming lane
   const targetLatShift = suspOvertakeTimer > 0 ? -1.0 : 0.0;
-  // Snap back extra-fast during a panic swerve, otherwise normal maniac urgency.
-  const shiftRate = suspPanicTimer > 0 ? 14 : 8;
+  // Snap back extra-fast during a panic swerve or a knock-recovery.
+  const shiftRate = (suspPanicTimer > 0 || knocked) ? 14 : 8;
   suspectLatShift += (targetLatShift - suspectLatShift) * Math.min(shiftRate * dt, 1);
 
   // ── Road-following target ─────────────────────────────────────────────────
   // Short lookahead while changing lanes → steep angle → full steer input.
   // Shortest of all during a panic swerve so the wheel yanks hard to the right.
-  const lookM = suspPanicTimer > 0   ? 8
+  const lookM = knocked              ? 7    // hard, immediate cut back to our lane
+              : suspPanicTimer > 0   ? 8
               : suspOvertakeTimer > 0 ? 10 + spd * 0.15
               :                         18 + spd * 0.4;
   const tgt   = laneLookAhead(suspRoadSeq, 1, lookM);
@@ -1061,13 +1080,14 @@ function suspectAI(dt) {
 
   const dx = sx - pos.x, dy = sy - pos.z;
   const wantAngle = Math.atan2(-dx, dy);
-  const curAngle  = -getYAngle(suspBody.quaternion);
   const headingErr = angleDiff(wantAngle, curAngle);
   // High gain (3.0) for aggressive, snappy steering toward offset target
   let steer = clamp(headingErr * 3.0, -1, 1);
 
   const suspTopSpd = 38 * ds.aiSpd * suspSpdMul;
-  const suspForce  = 1200 * ds.aiSpd * suspSpdMul;
+  // After a panic swerve, floor it to escape: much harder acceleration (same top
+  // speed, so still catchable) to power past the cars and away from the cop.
+  const suspForce  = 1200 * ds.aiSpd * suspSpdMul * (suspUrgencyTimer > 0 ? 1.7 : 1.0);
 
   if (suspEngineDisabled) {
     applyThrusters(suspBody, { throttle:false, brake:false, handbrake:false, steer:0 },
@@ -1092,17 +1112,6 @@ function suspectAI(dt) {
     suspBody.angularVelocity.y = clamp(-headingErr * 2.0, -2.5, 2.5);
     if (spd > 1.5) { aidInp.throttle = false; } // slow down so spin takes effect
   }
-  // If significantly off-road, override target to steer back to nearest road point
-  if (nr.dist > ROAD_HALF + 4 && Math.abs(headingErr) < Math.PI * 0.5) {
-    const rp = getRoadPt(suspRoadSeq);
-    if (rp) {
-      const rx = rp.x - pos.x, ry = rp.y - pos.z;
-      const recovAngle = Math.atan2(-rx, ry);
-      steer = clamp(angleDiff(recovAngle, curAngle) * 3.0, -1, 1);
-      aidInp.steer = steer;
-    }
-  }
-
   // Brake on tight bend ahead
   const bSeq = suspRoadSeq + Math.round(10 / ROAD_STEP);
   const bp   = getRoadPt(bSeq);
@@ -1805,7 +1814,7 @@ function startGame() {
   cdCount=1; cdTimer=1.0;  // "GET READY" (1 s) → "GO!" (0.5 s)
   pitDone=false; pitRating=''; endReason=''; pitCooldown=0; crashFlag=false;
   inp.throttle=inp.brake=inp.handbrake=false; inp.steer=0;
-  suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0; suspPanicTimer=0; suspHitCivilian=false;
+  suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0; suspPanicTimer=0; suspUrgencyTimer=0; suspHitCivilian=false;
   suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0;
   locked=false; chatCooldown=8;
   skidCount=0;
