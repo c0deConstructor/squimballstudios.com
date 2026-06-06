@@ -741,10 +741,10 @@ function buildPhysWorld() {
   carMat    = new CANNON.Material('car');
   // Very low ground friction — lateral grip comes from our custom thruster model
   cannonWorld.addContactMaterial(new CANNON.ContactMaterial(groundMat, carMat, {
-    friction: 0.005, restitution: 0.08,
+    friction: 0.0005, restitution: 0.08,
   }));
   cannonWorld.addContactMaterial(new CANNON.ContactMaterial(carMat, carMat, {
-    friction: 0.15, restitution: 0.25,
+    friction: 0.015, restitution: 0.25,
   }));
 
   const gBody = new CANNON.Body({ mass: 0, material: groundMat });
