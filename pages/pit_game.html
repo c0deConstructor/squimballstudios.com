@@ -366,6 +366,7 @@ let suspEngineDisabled = false; // set true when PIT condition is met
 let pitTrackActive     = false; // tracking suspect rotation after a PIT contact
 let pitAccumRot        = 0;    // accumulated suspect Y rotation (radians) since contact
 let pitLastAngle       = 0;    // last frame's suspect Y angle for delta computation
+let pitTrackTime       = 0;    // seconds the suspect has been free-spinning (steering off)
 let suspOvertakeTimer  = 0;        // seconds remaining in active overtake pass
 let suspPanicTimer     = 0;        // seconds remaining in a head-on panic swerve-back
 let suspUrgencyTimer   = 0;        // seconds of boosted aggression after a panic swerve
@@ -1008,7 +1009,7 @@ function suspectAI(dt) {
   { const ra = getRoadPt(suspRoadSeq), rb = getRoadPt(suspRoadSeq + 2);
     if (ra && rb) roadAng = Math.atan2(-(rb.x - ra.x), rb.y - ra.y); }
   const knocked = nr.dist > ROAD_HALF + 3 ||
-                  Math.abs(angleDiff(roadAng, curAngle)) > Math.PI * 0.33;   // >60° off
+                  Math.abs(angleDiff(roadAng, curAngle)) > Math.PI * 0.25;   // >45° off
 
   // ── Overtake decision ────────────────────────────────────────────────────
   // Use road-sequence comparison so detection works regardless of suspect lane.
@@ -1343,6 +1344,7 @@ function tryPITContact(evt) {
   // Valid PIT contact — start rotation tracking
   pitTrackActive = true;
   pitAccumRot    = 0;
+  pitTrackTime   = 0;
   pitLastAngle   = -getYAngle(suspBody.quaternion);
   pitCooldown    = 1.5;
 
@@ -1389,6 +1391,7 @@ function setupCollisionListeners() {
 function checkPIT(dt) {
   pitCooldown -= dt;
   if (!pitTrackActive) return;
+  pitTrackTime += dt;
 
   const angle = -getYAngle(suspBody.quaternion);
   pitAccumRot += Math.abs(angleDiff(angle, pitLastAngle));
@@ -1401,8 +1404,10 @@ function checkPIT(dt) {
     pitTrackActive     = false;
   }
 
-  // Timeout: reset tracking after 10 s if not triggered
-  if (pitCooldown < -10) { pitTrackActive = false; pitAccumRot = 0; }
+  // Short free-spin window: a real PIT spins the suspect out within ~1.5 s. If it
+  // hasn't (just a nudge/glance), hand steering back so the suspect immediately
+  // recovers its lane instead of coasting off-course for several seconds.
+  if (pitTrackTime > 1.5) { pitTrackActive = false; pitAccumRot = 0; }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1815,7 +1820,7 @@ function startGame() {
   pitDone=false; pitRating=''; endReason=''; pitCooldown=0; crashFlag=false;
   inp.throttle=inp.brake=inp.handbrake=false; inp.steer=0;
   suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0; suspPanicTimer=0; suspUrgencyTimer=0; suspHitCivilian=false;
-  suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0;
+  suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0; pitTrackTime=0;
   locked=false; chatCooldown=8;
   skidCount=0;
 
