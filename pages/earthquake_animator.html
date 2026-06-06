@@ -657,15 +657,28 @@ function thudFreq(mag) {
   return Math.exp(Math.log(freqMax) - t * (Math.log(freqMax) - Math.log(freqMin)));
 }
 
-function playThud(mag) {
+// Stereo pan (−1 = full left … 0 = centre … +1 = full right) from where the
+// quake projects onto the screen. Because this rides the camera projection, the
+// spread is naturally narrow when zoomed out (globe small, everything near the
+// centre) and widens toward the edges as you zoom in — giving a 3-D sense.
+function screenPan(eq) {
+  const v = geo3D(eq.lat, eq.lon, EARTH_R).project(camera);
+  return Math.max(-1, Math.min(1, v.x));
+}
+
+function playThud(mag, pan = 0) {
   if (!audioCtx || settings.audioVol === 0) return;
   const freq  = thudFreq(mag);
   // Gain: scales from 0.15 (mag1) up to 1.0 (mag9+), then multiplied by volume slider
   const peak  = Math.min(1.0, 0.15 + ((Math.max(1, mag) - 1) / 8) * 0.85) * settings.audioVol;
   const osc   = audioCtx.createOscillator();
   const gain  = audioCtx.createGain();
+  // Stereo placement: pan the thud to the quake's horizontal screen position.
+  const panner = audioCtx.createStereoPanner();
+  panner.pan.value = Math.max(-1, Math.min(1, pan));
   osc.connect(gain);
-  gain.connect(masterComp);
+  gain.connect(panner);
+  panner.connect(masterComp);
   const now = audioCtx.currentTime;
   osc.type  = 'sine';
 
@@ -709,7 +722,7 @@ function animate(ts) {
       while (eqIndex < earthquakes.length && (earthquakes[eqIndex].time - t0) <= simTime) {
         const eq = earthquakes[eqIndex];
         activeCircles.push(spawnCircle(eq));
-        playThud(eq.mag);
+        playThud(eq.mag, screenPan(eq));
         eqIndex++;
       }
     }
