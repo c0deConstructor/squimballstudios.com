@@ -112,9 +112,9 @@
 
     <div class="panel-section">
       <div class="panel-section-title">Visuals</div>
-      <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">0.90</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="0.9"></div>
-      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">4</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="4"></div>
-      <div class="slider-row"><div class="slider-label"><span>Ring Width</span><span id="lbl-ringWidth">0.4</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.4"></div>
+      <div class="slider-row"><div class="slider-label"><span>Pulse Opacity</span><span id="lbl-pulseOpacity">1.00</span></div><input type="range" id="sl-pulseOpacity" min="0.05" max="1.0" step="0.05" value="1.0"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">1</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Ring Width</span><span id="lbl-ringWidth">0.50</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.5"></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-autorot" checked><label for="chk-autorot">Auto-Rotate</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-grat" checked><label for="chk-grat">Globe Grid</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-atmos" checked><label for="chk-atmos">Atmosphere</label></div>
@@ -174,7 +174,7 @@ const PULSE_FADE  = 3.5;
 const settings = {
   massScale: 3.5, sizeScale: 1.0, speedScale: 5.0, impactInterval: 0.5,
   hardness: 0.5, trailLength: 30,
-  pulseOpacity: 0.9, rings: 5, ringWidth: 0.4,
+  pulseOpacity: 1.0, rings: 1, ringWidth: 0.5,
   autorot: true, grat: true, atmos: true,
   vol: 0.0,
 };
@@ -402,6 +402,7 @@ let RING_GEOM     = new THREE.RingGeometry(1.0 - settings.ringWidth, 1.0, 48);
 let _lastRingW    = settings.ringWidth;
 const CORE_GEOM   = new THREE.SphereGeometry(1.0, 8, 8);
 const spriteCache = {};
+const FLASH_DUR   = 0.5;   // seconds — white impact flash burst (faster than PULSE_FADE)
 
 function hexToRgba(hex, a) {
   return `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;
@@ -431,20 +432,24 @@ function spawnImpactPulse(lat, lon, energyScale, hexCol) {
   core.renderOrder = 3;
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: getSpriteTex(hexCol), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
   spr.renderOrder = 3;
+  // Bright white flash burst — grows and fades fast, on top of the coloured pulse.
+  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: getSpriteTex('#ffffff'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+  flash.renderOrder = 4;
   const rings = [];
   for (let i = 0; i < MAX_RINGS; i++) {
     const r = new THREE.Mesh(RING_GEOM, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.NormalBlending, depthWrite: false, depthTest: false }));
     r.renderOrder = 3; r.visible = false; scene.add(r); rings.push(r);
   }
-  scene.add(core); scene.add(spr);
-  obj.mesh3d = { core, spr, rings };
+  scene.add(core); scene.add(spr); scene.add(flash);
+  obj.mesh3d = { core, spr, flash, rings };
   return obj;
 }
 
 function removeCircle(obj) {
   if (!obj.mesh3d) return;
-  scene.remove(obj.mesh3d.core); obj.mesh3d.core.material.dispose();
-  scene.remove(obj.mesh3d.spr);  obj.mesh3d.spr.material.dispose();
+  scene.remove(obj.mesh3d.core);  obj.mesh3d.core.material.dispose();
+  scene.remove(obj.mesh3d.spr);   obj.mesh3d.spr.material.dispose();
+  scene.remove(obj.mesh3d.flash); obj.mesh3d.flash.material.dispose();
   for (const r of obj.mesh3d.rings) { scene.remove(r); r.material.dispose(); }
   obj.mesh3d = null;
 }
@@ -454,7 +459,7 @@ function updateCircle(obj, now) {
   if (age > PULSE_FADE) { obj.dead = true; removeCircle(obj); return; }
   const norm  = age / PULSE_FADE;
   const alpha = 1 - norm;
-  const wPeak = obj.energyScale * WORLD_SCALE * 20;
+  const wPeak = obj.energyScale * WORLD_SCALE * 60;
   const camDir    = camera.position.clone().normalize();
   const frontside = obj.outDir.dot(camDir) > -0.1;
 
@@ -468,6 +473,19 @@ function updateCircle(obj, now) {
   obj.mesh3d.spr.scale.setScalar(Math.max(wPeak * 4 * (1 - norm * 0.45), 0.001));
   obj.mesh3d.spr.material.opacity = alpha * settings.pulseOpacity * 0.5;
   obj.mesh3d.spr.visible = frontside;
+
+  // White flash burst: brighter than the pulse, grows outward, fades fast.
+  const fl    = obj.mesh3d.flash;
+  const fnorm = age / FLASH_DUR;
+  if (fnorm < 1 && frontside) {
+    const fa = (1 - fnorm) * (1 - fnorm);   // quick ease-out fade
+    fl.position.copy(obj.pos);
+    fl.scale.setScalar(Math.max(wPeak * (1.5 + fnorm * 4.5), 0.001));
+    fl.material.opacity = fa * settings.pulseOpacity;
+    fl.visible = true;
+  } else {
+    fl.visible = false;
+  }
 
   for (let i = 0; i < MAX_RINGS; i++) {
     const ring = obj.mesh3d.rings[i];
@@ -683,9 +701,10 @@ function runExplosion(now) {
   const el = now - explosionStartTs;
 
   if (explosionPhase === 'flash') {
-    if      (el < 60)  setFlash((el / 60).toFixed(3));
-    else if (el < 110) setFlash('1');
-    else if (el < 340) setFlash(((1 - (el - 110) / 230)).toFixed(3));
+    // Bigger, longer full-white flash than any individual impact.
+    if      (el < 70)  setFlash((el / 70).toFixed(3));
+    else if (el < 200) setFlash('1');
+    else if (el < 480) setFlash(((1 - (el - 200) / 280)).toFixed(3));
     else {
       setFlash('0');
       globe.visible = false;
