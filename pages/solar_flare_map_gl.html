@@ -181,21 +181,22 @@
   </div>
   <div class="sec">
     <h3>Animation</h3>
-    <div class="row"><span class="label-min">Speed</span><input type="range" id="s-speed" min="0" max="100" step="1" value="35"><span class="val" id="v-speed">—</span></div>
+    <div class="row"><span class="label-min">Length</span><input type="range" id="s-speed" min="3" max="60" step="0.5" value="20"><span class="val" id="v-speed">—</span></div>
     <div class="row"><span class="label-min">Fade</span><input type="range" id="s-fade" min="0.3" max="15" step="0.1" value="1"><span class="val" id="v-fade">1.0s</span></div>
     <div class="row"><span class="label-min">Rings</span><input type="range" id="s-rings" min="0" max="5" step="1" value="1"><span class="val" id="v-rings">1</span></div>
   </div>
   <div class="sec">
     <h3>Pulse size</h3>
-    <div class="row"><span class="label-min">Base</span><input type="range" id="s-base" min="2" max="40" step="1" value="5"><span class="val" id="v-base">5</span></div>
+    <div class="row"><span class="label-min">Base</span><input type="range" id="s-base" min="2" max="40" step="1" value="2"><span class="val" id="v-base">2</span></div>
     <div class="row"><span class="label-min">Scale</span><input type="range" id="s-scale" min="0.5" max="6" step="0.1" value="3"><span class="val" id="v-scale">3.0</span></div>
     <div class="row"><span class="label-min">Max</span><input type="range" id="s-max" min="20" max="300" step="5" value="120"><span class="val" id="v-max">120</span></div>
+    <div class="row"><span class="label-min">Opacity</span><input type="range" id="s-opacity" min="0" max="1" step="0.05" value="0.7"><span class="val" id="v-opacity">0.70</span></div>
   </div>
   <div class="sec">
     <h3>Colors</h3>
-    <div class="row"><span class="label-min">C class</span><input type="color" id="s-cC" value="#ffd166"></div>
-    <div class="row"><span class="label-min">M class</span><input type="color" id="s-cM" value="#ff6b35"></div>
-    <div class="row"><span class="label-min">X class</span><input type="color" id="s-cX" value="#ff3860"></div>
+    <div class="row"><span class="label-min">C class</span><input type="color" id="s-cC" value="#ff0000"></div>
+    <div class="row"><span class="label-min">M class</span><input type="color" id="s-cM" value="#ffffff"></div>
+    <div class="row"><span class="label-min">X class</span><input type="color" id="s-cX" value="#0000ff"></div>
     <div class="row"><span class="label-min">Sun</span><input type="color" id="s-cSun" value="#ffaa33"></div>
     <div class="row"><span class="label-min">Grid</span><input type="color" id="s-cGrid" value="#5a4a2a"></div>
   </div>
@@ -252,8 +253,8 @@ const SUN_ROT_RATE = 360 / (27.27 * 24 * 3600 * 1000); // °/ms sim time
 /* ── Simulation state (mirrored from original) ── */
 const settings = {
   speed: 126, fade: 1, rings: 1,
-  base: 5, scale: 3, max: 120,
-  cC: '#ffd166', cM: '#ff6b35', cX: '#ff3860',
+  base: 2, scale: 3, max: 120, opacity: 0.7,
+  cC: '#ff0000', cM: '#ffffff', cX: '#0000ff',
   cSun: '#ffaa33', cGrid: '#5a4a2a',
   grat: true, back: true, rotate: true, wind: true,
   showC: true, showM: true, showX: true,
@@ -530,13 +531,13 @@ function updateCircle3D(c, now) {
   const coreR = worldPeak * (0.35 + norm * 0.15);
   c.mesh3d.core.position.copy(pos.clone().multiplyScalar(1.005));
   c.mesh3d.core.scale.setScalar(Math.max(coreR, 0.001));
-  c.mesh3d.core.material.opacity = alpha * 0.9 * backA;
+  c.mesh3d.core.material.opacity = alpha * 0.9 * backA * settings.opacity;
   c.mesh3d.core.visible = visible;
 
   const sprScale = worldPeak * 3.5 * (1 - norm * 0.4);
   c.mesh3d.sprite.position.copy(pos.clone().multiplyScalar(1.006));
   c.mesh3d.sprite.scale.setScalar(Math.max(sprScale, 0.001));
-  c.mesh3d.sprite.material.opacity = alpha * 0.5 * backA;
+  c.mesh3d.sprite.material.opacity = alpha * 0.5 * backA * settings.opacity;
   c.mesh3d.sprite.visible = visible;
 
   for (let i = 0; i < MAX_RINGS; i++) {
@@ -546,7 +547,7 @@ function updateCircle3D(c, now) {
     ring.position.copy(pos.clone().multiplyScalar(1.008));
     ring.quaternion.setFromUnitVectors(UP_Z, outDir);
     ring.scale.setScalar(Math.max(ringR, 0.001));
-    ring.material.opacity = (1 - ringNorm) * 0.75 * alpha * backA;
+    ring.material.opacity = (1 - ringNorm) * 0.75 * alpha * backA * settings.opacity;
     ring.visible = visible && i < settings.rings;
   }
 }
@@ -567,16 +568,24 @@ function parseClass(s) {
 const CLASS_RANK = { C:0, M:1, X:2 };
 function colorForClass(l) { return l==='X'?settings.cX : l==='M'?settings.cM : settings.cC; }
 function classRadiusMultiplier(l, mag) {
-  return ({C:1.0,M:1.6,X:2.6}[l]||1.0) * (1 + Math.log10(Math.max(mag,0.1))*0.25);
+  // Wide gaps between classes so C / M / X are unmistakable at a glance, plus a
+  // stronger within-class growth with magnitude that still never overlaps the
+  // next class (C: 1.0–1.35, M: 2.5–3.4, X: 5.0–6.7+).
+  return ({C:1.0,M:2.5,X:5.0}[l]||1.0) * (1 + Math.log10(Math.max(mag,0.1))*0.35);
 }
 function fmtDate(ms) { if (!isFinite(ms)) return '—'; return new Date(ms).toISOString().replace('T',' ').slice(0,16)+'Z'; }
 function todayStr(off=0) { return new Date(Date.now()+off*86400000).toISOString().slice(0,10); }
 
-const SPEED_LO = Math.log10(1e3), SPEED_HI = Math.log10(2e6);
-function sliderToSpeed(v) { return Math.round(Math.pow(10, SPEED_LO + v*(SPEED_HI-SPEED_LO)/100)); }
-function speedToSlider(s) { return Math.min(100, Math.max(0, Math.round((Math.log10(Math.max(s,1e3))-SPEED_LO)*100/(SPEED_HI-SPEED_LO)))); }
-function speedLabel(s) { return s>=1e6?(s/1e6).toFixed(1)+'M×':s>=1000?(s/1000).toFixed(1)+'K×':s+'×'; }
-function setSpeed(v) { v=Math.min(100,Math.max(0,Math.round(v))); settings.speed=sliderToSpeed(v); $('s-speed').value=v; $('v-speed').textContent=speedLabel(settings.speed); }
+// The slider is the target ANIMATION LENGTH (3–60 s). Playback speed is derived
+// from the loaded dataset's time span so the whole sequence always plays in
+// exactly that many seconds, whatever date range is selected:
+//   speed = spanMs / (seconds * 1000).
+function applyAnimLength() {
+  const secs = parseFloat($('s-speed').value);
+  const span = datasetEnd - datasetStart;
+  if (span > 0) settings.speed = span / (secs * 1000);
+  $('v-speed').textContent = secs.toFixed(1) + 's';
+}
 
 /* ── Loop / replay ── */
 function scheduleLoop() {
@@ -657,13 +666,13 @@ function drawFlatMap2D(now) {
 
     ctx2.save();
     ctx2.shadowColor = c.color; ctx2.shadowBlur = 14*(1-norm*0.5);
-    ctx2.globalAlpha = alpha;
+    ctx2.globalAlpha = alpha * settings.opacity;
     ctx2.fillStyle   = c.color;
     ctx2.beginPath(); ctx2.arc(proj.x, proj.y, peakR*(0.35+norm*0.15), 0, Math.PI*2); ctx2.fill();
     for (let i=0; i<settings.rings; i++) {
       const rn=(norm+i*0.18)%1;
       const rr=peakR*(0.5+rn*1.4);
-      ctx2.globalAlpha=(1-rn)*0.6*alpha;
+      ctx2.globalAlpha=(1-rn)*0.6*alpha*settings.opacity;
       ctx2.lineWidth=2; ctx2.strokeStyle=c.color;
       ctx2.beginPath(); ctx2.arc(proj.x, proj.y, rr, 0, Math.PI*2); ctx2.stroke();
     }
@@ -845,12 +854,13 @@ function bindRange(id, key, fmt) {
   el.addEventListener('input', () => { settings[key]=parseFloat(el.value); if(out) out.textContent=fmt(settings[key]); });
   if (out) out.textContent = fmt(settings[key]);
 }
-{ const el=$('s-speed'); el.addEventListener('input', () => setSpeed(parseFloat(el.value))); setSpeed(35); }
+{ const el=$('s-speed'); el.addEventListener('input', applyAnimLength); applyAnimLength(); }
 bindRange('s-fade',  'fade',  v=>v.toFixed(1)+'s');
 bindRange('s-rings', 'rings', v=>v.toFixed(0));
 bindRange('s-base',  'base',  v=>v.toFixed(0));
 bindRange('s-scale', 'scale', v=>v.toFixed(1));
 bindRange('s-max',   'max',   v=>v.toFixed(0));
+bindRange('s-opacity','opacity', v=>v.toFixed(2));
 ['cC','cM','cX','cSun','cGrid'].forEach(k => { $('s-'+k).addEventListener('input', e => settings[k]=e.target.value); });
 ['grat','back','rotate','wind'].forEach(k => { $('t-'+k).addEventListener('change', e => settings[k]=e.target.checked); });
 ['C','M','X'].forEach(cls => { $('t-show'+cls).addEventListener('change', e => settings['show'+cls]=e.target.checked); });
@@ -956,7 +966,7 @@ async function doFetch() {
   flares = parsed;
   datasetStart = flares[0].peak;
   datasetEnd   = flares[flares.length-1].peak + 60_000;
-  setSpeed(speedToSlider((datasetEnd-datasetStart)/(20*1000)));
+  applyAnimLength();   // derive speed for the chosen length + this dataset's span
   cancelLoop(); simTime=0; firedCount=0; activeCircles=[]; reachedEnd=false; animPaused=false;
   $('h-play').textContent='❚❚'; $('h-total').textContent=flares.length;
   hasQueried=true;
