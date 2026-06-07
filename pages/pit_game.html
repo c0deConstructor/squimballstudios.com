@@ -122,8 +122,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
   </div>
   <button class="start-btn" id="btn-start">▶ BEGIN PURSUIT</button>
   <div class="ov-tip">
-    LMB — Throttle &nbsp;·&nbsp; RMB — Brake &nbsp;·&nbsp; MMB — Handbrake<br>
-    Mouse LEFT / RIGHT — Steer (no auto-return) &nbsp;·&nbsp; ESC — Pause
+    LMB / W / ↑ — Throttle &nbsp;·&nbsp; RMB / S / ↓ — Brake &nbsp;·&nbsp; MMB — Handbrake<br>
+    Mouse or A&nbsp;D / ←&nbsp;→ — Steer &nbsp;·&nbsp; ESC — Pause
   </div>
 </div>
 
@@ -357,6 +357,14 @@ const camLook = new THREE.Vector3();
 
 const inp = { throttle:false, brake:false, handbrake:false, steer:0 };
 let   calSteer = 0;  // steering value while in the calibration screen
+// Raw per-source input state; combined into `inp` each frame so mouse + keyboard
+// (WASD / arrows) work simultaneously without fighting over the same flags.
+const mouse = { gas:false, brake:false, hand:false };
+const keys  = { gas:false, brake:false, left:false, right:false };
+const KEY_STEER_RATE = 3000;   // held-key steer ramp multiplier (per second)
+const KEY_SENS       = 0.0002; // fixed keyboard steer feel — NOT tied to the mouse slider
+const KEY_RECENTER   = 4.5;    // stronger auto-recenter when driving with the keyboard
+let   kbSteering     = false;  // true when the keyboard is the active steering method
 const steerCfg   = { sensitivity: 0.0007, nonlin: 0.0, recenter: 2.0 };
 const trafficCfg = { density: 2.0 };
 
@@ -722,6 +730,9 @@ function buildSkidSystem() {
   const posAttr = new THREE.BufferAttribute(skidPositions, 3);
   posAttr.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('position', posAttr);
+  // skidPositions is reused across rounds; start with nothing drawn so last
+  // round's marks don't show until fresh skids are laid down (skidCount is 0 here).
+  geo.setDrawRange(0, skidCount);
   skidMesh = new THREE.Points(geo, new THREE.PointsMaterial({ color:0x1a1208, size:0.4, sizeAttenuation:true }));
   skidMesh.renderOrder = 1;
   scene.add(skidMesh);
@@ -1668,9 +1679,25 @@ function gameUpdate(dt) {
   const copNr = findNearRoad(copBody.position.x, copBody.position.z, copRoadSeq);
   copRoadSeq = copNr.seq;
 
-  // Auto-recenter steering
-  if (steerCfg.recenter > 0) {
-    inp.steer *= Math.max(0, 1 - steerCfg.recenter * dt);
+  // ── Combine input sources (mouse buttons + keyboard) ──
+  inp.throttle  = mouse.gas   || keys.gas;
+  inp.brake     = mouse.brake || keys.brake;
+  inp.handbrake = mouse.hand;
+
+  // Keyboard steering — held A/D (or ←/→) ramp the wheel; the mouse still steers
+  // too. Uses a fixed feel (KEY_SENS), independent of the mouse sensitivity slider.
+  const keySteer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  if (keySteer !== 0) {
+    kbSteering = true;
+    inp.steer = clamp(inp.steer + keySteer * KEY_SENS * KEY_STEER_RATE * dt, -1, 1);
+  }
+
+  // Auto-recenter: keyboard drivers get a stronger automatic recenter (easier to
+  // drive, harder to spin out); mouse drivers get the slider value. Skipped while
+  // a steer key is held so the keyboard can still hold a full turn.
+  const recRate = kbSteering ? KEY_RECENTER : steerCfg.recenter;
+  if (recRate > 0 && keySteer === 0) {
+    inp.steer *= Math.max(0, 1 - recRate * dt);
     if (Math.abs(inp.steer) < 0.001) inp.steer = 0;
   }
 
@@ -1819,6 +1846,9 @@ function startGame() {
   cdCount=1; cdTimer=1.0;  // "GET READY" (1 s) → "GO!" (0.5 s)
   pitDone=false; pitRating=''; endReason=''; pitCooldown=0; crashFlag=false;
   inp.throttle=inp.brake=inp.handbrake=false; inp.steer=0;
+  mouse.gas=mouse.brake=mouse.hand=false;
+  keys.gas=keys.brake=keys.left=keys.right=false;
+  kbSteering=false;
   suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0; suspPanicTimer=0; suspUrgencyTimer=0; suspHitCivilian=false;
   suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0; pitTrackTime=0;
   locked=false; chatCooldown=8;
@@ -1935,20 +1965,21 @@ document.addEventListener('mousemove', e => {
     return;
   }
   if (!locked || state!=='playing') return;
+  if (e.movementX !== 0) kbSteering = false;   // active mouse steering → slider recenter
   const nlFactor = 1 + steerCfg.nonlin * inp.steer * inp.steer;
   const delta = clamp(e.movementX * steerCfg.sensitivity * nlFactor, -MAX_STEER_DELTA, MAX_STEER_DELTA);
   inp.steer = clamp(inp.steer + delta, -1, 1);
 });
 document.addEventListener('mousedown', e => {
-  if (e.button===0) inp.throttle=true;
+  if (e.button===0) mouse.gas=true;
   if (state!=='playing' || !locked) return;
-  if (e.button===2) inp.brake=true;
-  if (e.button===1) { e.preventDefault(); inp.handbrake=true; }
+  if (e.button===2) mouse.brake=true;
+  if (e.button===1) { e.preventDefault(); mouse.hand=true; }
 });
 document.addEventListener('mouseup', e => {
-  if (e.button===0) inp.throttle=false;
-  if (e.button===2) inp.brake=false;
-  if (e.button===1) inp.handbrake=false;
+  if (e.button===0) mouse.gas=false;
+  if (e.button===2) mouse.brake=false;
+  if (e.button===1) mouse.hand=false;
 });
 renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
 document.addEventListener('keydown', e => {
@@ -1956,6 +1987,23 @@ document.addEventListener('keydown', e => {
   if (e.key==='Escape' && state==='playing') {
     if (locked) document.exitPointerLock();
     else renderer.domElement.requestPointerLock();
+    return;
+  }
+  // Keyboard driving — gas/brake/steer (only while actively driving)
+  if (state!=='playing' || !locked) return;
+  switch (e.key) {
+    case 'w': case 'W': case 'ArrowUp':    keys.gas=true;   e.preventDefault(); break;
+    case 's': case 'S': case 'ArrowDown':  keys.brake=true; e.preventDefault(); break;
+    case 'a': case 'A': case 'ArrowLeft':  keys.left=true;  e.preventDefault(); break;
+    case 'd': case 'D': case 'ArrowRight': keys.right=true; e.preventDefault(); break;
+  }
+});
+document.addEventListener('keyup', e => {
+  switch (e.key) {
+    case 'w': case 'W': case 'ArrowUp':    keys.gas=false;   break;
+    case 's': case 'S': case 'ArrowDown':  keys.brake=false; break;
+    case 'a': case 'A': case 'ArrowLeft':  keys.left=false;  break;
+    case 'd': case 'D': case 'ArrowRight': keys.right=false; break;
   }
 });
 
