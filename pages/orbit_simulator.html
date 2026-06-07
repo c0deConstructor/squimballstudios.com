@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbit Simulator — Squimball Studios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #04040a;
+    --accent:  #e8ff47;
+    --text:    #c8c8d4;
+    --muted:   #555560;
+    --border:  #2a2a30;
+    --panel:   #11131a;
+    --font:    'JetBrains Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  #sim { position: fixed; inset: 0; display: block; cursor: crosshair; }
+
+  /* ── HUD (top-left) ── */
+  #hud {
+    position: fixed; top: 14px; left: 14px;
+    z-index: 10; pointer-events: none;
+    line-height: 1.5;
+  }
+  #hud .big {
+    font-size: 30px; font-weight: 700; letter-spacing: .02em;
+    color: var(--accent); text-shadow: 0 0 24px rgba(232,255,71,.3);
+  }
+  #hud .big small { font-size: 10px; font-weight: 600; letter-spacing: .2em;
+    color: var(--muted); text-transform: uppercase; display: block; margin-bottom: -2px; }
+  #hud .row { font-size: 11px; letter-spacing: .08em; color: var(--text); margin-top: 6px; }
+  #hud .row span { color: var(--accent); font-weight: 600; }
+  #hud .muted { color: var(--muted); }
+
+  /* selected-object readout */
+  #sel {
+    margin-top: 14px; padding: 10px 12px;
+    background: rgba(17,19,26,.72); border: 1px solid var(--border);
+    border-left: 2px solid var(--accent); border-radius: 0 4px 4px 0;
+    font-size: 10px; letter-spacing: .06em; display: none; min-width: 168px;
+  }
+  #sel.on { display: block; }
+  #sel h3 { font-size: 9px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 7px; }
+  #sel .l { display: flex; justify-content: space-between; margin: 3px 0; }
+  #sel .l b { color: #fff; font-weight: 600; }
+  #sel .det { color: var(--muted); margin-top: 7px; font-size: 9px; letter-spacing: .12em; }
+  #sel .det b { color: #ff6a5a; }
+
+  /* ── controls legend (bottom-left) ── */
+  #help {
+    position: fixed; bottom: 12px; left: 14px; z-index: 10;
+    pointer-events: none; font-size: 9px; line-height: 1.85;
+    letter-spacing: .07em; color: var(--muted);
+  }
+  #help b { color: var(--text); font-weight: 600; }
+
+  /* ── gear / settings button ── */
+  #gear {
+    position: fixed; top: 14px; right: 14px; z-index: 20;
+    width: 30px; height: 30px; border-radius: 5px;
+    background: rgba(17,19,26,.8); border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    transition: color .15s, border-color .15s;
+  }
+  #gear:hover, #gear.on { color: var(--accent); border-color: var(--accent); }
+
+  /* ── settings panel ── */
+  #panel {
+    position: fixed; top: 52px; right: 14px; z-index: 20;
+    width: 252px; background: var(--panel);
+    border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    border-radius: 0 0 6px 6px; padding: 14px 16px 16px;
+    opacity: 0; transform: translateY(-8px); pointer-events: none;
+    transition: opacity .2s, transform .2s;
+  }
+  #panel.on { opacity: 1; transform: none; pointer-events: all; }
+  #panel h2 { font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border); }
+  .ctl { margin-bottom: 11px; }
+  .ctl label { display: flex; justify-content: space-between; font-size: 9px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .ctl label b { color: var(--accent); font-weight: 600; }
+  .ctl input[type=range] { width: 100%; height: 3px; -webkit-appearance: none; appearance: none;
+    background: var(--border); border-radius: 2px; outline: none; cursor: pointer; }
+  .ctl input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+    width: 12px; height: 12px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+  .ctl input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: none;
+    border-radius: 50%; background: var(--accent); cursor: pointer; }
+
+  .speed-row { display: flex; gap: 4px; margin-bottom: 12px; }
+  .speed-row button, .act-row button {
+    flex: 1; font-family: var(--font); font-size: 9px; letter-spacing: .06em;
+    padding: 6px 0; background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 3px; cursor: pointer;
+    transition: all .12s; text-transform: uppercase;
+  }
+  .speed-row button:hover, .act-row button:hover { color: var(--text); border-color: var(--muted); }
+  .speed-row button.on { background: var(--accent); color: #06060a; border-color: var(--accent); font-weight: 700; }
+  .act-row { display: flex; gap: 6px; margin-top: 4px; }
+  .act-row button:hover { color: #ff6a5a; border-color: #ff6a5a; }
+
+  /* flash overlay when a cascade wipes the field */
+  #wipe {
+    position: fixed; inset: 0; z-index: 15; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; letter-spacing: .35em; text-transform: uppercase;
+    color: #ff6a5a; opacity: 0; transition: opacity .4s;
+  }
+  #wipe.on { opacity: 1; }
+</style>
+</head>
+<body>
+
+<canvas id="sim"></canvas>
+
+<div id="hud">
+  <div class="big"><small>in orbit</small><span id="orbit">0</span></div>
+  <div class="row">total active <span id="total">0</span></div>
+  <div class="row muted">best <span id="best">0</span></div>
+
+  <div id="sel">
+    <h3>Selected</h3>
+    <div class="l">speed <b id="s-speed">0</b></div>
+    <div class="l">altitude <b id="s-alt">0</b></div>
+    <div class="l">status <b id="s-stat">—</b></div>
+    <div class="det">W/S pro·retro · A/D lateral · <b>SPACE detonate</b></div>
+  </div>
+</div>
+
+<div id="help">
+  <b>drag</b> launch &nbsp;·&nbsp; <b>click</b> select &nbsp;·&nbsp; <b>W/S</b> thrust &nbsp;·&nbsp; <b>A/D</b> lateral<br>
+  <b>space</b> detonate &nbsp;·&nbsp; <b>right-drag</b> pan &nbsp;·&nbsp; <b>wheel</b> zoom
+</div>
+
+<button id="gear" title="Settings">⚙</button>
+
+<div id="panel">
+  <h2>Parameters</h2>
+
+  <div class="speed-row" id="speed">
+    <button data-ts="0">❚❚</button>
+    <button data-ts="0.5">0.5×</button>
+    <button data-ts="1" class="on">1×</button>
+    <button data-ts="2">2×</button>
+  </div>
+
+  <div class="ctl"><label>Gravity (G) <b id="v-g">1.0</b></label>
+    <input type="range" id="r-g" min="0" max="10" step="0.1" value="1"></div>
+  <div class="ctl"><label>Planet mass (×10⁶) <b id="v-m">1.0</b></label>
+    <input type="range" id="r-m" min="0.2" max="10" step="0.1" value="1"></div>
+  <div class="ctl"><label>Launch power <b id="v-l">2.0</b></label>
+    <input type="range" id="r-l" min="0.5" max="4" step="0.1" value="2"></div>
+  <div class="ctl"><label>Thrust power <b id="v-t">50</b></label>
+    <input type="range" id="r-t" min="0" max="200" step="5" value="50"></div>
+  <div class="ctl"><label>Shockwave speed <b id="v-ss">250</b></label>
+    <input type="range" id="r-ss" min="50" max="600" step="10" value="250"></div>
+  <div class="ctl"><label>Shockwave radius <b id="v-sr">160</b></label>
+    <input type="range" id="r-sr" min="40" max="400" step="10" value="160"></div>
+  <div class="ctl"><label>Trail length (s) <b id="v-tr">5.0</b></label>
+    <input type="range" id="r-tr" min="0" max="10" step="0.5" value="5"></div>
+
+  <div class="act-row">
+    <button id="btn-reset">Reset Field</button>
+    <button id="btn-resetbest">Reset Best</button>
+  </div>
+</div>
+
+<div id="wipe">cascade — field cleared</div>
+
+<script>
+"use strict";
+(function () {
+
+/* ─────────────────────────────────────────────────────────────
+   CONSTANTS  (physics ported from the Unity Orbitz prototype)
+   ───────────────────────────────────────────────────────────── */
+const DT          = 0.02;        // fixed step = Unity FixedUpdate (50 Hz)
+const PLANET_R    = 10.0;       // central body radius (world units)
+const ORBITER_R   = 3.5;         // orbiter visual + collision radius
+const DESPAWN_R   = 5000;        // remove objects past this distance
+const CLICK_THRESH= 5;           // px drag below which a gesture = click/select
+const TRAIL_DT    = 0.04;        // sim-seconds between trail samples
+
+/* tunables (driven by the settings panel) */
+const P = {
+  G: 2, massM: 2, launchMult: 2.0, thrust: 50,
+  shockSpeed: 250, shockMax: 160, trailSec: 5,
+};
+let MU = P.G * P.massM * 1e6;    // gravitational parameter G·M
+function recalcMU() { MU = P.G * P.massM * 1e6; }
+
+/* ─────────────────────────────────────────────────────────────
+   STATE
+   ───────────────────────────────────────────────────────────── */
+let objects    = [];   // orbiters
+let shockwaves = [];
+let flashes    = [];
+let blasts     = [];   // explosion centers queued for this step
+let selected   = null;
+let timeScale  = 1;
+let best       = parseInt(localStorage.getItem('sq_orbit_best') || '0', 10) || 0;
+
+const cam = { x: 0, y: 0, zoom: 0.9 };   // px per world unit
+const keys = { pro: false, retro: false, left: false, right: false };
+
+const canvas = document.getElementById('sim');
+const ctx    = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+
+/* ─────────────────────────────────────────────────────────────
+   CANVAS SIZING
+   ───────────────────────────────────────────────────────────── */
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width  = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ─────────────────────────────────────────────────────────────
+   COORD TRANSFORMS
+   ───────────────────────────────────────────────────────────── */
+function w2sx(x) { return (x - cam.x) * cam.zoom + W / 2; }
+function w2sy(y) { return (y - cam.y) * cam.zoom + H / 2; }
+function s2w(sx, sy) {
+  return { x: (sx - W / 2) / cam.zoom + cam.x, y: (sy - H / 2) / cam.zoom + cam.y };
+}
+
+/* ─────────────────────────────────────────────────────────────
+   SPAWNING / EXPLOSIONS
+   ───────────────────────────────────────────────────────────── */
+function spawnOrbiter(x, y, vx, vy) {
+  objects.push({
+    x, y, vx, vy,
+    radius: ORBITER_R,
+    heading: Math.atan2(vy, vx) || 0,
+    trail: [], trailT: 0,
+    bound: false, energy: 0, r: 0, speed: 0,
+    dead: false,
+  });
+}
+
+function launch(start, end) {
+  // velocity = dir.normalized * dragLen * launchMult  ==  (end-start) * launchMult
+  const vx = (end.x - start.x) * P.launchMult;
+  const vy = (end.y - start.y) * P.launchMult;
+  spawnOrbiter(start.x, start.y, vx, vy);
+}
+
+function spawnShock(x, y) {
+  shockwaves.push({ x, y, r: 0, speed: P.shockSpeed, maxR: P.shockMax, dead: false });
+}
+function spawnFlash(x, y) {
+  flashes.push({ x, y, life: 0.28, max: 0.28 });
+}
+function explode(o) {            // queue an orbiter's destruction
+  if (o.dead) return;
+  o.dead = true;
+  blasts.push({ x: o.x, y: o.y });
+}
+
+/* ─────────────────────────────────────────────────────────────
+   THRUST (prograde / retrograde / lateral) on the selected object
+   ───────────────────────────────────────────────────────────── */
+function applyThrust(o, dt) {
+  const sp = Math.hypot(o.vx, o.vy);
+  let hx, hy;
+  if (sp > 1e-3) { hx = o.vx / sp; hy = o.vy / sp; o.heading = Math.atan2(hy, hx); }
+  else           { hx = Math.cos(o.heading); hy = Math.sin(o.heading); }
+
+  let ax = 0, ay = 0;
+  if (keys.pro)   { ax += hx;  ay += hy;  }
+  if (keys.retro) { ax -= hx;  ay -= hy;  }
+  if (keys.left)  { ax += hy; ay += -hx;  }   // heading rotated +90°
+  if (keys.right) { ax += -hy;  ay += hx; }   // heading rotated -90°
+
+  const m = Math.hypot(ax, ay);
+  if (m > 0) { o.vx += (ax / m) * P.thrust * dt; o.vy += (ay / m) * P.thrust * dt; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PHYSICS STEP  (semi-implicit Euler, fixed dt)
+   ───────────────────────────────────────────────────────────── */
+const trailMax = () => Math.ceil(P.trailSec / TRAIL_DT);
+
+function step(dt) {
+  // 1 — gravity + thrust + integrate
+  for (const o of objects) {
+    const r2 = o.x * o.x + o.y * o.y;
+    const r  = Math.sqrt(r2);
+    if (r2 > 1e-6) {
+      const f = MU / (r2 * r);          // MU / r^3
+      o.vx += (-o.x) * f * dt;
+      o.vy += (-o.y) * f * dt;
+    }
+    if (o === selected) applyThrust(o, dt);
+    o.x += o.vx * dt;
+    o.y += o.vy * dt;
+
+    // bookkeeping
+    o.r = Math.hypot(o.x, o.y);
+    o.speed = Math.hypot(o.vx, o.vy);
+    o.energy = o.speed * o.speed / 2 - MU / Math.max(o.r, 1e-3);
+    o.bound = o.energy < 0 && o.r < DESPAWN_R;
+
+    // trail sampling
+    o.trailT -= dt;
+    if (o.trailT <= 0) {
+      o.trail.push(o.x, o.y);
+      const cap = trailMax() * 2;
+      if (o.trail.length > cap) o.trail.splice(0, o.trail.length - cap);
+      o.trailT = TRAIL_DT;
+    }
+  }
+
+  // 2 — planet collision (only the orbiter explodes)
+  for (const o of objects) {
+    if (o.dead) continue;
+    if (o.r < PLANET_R + o.radius) explode(o);
+  }
+
+  // 3 — orbiter↔orbiter collision (both explode)
+  for (let i = 0; i < objects.length; i++) {
+    const a = objects[i]; if (a.dead) continue;
+    for (let j = i + 1; j < objects.length; j++) {
+      const b = objects[j]; if (b.dead) continue;
+      const dx = a.x - b.x, dy = a.y - b.y;
+      const rr = a.radius + b.radius;
+      if (dx * dx + dy * dy < rr * rr) { explode(a); explode(b); }
+    }
+  }
+
+  // 4 — shockwaves expand and consume orbiters in their path (cascade)
+  for (const s of shockwaves) {
+    s.r += s.speed * dt;
+    if (s.r > s.maxR) s.dead = true;
+    for (const o of objects) {
+      if (o.dead) continue;
+      const dx = o.x - s.x, dy = o.y - s.y;
+      if (dx * dx + dy * dy <= s.r * s.r) explode(o);
+    }
+  }
+
+  // 5 — despawn far drifters (no explosion, matches Unity)
+  for (const o of objects) {
+    if (!o.dead && o.r > DESPAWN_R) o.dead = true;
+  }
+
+  // 6 — resolve explosions → new shockwaves + flashes (cascade seeds for next step)
+  for (const e of blasts) { spawnShock(e.x, e.y); spawnFlash(e.x, e.y); }
+  blasts.length = 0;
+
+  // 7 — sweep dead
+  const hadObjects = objects.length;
+  const boundBefore = liveBound;
+  if (selected && selected.dead) selected = null;
+  objects    = objects.filter(o => !o.dead);
+  shockwaves = shockwaves.filter(s => !s.dead);
+
+  // 8 — flashes decay
+  for (const f of flashes) f.life -= dt;
+  flashes = flashes.filter(f => f.life > 0);
+
+  // 9 — counters + best + cascade-wipe detection
+  let bound = 0;
+  for (const o of objects) if (o.bound) bound++;
+  liveBound = bound;
+  if (bound > best) { best = bound; localStorage.setItem('sq_orbit_best', String(best)); }
+
+  // a "cascade wipe": we had a meaningful field and it just emptied
+  if (hadObjects >= 3 && objects.length === 0 && boundBefore >= 2) triggerWipe();
+}
+
+let liveBound = 0;
+
+/* ─────────────────────────────────────────────────────────────
+   RENDER
+   ───────────────────────────────────────────────────────────── */
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#04040a';
+  ctx.fillRect(0, 0, W, H);
+
+  drawStarfield();
+  drawPlanet();
+  drawTrails();
+  drawShockwaves();
+  drawFlashes();
+  drawOrbiters();
+  drawSelection();
+  drawAim();
+  updateHUD();
+}
+
+/* lightweight parallax-free star dots (drawn in screen space, stable) */
+let stars = null;
+function drawStarfield() {
+  if (!stars) {
+    stars = [];
+    for (let i = 0; i < 140; i++)
+      stars.push({ x: Math.random(), y: Math.random(), a: Math.random() * 0.4 + 0.1 });
+  }
+  ctx.fillStyle = '#ffffff';
+  for (const s of stars) {
+    ctx.globalAlpha = s.a;
+    ctx.fillRect(s.x * W, s.y * H, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPlanet() {
+  const cx = w2sx(0), cy = w2sy(0), R = PLANET_R * cam.zoom;
+  const g = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 2.4);
+  g.addColorStop(0, 'rgba(215,250,0,0.28)');
+  g.addColorStop(1, 'rgba(215,250,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 2.4, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#d7fa00';
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath(); ctx.arc(cx + R * 0.22, cy + R * 0.22, R * 0.86, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawTrails() {
+  if (P.trailSec <= 0) return;
+  ctx.lineWidth = 1.4;
+  for (const o of objects) {
+    const t = o.trail;
+    if (t.length < 4) continue;
+    ctx.strokeStyle = o.bound ? 'rgba(232,255,71,0.22)' : 'rgba(255,106,90,0.18)';
+    ctx.beginPath();
+    ctx.moveTo(w2sx(t[0]), w2sy(t[1]));
+    for (let i = 2; i < t.length; i += 2) ctx.lineTo(w2sx(t[i]), w2sy(t[i + 1]));
+    ctx.stroke();
+  }
+}
+
+function drawShockwaves() {
+  for (const s of shockwaves) {
+    const k = 1 - s.r / s.maxR;                 // fade as it grows
+    const cx = w2sx(s.x), cy = w2sy(s.y), R = s.r * cam.zoom;
+    ctx.lineWidth = Math.max(1.5, 6 * cam.zoom * k);
+    ctx.strokeStyle = `rgba(255,${Math.round(150 + 105 * k)},${Math.round(60 * k)},${0.85 * k + 0.1})`;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+function drawFlashes() {
+  for (const f of flashes) {
+    const k = f.life / f.max;
+    const cx = w2sx(f.x), cy = w2sy(f.y);
+    const R = ORBITER_R * cam.zoom * (1 + (1 - k) * 5);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0,   `rgba(255,255,255,${0.9 * k})`);
+    g.addColorStop(0.4, `rgba(255,251,196,${0.7 * k})`);
+    g.addColorStop(1,   'rgba(255,140,40,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawOrbiters() {
+  for (const o of objects) {
+    const cx = w2sx(o.x), cy = w2sy(o.y);
+    const R = Math.max(2, o.radius * cam.zoom);
+    ctx.fillStyle = o.bound ? '#f2f2f8' : '#ff6a5a';
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawSelection() {
+  if (!selected) return;
+  const cx = w2sx(selected.x), cy = w2sy(selected.y);
+  const R = Math.max(2, selected.radius * cam.zoom);
+  ctx.strokeStyle = '#e8ff47'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, R + 6, 0, Math.PI * 2); ctx.stroke();
+  // velocity vector
+  ctx.strokeStyle = 'rgba(232,255,71,0.6)';
+  ctx.beginPath(); ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + selected.vx * 0.35 * cam.zoom, cy + selected.vy * 0.35 * cam.zoom);
+  ctx.stroke();
+}
+
+function drawAim() {
+  if (!drag.active || drag.mode !== 'launch') return;
+  const a = drag.startScreen, b = drag.curScreen;
+  ctx.strokeStyle = 'rgba(232,255,71,0.85)'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#e8ff47';
+  ctx.beginPath(); ctx.arc(a.x, a.y, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   HUD
+   ───────────────────────────────────────────────────────────── */
+const el = id => document.getElementById(id);
+const hOrbit = el('orbit'), hTotal = el('total'), hBest = el('best');
+const selBox = el('sel'), sSpeed = el('s-speed'), sAlt = el('s-alt'), sStat = el('s-stat');
+
+function updateHUD() {
+  hOrbit.textContent = liveBound;
+  hTotal.textContent = objects.length;
+  hBest.textContent  = best;
+  if (selected) {
+    selBox.classList.add('on');
+    sSpeed.textContent = selected.speed.toFixed(0);
+    sAlt.textContent   = Math.max(0, selected.r - PLANET_R).toFixed(0);
+    sStat.textContent  = selected.bound ? 'BOUND' : 'ESCAPING';
+    sStat.style.color  = selected.bound ? '#fff' : '#ff6a5a';
+  } else {
+    selBox.classList.remove('on');
+  }
+}
+
+let wipeTimer = 0;
+const wipeEl = el('wipe');
+function triggerWipe() { wipeEl.classList.add('on'); wipeTimer = 1.4; }
+
+/* ─────────────────────────────────────────────────────────────
+   MAIN LOOP  (fixed-step accumulator)
+   ───────────────────────────────────────────────────────────── */
+let acc = 0, last = performance.now(), raf = 0;
+function loop(now) {
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.1) dt = 0.1;                  // avoid spiral after tab-out
+  acc += dt * timeScale;
+  let guard = 0;
+  while (acc >= DT && guard < 8) { step(DT); acc -= DT; guard++; }
+  if (acc > DT) acc = 0;                    // drop backlog if overloaded
+
+  if (wipeTimer > 0) { wipeTimer -= dt; if (wipeTimer <= 0) wipeEl.classList.remove('on'); }
+
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+raf = requestAnimationFrame(loop);
+
+/* ─────────────────────────────────────────────────────────────
+   INPUT — mouse (launch / select / pan / zoom)
+   ───────────────────────────────────────────────────────────── */
+const drag = { active: false, mode: null, startScreen: null, startWorld: null, curScreen: null, moved: 0, hit: null };
+const panS = { active: false, lastX: 0, lastY: 0 };
+
+function pickObject(sx, sy) {
+  let bestO = null, bestD = Infinity;
+  for (const o of objects) {
+    const d = Math.hypot(w2sx(o.x) - sx, w2sy(o.y) - sy);
+    const hitR = Math.max(o.radius * cam.zoom, 10);
+    if (d < hitR && d < bestD) { bestD = d; bestO = o; }
+  }
+  return bestO;
+}
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+canvas.addEventListener('mousedown', e => {
+  canvas.focus();
+  const sx = e.clientX, sy = e.clientY;
+  if (e.button === 0) {
+    drag.active = true; drag.mode = 'launch';
+    drag.startScreen = { x: sx, y: sy };
+    drag.curScreen   = { x: sx, y: sy };
+    drag.startWorld  = s2w(sx, sy);
+    drag.moved = 0;
+    drag.hit   = pickObject(sx, sy);
+  } else if (e.button === 2) {
+    panS.active = true; panS.lastX = sx; panS.lastY = sy;
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  const sx = e.clientX, sy = e.clientY;
+  if (drag.active) {
+    drag.curScreen = { x: sx, y: sy };
+    drag.moved = Math.hypot(sx - drag.startScreen.x, sy - drag.startScreen.y);
+  }
+  if (panS.active) {
+    cam.x -= (sx - panS.lastX) / cam.zoom;
+    cam.y -= (sy - panS.lastY) / cam.zoom;
+    panS.lastX = sx; panS.lastY = sy;
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  if (e.button === 0 && drag.active) {
+    drag.active = false;
+    if (drag.moved < CLICK_THRESH) {
+      selected = drag.hit || null;          // click → select / deselect
+    } else {
+      launch(drag.startWorld, s2w(e.clientX, e.clientY));   // drag → launch
+    }
+  }
+  if (e.button === 2) panS.active = false;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const before = s2w(e.clientX, e.clientY);
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  cam.zoom = Math.max(0.1, Math.min(8, cam.zoom * factor));
+  const after = s2w(e.clientX, e.clientY);
+  cam.x += before.x - after.x;
+  cam.y += before.y - after.y;
+}, { passive: false });
+
+/* ─────────────────────────────────────────────────────────────
+   INPUT — keyboard (thrust + detonate)
+   ───────────────────────────────────────────────────────────── */
+canvas.tabIndex = 0;   // allow the canvas to hold keyboard focus
+
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+  if (k === 'w' || k === 'arrowup')    keys.pro   = true;
+  if (k === 's' || k === 'arrowdown')  keys.retro = true;
+  if (k === 'a' || k === 'arrowleft')  keys.left  = true;
+  if (k === 'd' || k === 'arrowright') keys.right = true;
+  if ((k === ' ' || k === 'x') && selected) { explode(selected); selected = null; }
+});
+window.addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'arrowup')    keys.pro   = false;
+  if (k === 's' || k === 'arrowdown')  keys.retro = false;
+  if (k === 'a' || k === 'arrowleft')  keys.left  = false;
+  if (k === 'd' || k === 'arrowright') keys.right = false;
+});
+
+/* ─────────────────────────────────────────────────────────────
+   SETTINGS PANEL
+   ───────────────────────────────────────────────────────────── */
+const gear = el('gear'), panel = el('panel');
+gear.addEventListener('click', () => {
+  const on = panel.classList.toggle('on');
+  gear.classList.toggle('on', on);
+});
+
+function bindSlider(id, valId, key, fmt, after) {
+  const r = el(id), v = el(valId);
+  r.addEventListener('input', () => {
+    P[key] = parseFloat(r.value);
+    v.textContent = fmt(P[key]);
+    if (after) after();
+  });
+}
+bindSlider('r-g',  'v-g',  'G',          x => x.toFixed(1), recalcMU);
+bindSlider('r-m',  'v-m',  'massM',      x => x.toFixed(1), recalcMU);
+bindSlider('r-l',  'v-l',  'launchMult', x => x.toFixed(1));
+bindSlider('r-t',  'v-t',  'thrust',     x => x.toFixed(0));
+bindSlider('r-ss', 'v-ss', 'shockSpeed', x => x.toFixed(0));
+bindSlider('r-sr', 'v-sr', 'shockMax',   x => x.toFixed(0));
+bindSlider('r-tr', 'v-tr', 'trailSec',   x => x.toFixed(1));
+
+document.querySelectorAll('#speed button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#speed button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    timeScale = parseFloat(b.dataset.ts);
+  });
+});
+
+el('btn-reset').addEventListener('click', () => {
+  objects = []; shockwaves = []; flashes = []; blasts = []; selected = null; liveBound = 0;
+});
+el('btn-resetbest').addEventListener('click', () => {
+  best = 0; localStorage.setItem('sq_orbit_best', '0');
+});
+
+el('best').textContent = best;
+
+})();
+</script>
+</body>
+</html>
