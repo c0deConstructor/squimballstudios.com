@@ -66,7 +66,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 <!-- HUD -->
 <div id="hud">
   <div id="hud-timer">60</div>
-  <div id="hud-speed">0 km/h</div>
+  <div id="hud-speed">0 mph</div>
   <div id="hud-state">COP</div>
   <div id="wheel-wrap">
     <canvas id="wheel-cvs" width="80" height="80"></canvas>
@@ -362,7 +362,7 @@ let   calSteer = 0;  // steering value while in the calibration screen
 const mouse = { gas:false, brake:false, hand:false };
 const keys  = { gas:false, brake:false, left:false, right:false };
 const KEY_STEER_RATE = 3000;   // held-key steer ramp multiplier (per second)
-const KEY_SENS       = 0.0002; // fixed keyboard steer feel — NOT tied to the mouse slider
+const KEY_SENS       = 0.0001; // fixed keyboard steer feel — NOT tied to the mouse slider
 const KEY_RECENTER   = 4.5;    // stronger auto-recenter when driving with the keyboard
 let   kbSteering     = false;  // true when the keyboard is the active steering method
 const steerCfg   = { sensitivity: 0.0007, nonlin: 0.0, recenter: 2.0 };
@@ -578,6 +578,9 @@ function initRoadMesh() {
 
   roadMeshDynamic = new THREE.Mesh(geo, MAT.road);
   roadMeshDynamic.receiveShadow = true;
+  // Positions are streamed in-place; the cached bounding sphere goes stale and
+  // would frustum-cull the road mid-chase. It's always near the camera, so skip culling.
+  roadMeshDynamic.frustumCulled = false;
   scene.add(roadMeshDynamic);
 
   // Lane marking mesh (dashed centre line)
@@ -598,6 +601,7 @@ function initRoadMesh() {
   markGeo.setDrawRange(0, 0);
   roadMarkMesh = new THREE.Mesh(markGeo, MAT.marking);
   roadMarkMesh.renderOrder = 1;
+  roadMarkMesh.frustumCulled = false;
   scene.add(roadMarkMesh);
 }
 
@@ -735,6 +739,8 @@ function buildSkidSystem() {
   geo.setDrawRange(0, skidCount);
   skidMesh = new THREE.Points(geo, new THREE.PointsMaterial({ color:0x1a1208, size:0.4, sizeAttenuation:true }));
   skidMesh.renderOrder = 1;
+  // Streamed positions → stale bounding sphere would cull skids at some angles.
+  skidMesh.frustumCulled = false;
   scene.add(skidMesh);
 }
 
@@ -1438,7 +1444,7 @@ function addSkids(body) {
     if (skidCount < SKID_MAX) {
       const si = skidCount*3;
       skidPositions[si]   = bx + rt.x*hw*side;
-      skidPositions[si+1] = 0.12;
+      skidPositions[si+1] = 0.18;   // sit clearly above the road (0.08) to avoid z-fighting
       skidPositions[si+2] = by + rt.y*hw*side;
       skidCount++;
     }
@@ -1559,14 +1565,14 @@ function updateHUD(dt) {
   tel.className   = timer<5?'crit':timer<15?'warn':'';
 
   const vel = copBody.velocity;
-  const kph = Math.round(Math.hypot(vel.x, vel.z)*3.6);
-  document.getElementById('hud-speed').textContent = kph + ' km/h';
+  const mph = Math.round(Math.hypot(vel.x, vel.z)*2.23694);
+  document.getElementById('hud-speed').textContent = mph + ' mph';
 
   const sv = suspBody.velocity;
-  const suspSpd = Math.round(Math.hypot(sv.x, sv.z)*3.6);
+  const suspSpd = Math.round(Math.hypot(sv.x, sv.z)*2.23694);
   const nr  = findNearRoad(suspBody.position.x, suspBody.position.z, suspRoadSeq);
   const onRoad = nr.dist < ROAD_HALF + 2;
-  document.getElementById('hud-state').textContent = 'SUSPECT ' + suspSpd + ' · ' + (onRoad?'ON ROAD':'OFF ROAD');
+  document.getElementById('hud-state').textContent = 'SUSPECT ' + suspSpd + ' MPH · ' + (onRoad?'ON ROAD':'OFF ROAD');
 
   toastTimer -= dt;
   if (toastTimer <= 0) document.getElementById('toast').style.opacity='0';
