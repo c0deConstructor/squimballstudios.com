@@ -27,6 +27,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 #minimap-cvs{display:block;background:#0a0a0a}
 #toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:24px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;pointer-events:none;opacity:0;transition:opacity .2s;text-shadow:0 2px 8px rgba(0,0,0,.8)}
 #chatter{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);background:rgba(0,0,20,.7);border:1px solid rgba(80,120,200,.35);color:#8aacf0;font-size:10px;letter-spacing:.14em;padding:6px 18px;pointer-events:none;opacity:0;transition:opacity .4s;white-space:nowrap}
+#suspect-marker{position:fixed;z-index:12;pointer-events:none;display:none;border:2px solid #ffe000;box-shadow:0 0 12px rgba(255,224,0,.55),inset 0 0 10px rgba(255,224,0,.2)}
+#suspect-marker-label{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;white-space:nowrap;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#ffe000;text-shadow:0 0 6px rgba(255,224,0,.75)}
 
 /* ── OVERLAYS ── */
 .overlay{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(2,4,12,.84)}
@@ -78,6 +80,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
   <div id="toast"></div>
   <div id="chatter"></div>
 </div>
+
+<!-- Suspect targeting box (flashes at round start to identify the suspect) -->
+<div id="suspect-marker"><span id="suspect-marker-label">◤ Suspect Vehicle ◥</span></div>
 
 <!-- Start overlay -->
 <div id="ov-start" class="overlay">
@@ -378,6 +383,7 @@ let pitTrackTime       = 0;    // seconds the suspect has been free-spinning (st
 let suspOvertakeTimer  = 0;        // seconds remaining in active overtake pass
 let suspPanicTimer     = 0;        // seconds remaining in a head-on panic swerve-back
 let suspUrgencyTimer   = 0;        // seconds of boosted aggression after a panic swerve
+let suspMarkerT        = 0;        // seconds remaining to flash the "suspect vehicle" target box
 let suspHitCivilian    = false;    // set true when the suspect strikes a civilian → player loses
 
 const SKID_MAX = 2000;
@@ -778,6 +784,10 @@ function makeBoxCar(x, y_road, angle, tag) {
   body.addShape(new CANNON.Box(new CANNON.Vec3(CAR_W/2, CAR_H/2, CAR_L/2)));
   body.position.set(x, CAR_H / 2, y_road);        // center sits one half-height above ground
   body.quaternion.setFromEuler(0, roadFwdAngle_3D(angle), 0);
+  // Seed the interpolated transform (used for rendering) so the car never shows
+  // at the origin for a frame before its first physics step.
+  body.interpolatedPosition.copy(body.position);
+  body.interpolatedQuaternion.copy(body.quaternion);
   body.linearDamping  = 0.06;
   body.angularDamping = tag === 'suspect' ? 0.35 : 0.7;
   body.userData = tag;
@@ -869,9 +879,12 @@ function applyThrusters(body, input, engineForce, maxSpeedKph, hintRoadSeq) {
 // ═══════════════════════════════════════════════════════
 //  DEBUG ARROWS — show thruster directions/forces
 // ═══════════════════════════════════════════════════════
+// Debug directional thruster arrows — OFF by default. Flip to true to visualize forces.
+const DEBUG_ARROWS = false;
 let copArrows = [], suspArrows = [];
 
 function makeDebugArrows(frontCol, rearCol) {
+  if (!DEBUG_ARROWS) return [];
   const arr = [];
   for (let i = 0; i < 4; i++) {
     const a = new THREE.ArrowHelper(
@@ -938,6 +951,7 @@ function updateDebugArrows(arrows, body, input, engineForce, maxSpeedKph) {
 
 // For traffic: simpler 2-arrow visualization (just front + rear combined)
 function makeTrafficArrows() {
+  if (!DEBUG_ARROWS) return [];
   const arr = [];
   for (let i = 0; i < 4; i++) {
     const a = new THREE.ArrowHelper(
@@ -1628,8 +1642,11 @@ function updateHUD(dt) {
 //  CAMERA
 // ═══════════════════════════════════════════════════════
 function updateCamera(dt) {
-  const pos = copBody.position;
-  const fwd = bodyFwd(copBody);
+  // Use the interpolated (render-smooth) transform to match syncMesh, so the
+  // tracked cop doesn't appear to vibrate relative to the camera.
+  const pos = copBody.interpolatedPosition;
+  const a   = -getYAngle(copBody.interpolatedQuaternion);
+  const fwd = { x: -Math.sin(a), y: Math.cos(a) };
 
   const tPos = new THREE.Vector3(pos.x - fwd.x*30, 38, pos.z - fwd.y*30);
   const tLook= new THREE.Vector3(pos.x + fwd.x*15,  3, pos.z + fwd.y*15);
@@ -1638,6 +1655,34 @@ function updateCamera(dt) {
   camLook.lerp(tLook, 7*dt);
   camera.position.copy(camPos);
   camera.lookAt(camLook);
+}
+
+// Flashing yellow "Suspect Vehicle" target box, shown for a few seconds at the
+// start of the round so the player knows which car to chase.
+const _smVec = new THREE.Vector3();
+const suspectMarkerEl = document.getElementById('suspect-marker');
+function updateSuspectMarker(dt) {
+  if (suspMarkerT <= 0 || !suspBody) { suspectMarkerEl.style.display = 'none'; return; }
+  suspMarkerT -= dt;
+
+  const p = suspBody.interpolatedPosition;
+  _smVec.set(p.x, p.y + 0.4, p.z);
+  const dist = camera.position.distanceTo(_smVec);
+  _smVec.project(camera);
+  // Behind the camera or off-screen → hide this frame.
+  if (_smVec.z > 1 || Math.abs(_smVec.x) > 1.3 || Math.abs(_smVec.y) > 1.3) {
+    suspectMarkerEl.style.display = 'none'; return;
+  }
+  const size = clamp(3600 / dist, 54, 170);
+  const sx = ( _smVec.x * 0.5 + 0.5) * window.innerWidth;
+  const sy = (-_smVec.y * 0.5 + 0.5) * window.innerHeight;
+  // Blink on/off ~every 0.32 s for a "targeting" feel.
+  const blinkOn = Math.floor(suspMarkerT / 0.32) % 2 === 0;
+  suspectMarkerEl.style.display = blinkOn ? 'block' : 'none';
+  suspectMarkerEl.style.left   = Math.round(sx - size / 2) + 'px';
+  suspectMarkerEl.style.top    = Math.round(sy - size / 2) + 'px';
+  suspectMarkerEl.style.width  = Math.round(size) + 'px';
+  suspectMarkerEl.style.height = Math.round(size) + 'px';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1660,10 +1705,12 @@ function updateLightBar(dt) {
 // yOff: vertical shift from physics body center to Three.js mesh group origin.
 // RaycastVehicle chassis center ≈ 1.16m → offset -1.0 puts mesh group near ground.
 // Traffic box center ≈ 0.65m (CAR_H/2) → offset -0.65 puts mesh group at ground.
+// Render from the cannon-es *interpolated* transform (smooth at the display rate)
+// rather than the raw 60 Hz step position — otherwise fast/tracked cars judder.
 function syncMesh(mesh, body, yOff = -1.0) {
-  mesh.position.copy(body.position);
+  mesh.position.copy(body.interpolatedPosition);
   mesh.position.y += yOff;
-  mesh.quaternion.copy(body.quaternion);
+  mesh.quaternion.copy(body.interpolatedQuaternion);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1726,6 +1773,7 @@ function gameUpdate(dt) {
 
   updateLightBar(dt);
   updateCamera(dt);
+  updateSuspectMarker(dt);
   updateAudio(dt);
   updateHUD(dt);
   maybeChatUpdate(dt);
@@ -1772,7 +1820,7 @@ function countdownUpdate(dt) {
     if (roadPts.length !== prevLen) updateRoadMesh();
     streamTraffic(); streamScenery();
   }
-  if (copBody) { updateHUD(dt); updateCamera(dt); }
+  if (copBody) { updateHUD(dt); updateCamera(dt); updateSuspectMarker(dt); }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1856,6 +1904,7 @@ function startGame() {
   keys.gas=keys.brake=keys.left=keys.right=false;
   kbSteering=false;
   suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0; suspPanicTimer=0; suspUrgencyTimer=0; suspHitCivilian=false;
+  suspMarkerT=4.0;   // flash the "suspect vehicle" target box for the first few seconds
   suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0; pitTrackTime=0;
   locked=false; chatCooldown=8;
   skidCount=0;

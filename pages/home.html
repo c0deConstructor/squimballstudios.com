@@ -40,15 +40,15 @@
   .wrap {
     position: relative;
     z-index: 1;
-    max-width: 980px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 72px 28px 100px;
+    padding: 72px 10px 100px;
   }
 
   /* ── Hero ── */
   .hero {
     text-align: center;
-    padding: 48px 0 80px;
+    padding: 48px 0 30px;
     animation: fadeUp .6s ease both;
   }
 
@@ -111,9 +111,12 @@
   /* ── Cards ── */
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
   }
+  @media (max-width: 1080px) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 800px)  { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px)  { .cards { grid-template-columns: 1fr; } }
 
   .card {
     background: var(--surf);
@@ -203,6 +206,7 @@
     text-align: center;
     line-height: 2.2;
     opacity: .55;
+    animation: seizurePulse 4s ease-in-out infinite;
   }
   .seizure-notice::before {
     content: '';
@@ -218,6 +222,11 @@
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(18px); }
     to   { opacity: 1; transform: translateY(0); }
+  }
+  /* Gentle attention pulse for the photosensitivity notice */
+  @keyframes seizurePulse {
+    0%, 100% { color: var(--muted); }
+    50%      { color: #ffe000; }
   }
   @keyframes blink {
     0%, 100% { opacity: .7; }
@@ -303,10 +312,20 @@
     <div class="card" style="animation-delay:.47s" onclick="launch(7)">
       <div class="card-id">SIM · 007</div>
       <div class="card-title">Orbit Simulator</div>
-      <div class="card-desc">Top-down 2D gravity sandbox. Drag to launch objects into orbit, select one to thrust prograde/retrograde, and detonate to trigger radiating shockwaves. Bank as many stable orbits as you can before a chain reaction wipes the field.</div>
+      <div class="card-desc">Top-down 2D gravity sandbox. Drag to launch objects into orbit, thrust prograde/retrograde, and detonate to trigger radiating shockwaves. Bank as many stable orbits as you can.</div>
       <div class="card-foot">
         <span class="badge badge-live">Live</span>
         <button class="launch">Launch →</button>
+      </div>
+    </div>
+
+    <div class="card soon" style="animation-delay:.54s">
+      <div class="card-id">SIM · 008 // ████████</div>
+      <div class="card-title">[ DATA RESTRICTED ]</div>
+      <div class="card-desc">⚠ ACCESS DENIED · CLEARANCE LEVEL ███ REQUIRED. Project "██████████" exists beyond your authorization scope. <br /><br />Project Reference: [REDACTED]</div>
+      <div class="card-foot">
+        <span class="badge badge-soon">Classified</span>
+        <span class="launch" style="color:var(--muted);cursor:default">⊘ Locked</span>
       </div>
     </div>
 
