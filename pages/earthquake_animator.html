@@ -102,8 +102,11 @@
   #hud-zoom { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
 
   /* ── PROGRESS BAR ── */
-  #progress-bar-wrap { position: fixed; bottom: 0; left: 0; right: 0; height: 3px; z-index: 40; background: rgba(0,200,180,0.07); pointer-events: none; }
-  #progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent3)); box-shadow: 0 0 8px var(--accent); transition: width 0.1s linear; }
+  /* Wrap is a tall, transparent click/hover zone; the visible track is pinned to the very bottom. */
+  #progress-bar-wrap { position: fixed; bottom: 0; left: 0; right: 0; height: 14px; z-index: 40; pointer-events: auto; cursor: pointer; }
+  #progress-bar-track { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(0,200,180,0.07); pointer-events: none; }
+  #progress-bar { position: absolute; bottom: 0; left: 0; height: 3px; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent3)); box-shadow: 0 0 8px var(--accent); transition: width 0.1s linear; pointer-events: none; }
+  #progress-knob { position: absolute; bottom: 0; left: 0; width: 11px; height: 11px; border-radius: 50%; background: var(--accent3); border: 1.5px solid var(--bg); box-shadow: 0 0 8px var(--accent3); transform: translateX(-50%); pointer-events: none; opacity: 0; transition: opacity 0.12s; }
 
   /* ── CONTROLS BAR ── */
   #controls-bar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 40; display: flex; gap: 8px; align-items: center; background: var(--panel-bg); border: 1px solid var(--border); padding: 10px 16px; }
@@ -190,7 +193,7 @@
 
 <div id="gl-container"></div>
 <div id="grid-overlay"></div>
-<div id="gl-badge">WebGL · 3D Globe</div>
+<!-- <div id="gl-badge">WebGL · 3D Globe</div> -->
 
 <!-- ── Query Modal ── -->
 <div id="query-modal">
@@ -261,7 +264,7 @@
     <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.25em;color:var(--accent);text-transform:uppercase;margin-bottom:11px;">⚙ Settings</div>
     <div class="panel-section">
       <div class="panel-section-title">Animation</div>
-      <div class="slider-row"><div class="slider-label"><span>Animation Length</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="3" max="60" step="0.5" value="20"></div>
+      <div class="slider-row"><div class="slider-label"><span>Animation Length</span><span id="lbl-speed">—</span></div><input type="range" id="sl-speed" min="3" max="180" step="0.5" value="20"></div>
       <div class="slider-row"><div class="slider-label"><span>Fade Out (s)</span><span id="lbl-fade">1.0s</span></div><input type="range" id="sl-fade" min="0.3" max="15" step="0.1" value="1"></div>
       <div class="slider-row"><div class="slider-label"><span>Ripple Rings</span><span id="lbl-rings">1</span></div><input type="range" id="sl-rings" min="0" max="5" step="1" value="1"></div>
       <div class="slider-row"><div class="slider-label"><span>Ripple Line Width</span><span id="lbl-ringWidth">0.04</span></div><input type="range" id="sl-ringWidth" min="0.02" max="0.5" step="0.01" value="0.04"></div>
@@ -277,10 +280,18 @@
       <div class="slider-row"><div class="slider-label"><span>Audio Frequencies</span><span id="lbl-audioFreq">Low</span></div><input type="range" id="sl-audioFreq" min="0" max="1" step="0.05" value="0.2"></div>
     </div>
     <div class="panel-section">
+      <div class="panel-section-title">Magnitude Ranges</div>
+      <div class="slider-row"><div class="slider-label"><span>Low / Mid Split</span><span id="lbl-magRange1">5.0</span></div><input type="range" id="sl-magRange1" min="0.1" max="9.7" step="0.1" value="5"></div>
+      <div class="slider-row"><div class="slider-label"><span>Mid / High Split</span><span id="lbl-magRange2">7.0</span></div><input type="range" id="sl-magRange2" min="0.2" max="9.8" step="0.1" value="7"></div>
+      <div class="slider-row"><div class="slider-label"><span>Low Range Scale</span><span id="lbl-scaleLow">0.1×</span></div><input type="range" id="sl-scaleLow" min="0.1" max="5" step="0.1" value="0.1"></div>
+      <div class="slider-row"><div class="slider-label"><span>Mid Range Scale</span><span id="lbl-scaleMid">1.0×</span></div><input type="range" id="sl-scaleMid" min="0.1" max="5" step="0.1" value="1"></div>
+      <div class="slider-row"><div class="slider-label"><span>High Range Scale</span><span id="lbl-scaleHigh">4.5×</span></div><input type="range" id="sl-scaleHigh" min="0.1" max="5" step="0.1" value="4.5"></div>
+    </div>
+    <div class="panel-section">
       <div class="panel-section-title">Colors</div>
-      <div class="color-row"><label>Low Mag (≤4)</label><input type="color" id="col-low" value="#ffffff"></div>
-      <div class="color-row"><label>Mid Mag (4–6)</label><input type="color" id="col-mid" value="#ff0000"></div>
-      <div class="color-row"><label>High Mag (≥6)</label><input type="color" id="col-high" value="#0000ff"></div>
+      <div class="color-row"><label id="col-lbl-low">Low Mag (≤4.0)</label><input type="color" id="col-low" value="#ffffff"></div>
+      <div class="color-row"><label id="col-lbl-mid">Mid Mag (4.0–6.0)</label><input type="color" id="col-mid" value="#ff0000"></div>
+      <div class="color-row"><label id="col-lbl-high">High Mag (≥6.0)</label><input type="color" id="col-high" value="#0000ff"></div>
       <div class="color-row"><label>Border Lines</label><input type="color" id="col-borders" value="#00c8b4"></div>
     </div>
     <div class="panel-section">
@@ -291,6 +302,7 @@
       <div class="checkbox-row"><input type="checkbox" id="chk-grat" checked><label for="chk-grat">Globe Grid</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-borders" checked><label for="chk-borders">Country Borders</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-autorot"><label for="chk-autorot">Auto-Rotate Globe</label></div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-ringsSmall"><label for="chk-ringsSmall">Rings on Smallest Range</label></div>
     </div>
     <div class="panel-section">
       <div class="panel-section-title">Controls</div>
@@ -330,12 +342,12 @@
 <!-- ── Legend ── -->
 <div id="legend" style="display:none">
   <div class="legend-title">Magnitude</div>
-  <div class="legend-row"><span class="legend-label">≥ 6</span><div class="legend-circle" id="legend-c-high" style="width:22px;height:22px;background:#0000ff;"></div></div>
-  <div class="legend-row"><span class="legend-label">4 – 6</span><div class="legend-circle" id="legend-c-mid" style="width:14px;height:14px;background:#ff0000;"></div></div>
-  <div class="legend-row"><span class="legend-label">≤ 4</span><div class="legend-circle" id="legend-c-low" style="width:8px;height:8px;background:#ffffff;"></div></div>
+  <div class="legend-row"><span class="legend-label" id="legend-lbl-high">≥ 6</span><div class="legend-circle" id="legend-c-high" style="width:22px;height:22px;background:#0000ff;"></div></div>
+  <div class="legend-row"><span class="legend-label" id="legend-lbl-mid">4 – 6</span><div class="legend-circle" id="legend-c-mid" style="width:14px;height:14px;background:#ff0000;"></div></div>
+  <div class="legend-row"><span class="legend-label" id="legend-lbl-low">≤ 4</span><div class="legend-circle" id="legend-c-low" style="width:8px;height:8px;background:#ffffff;"></div></div>
 </div>
 
-<div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+<div id="progress-bar-wrap"><div id="progress-bar-track"></div><div id="progress-bar"></div><div id="progress-knob"></div></div>
 <div id="tooltip"></div>
 
 <script type="module">
@@ -345,7 +357,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 /* ── Constants ── */
 const EARTH_R    = 2.0;
-const INIT_DIST  = EARTH_R * 3.3;
+const INIT_DIST  = EARTH_R * 2.3;
 const WORLD_SCALE = EARTH_R * 0.45 / 200;
 const MAX_RINGS  = 5;
 const UP_Z = new THREE.Vector3(0, 0, 1);
@@ -354,6 +366,7 @@ const UP_Z = new THREE.Vector3(0, 0, 1);
 const settings = {
   speed: 100000, fadeTime: 1, rings: 1, ringWidth: 0.04, pulseOpacity: 0.9,
   baseR: 0.2, magScale: 1.5, maxR: 200, depthScale: 0.5,
+  magRange1: 5, magRange2: 7, scaleLow: 0.3, scaleMid: 1, scaleHigh: 4.5, ringsSmall: false,
   audioVol: 0.1, audioFreq: 0.2,
   glow: true, depth: true, atmos: true, grat: true, borders: true, autorot: false,
   colLow: '#ffffff', colMid: '#ff0000', colHigh: '#0000ff', colBorders: '#00c8b4',
@@ -363,6 +376,7 @@ const settings = {
 let earthquakes = [], activeCircles = [];
 let animActive = false, animPaused = false;
 let lastRealTs = null, simTime = 0, eqIndex = 0, totalSimDuration = 0;
+let animClock = 0;    // playback clock (ms) — advances only while playing, freezes on pause; drives pulse fade
 let dataSpanMs = 0;   // real time span of the loaded dataset (first→last quake), ms
 let queryParams = {};
 let worldGeoReady = false;
@@ -382,7 +396,7 @@ camera.position.set(0, 0.8, INIT_DIST);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping  = true;
 controls.dampingFactor  = 0.07;
-controls.minDistance    = EARTH_R * 1.2;
+controls.minDistance    = EARTH_R * 1.01;
 controls.maxDistance    = EARTH_R * 20;
 controls.autoRotate     = false;
 controls.autoRotateSpeed = 0.4;
@@ -560,11 +574,18 @@ function lerpColor(a, b, t) {
   return `#${[0,1,2].map(i=>[ca.r,ca.g,ca.b][i]+([cb.r-ca.r,cb.g-ca.g,cb.b-ca.b][i])*t).map(v=>Math.round(v).toString(16).padStart(2,'0')).join('')}`;
 }
 function magColor(mag) {
-  if (mag <= 4) return settings.colLow;
-  if (mag <= 6) return lerpColor(settings.colLow, settings.colMid, (mag-4)/2);
-  return lerpColor(settings.colMid, settings.colHigh, Math.min(1,(mag-6)/2));
+  const r1 = settings.magRange1, r2 = settings.magRange2;
+  if (mag <= r1) return settings.colLow;
+  if (mag <= r2) return lerpColor(settings.colLow, settings.colMid, (mag - r1) / Math.max(0.0001, r2 - r1));
+  return lerpColor(settings.colMid, settings.colHigh, Math.min(1, (mag - r2) / Math.max(0.0001, 10 - r2)));
 }
-function magRadius(mag) { return Math.min(settings.maxR, Math.pow(Math.max(0, mag), settings.magScale)); }
+// Per-range size multiplier so the three magnitude classes can be scaled independently.
+function magRangeScale(mag) {
+  if (mag <= settings.magRange1) return settings.scaleLow;
+  if (mag <= settings.magRange2) return settings.scaleMid;
+  return settings.scaleHigh;
+}
+function magRadius(mag) { return Math.min(settings.maxR, Math.pow(Math.max(0, mag), settings.magScale) * magRangeScale(mag)); }
 
 /* ── Spawn / remove circle meshes ── */
 function spawnCircle(eq) {
@@ -578,7 +599,7 @@ function spawnCircle(eq) {
   }
   const pos    = geo3D(eq.lat, eq.lon, EARTH_R);
   const outDir = pos.clone().normalize();
-  const obj = { eq, color: col, hexCol, born: performance.now(), pos, outDir, dead: false, mesh3d: null };
+  const obj = { eq, color: col, hexCol, born: animClock, pos, outDir, dead: false, mesh3d: null };
 
   const core = new THREE.Mesh(CORE_GEOM, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, blending: THREE.NormalBlending, depthWrite: false, depthTest: false }));
   core.renderOrder = 2;
@@ -643,7 +664,7 @@ function updateCircle(obj, now) {
     ring.quaternion.setFromUnitVectors(UP_Z, obj.outDir);
     ring.scale.setScalar(Math.max(rR, 0.001));
     ring.material.opacity = (1 - rn) * settings.pulseOpacity * alpha;
-    ring.visible = frontside && i < settings.rings;
+    ring.visible = frontside && i < settings.rings && (settings.ringsSmall || obj.eq.mag > settings.magRange1);
   }
 }
 
@@ -765,7 +786,8 @@ function animate(ts) {
   if (animActive && !animPaused) {
     if (lastRealTs !== null) {
       const rd = ts - lastRealTs;
-      simTime += rd * settings.speed;
+      simTime  += rd * settings.speed;
+      animClock += rd;   // fade clock tracks real time, but only while playing
     }
     lastRealTs = ts;
 
@@ -800,8 +822,8 @@ function animate(ts) {
     lastRealTs = null;
   }
 
-  const now = performance.now();
-  for (const obj of activeCircles) { if (!obj.dead) updateCircle(obj, now); }
+  // Pulses age against animClock, so when paused (clock frozen) they hold instead of fading.
+  for (const obj of activeCircles) { if (!obj.dead) updateCircle(obj, animClock); }
   activeCircles = activeCircles.filter(o => !o.dead);
 
   // Atmosphere visibility
@@ -835,7 +857,7 @@ requestAnimationFrame(animate);
 
 /* ── Animation control ── */
 function startAnimation() {
-  eqIndex = 0; simTime = 0; lastRealTs = null;
+  eqIndex = 0; simTime = 0; lastRealTs = null; animClock = 0;
   for (const obj of activeCircles) removeCircle(obj);
   activeCircles = [];
   animActive = true; animPaused = false;
@@ -869,6 +891,70 @@ document.getElementById('btn-reset-view').addEventListener('click', () => { cont
 document.getElementById('btn-zoom-in').addEventListener('click', () => { camera.position.multiplyScalar(0.8); controls.update(); });
 document.getElementById('btn-zoom-out').addEventListener('click', () => { camera.position.multiplyScalar(1.25); controls.update(); });
 
+/* ── Scrubbable progress bar ──
+   Click or drag the bar to scrub simTime to that fraction of the dataset (works
+   while playing or paused). Seeking rebuilds the set of pulses that should be
+   alive at that instant — back-dating each so it shows the right fade level — so
+   a paused scrub renders the true state of the globe rather than a blank one. */
+const _progWrap = document.getElementById('progress-bar-wrap');
+const _progKnob = document.getElementById('progress-knob');
+let _scrubbing = false;
+function _canScrub() { return animActive && earthquakes.length > 0 && totalSimDuration > 0; }
+function progFractionFromEvent(e) {
+  const rect = _progWrap.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+}
+function seekToFraction(frac) {
+  if (!_canScrub()) return;
+  simTime = Math.max(0, Math.min(1, frac)) * totalSimDuration;
+  // Drop every current pulse; we rebuild exactly the ones visible at this instant.
+  for (const obj of activeCircles) removeCircle(obj);
+  activeCircles = [];
+  const t0 = earthquakes[0].time;
+  // A pulse stays visible for `fadeTime` real-playback seconds; convert that to
+  // simTime so we know which quakes (born within the last fade window) still show.
+  const fadeSpanSim = settings.fadeTime * 1000 * settings.speed;
+  eqIndex = 0;
+  while (eqIndex < earthquakes.length && (earthquakes[eqIndex].time - t0) <= simTime) {
+    const bornSim = earthquakes[eqIndex].time - t0;
+    if (simTime - bornSim < fadeSpanSim) {
+      const obj = spawnCircle(earthquakes[eqIndex]);
+      // Back-date birth on the fade clock so updateCircle renders the correct fade level.
+      obj.born = animClock - (simTime - bornSim) / Math.max(1e-9, settings.speed);
+      activeCircles.push(obj);
+    }
+    eqIndex++;
+  }
+  lastRealTs = null;   // avoid a huge dt being applied on the next frame
+  // Immediate UI feedback (esp. while paused, when the render loop won't update these).
+  document.getElementById('progress-bar').style.width = Math.min(1, simTime / totalSimDuration) * 100 + '%';
+  document.getElementById('hud-current-time').textContent =
+    new Date(earthquakes[0].time + simTime).toUTCString().slice(5, 22);
+}
+_progWrap.addEventListener('mousemove', e => {
+  if (_scrubbing) return;   // handled by the window-level listener while dragging
+  _progKnob.style.left = progFractionFromEvent(e) * 100 + '%';
+  _progKnob.style.opacity = _canScrub() ? '1' : '0';
+});
+_progWrap.addEventListener('mouseleave', () => { if (!_scrubbing) _progKnob.style.opacity = '0'; });
+_progWrap.addEventListener('mousedown', e => {
+  if (!_canScrub()) return;
+  e.preventDefault();
+  _scrubbing = true;
+  const f = progFractionFromEvent(e);
+  _progKnob.style.left = f * 100 + '%';
+  _progKnob.style.opacity = '1';
+  seekToFraction(f);
+});
+// Track on window so a drag keeps scrubbing even when the cursor leaves the thin bar.
+window.addEventListener('mousemove', e => {
+  if (!_scrubbing) return;
+  const f = progFractionFromEvent(e);
+  _progKnob.style.left = f * 100 + '%';
+  seekToFraction(f);
+});
+window.addEventListener('mouseup', () => { _scrubbing = false; });
+
 /* ── Settings wiring ── */
 function bindSlider(id, lblId, key, fmt) {
   const sl = document.getElementById(id), lbl = document.getElementById(lblId);
@@ -894,11 +980,35 @@ bindSlider('sl-rings',        'lbl-rings',        'rings',        v=>v);
 bindSlider('sl-ringWidth',    'lbl-ringWidth',    'ringWidth',    v=>v.toFixed(2));
 bindSlider('sl-baseR',        'lbl-baseR',        'baseR',        v=>v.toFixed(1));
 bindSlider('sl-magScale',     'lbl-magScale',     'magScale',     v=>v.toFixed(1));
+bindSlider('sl-scaleLow',     'lbl-scaleLow',     'scaleLow',     v=>v.toFixed(1)+'×');
+bindSlider('sl-scaleMid',     'lbl-scaleMid',     'scaleMid',     v=>v.toFixed(1)+'×');
+bindSlider('sl-scaleHigh',    'lbl-scaleHigh',    'scaleHigh',    v=>v.toFixed(1)+'×');
 bindSlider('sl-maxR',         'lbl-maxR',         'maxR',         v=>v);
 bindSlider('sl-depthScale',   'lbl-depthScale',   'depthScale',   v=>v.toFixed(2));
 bindSlider('sl-pulseOpacity', 'lbl-pulseOpacity', 'pulseOpacity', v=>v.toFixed(2));
 bindSlider('sl-audioVol',  'lbl-audioVol',  'audioVol',  v => v === 0 ? 'off' : v.toFixed(2));
 bindSlider('sl-audioFreq', 'lbl-audioFreq', 'audioFreq', v => v <= 0.15 ? 'Sub' : v < 0.45 ? 'Low' : v < 0.70 ? 'Mid' : 'High');
+
+/* ── Magnitude range splits — the two sliders set the class boundaries and are
+   clamped so they can never cross (kept ≥ 0.1 apart). Range 1 = 0.1…split1,
+   Range 2 = split1…split2, Range 3 = split2…10.0 (automatic). ── */
+const _slR1 = document.getElementById('sl-magRange1');
+const _slR2 = document.getElementById('sl-magRange2');
+const _lblR1 = document.getElementById('lbl-magRange1');
+const _lblR2 = document.getElementById('lbl-magRange2');
+function syncMagRanges(source) {
+  let r1 = parseFloat(_slR1.value), r2 = parseFloat(_slR2.value);
+  if (r1 > r2 - 0.1) {                       // overlap — clamp whichever was moved
+    if (source === 'r2') { r2 = Math.min(9.9, r1 + 0.1); _slR2.value = r2; }
+    else                 { r1 = Math.max(0.1, r2 - 0.1); _slR1.value = r1; }
+  }
+  settings.magRange1 = r1; settings.magRange2 = r2;
+  _lblR1.textContent = r1.toFixed(1); _lblR2.textContent = r2.toFixed(1);
+  updateLegend(); updateColorLabels();
+}
+_slR1.addEventListener('input', () => syncMagRanges('r1'));
+_slR2.addEventListener('input', () => syncMagRanges('r2'));
+syncMagRanges('init');
 
 function bindCheck(id, key, cb) {
   const el = document.getElementById(id);
@@ -910,16 +1020,26 @@ bindCheck('chk-atmos',   'atmos');
 bindCheck('chk-grat',    'grat');
 bindCheck('chk-borders', 'borders', () => { if(borderLines) borderLines.visible = settings.borders; });
 bindCheck('chk-autorot', 'autorot');
+bindCheck('chk-ringsSmall', 'ringsSmall');
 
 function bindColor(id, key, cb) {
   const el = document.getElementById(id);
   el.addEventListener('input', () => { settings[key] = el.value; if(cb) cb(); });
 }
-// Keep the magnitude legend swatches in sync with the active mag colors.
+// Keep the magnitude legend swatches + range labels in sync with the active settings.
 function updateLegend() {
   document.getElementById('legend-c-low').style.background  = settings.colLow;
   document.getElementById('legend-c-mid').style.background  = settings.colMid;
   document.getElementById('legend-c-high').style.background = settings.colHigh;
+  document.getElementById('legend-lbl-low').textContent  = '≤ ' + settings.magRange1.toFixed(1);
+  document.getElementById('legend-lbl-mid').textContent  = settings.magRange1.toFixed(1) + ' – ' + settings.magRange2.toFixed(1);
+  document.getElementById('legend-lbl-high').textContent = '≥ ' + settings.magRange2.toFixed(1);
+}
+// Keep the color-picker labels showing the current range boundaries.
+function updateColorLabels() {
+  document.getElementById('col-lbl-low').textContent  = 'Low Mag (≤' + settings.magRange1.toFixed(1) + ')';
+  document.getElementById('col-lbl-mid').textContent  = 'Mid Mag (' + settings.magRange1.toFixed(1) + '–' + settings.magRange2.toFixed(1) + ')';
+  document.getElementById('col-lbl-high').textContent = 'High Mag (≥' + settings.magRange2.toFixed(1) + ')';
 }
 bindColor('col-low',     'colLow',  updateLegend);
 bindColor('col-mid',     'colMid',  updateLegend);
@@ -1145,8 +1265,8 @@ clampInput('q-radius',   1, 20000);
 // surface a rich but manageable sequence rather than tens of thousands of micro-quakes.
 const HISTORIC_QUAKES = [
   { rank: 1,  name: 'Valdivia, Chile',    mag: 9.5, date: '1960-05-22', lat: -38.24, lon:  -73.05, start: '1960-03-01', end: '1960-09-15', radius: 3000 },
-  { rank: 2,  name: 'Good Friday, Alaska',mag: 9.2, date: '1964-03-28', lat:  61.02, lon: -147.65, start: '1964-01-21', end: '1964-06-21', radius: 3000 },
-  { rank: 3,  name: 'Sumatra-Andaman',    mag: 9.1, date: '2004-12-26', lat:   3.30, lon:   95.98, start: '2004-11-01', end: '2005-03-30', radius: 3000 },
+  { rank: 2,  name: 'Good Friday, Alaska',mag: 9.2, date: '1964-03-28', lat:  61.02, lon: -147.65, start: '1964-03-21', end: '1964-06-21', radius: 3000 },
+  { rank: 3,  name: 'Sumatra-Andaman',    mag: 9.1, date: '2004-12-26', lat:   3.30, lon:   95.98, start: '2004-12-20', end: '2005-06-30', radius: 3000 },
   { rank: 4,  name: 'Tōhoku, Japan',      mag: 9.1, date: '2011-03-11', lat:  38.30, lon:  142.37, start: '2011-01-27', end: '2011-10-30', radius: 3000 },
   { rank: 5,  name: 'Kamchatka, Russia',  mag: 9.0, date: '1952-11-04', lat:  52.76, lon:  159.50, start: '1952-09-20', end: '1953-01-28', radius: 3000 },
   { rank: 6,  name: 'Kamchatka, Russia',  mag: 8.8, date: '2025-07-29', lat:  52.47, lon:  160.40, start: '2025-06-17', end: '2025-10-22', radius:  3000 },

@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(node _verify3.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(node --check ._check.mjs)",
+      "Bash(rm -f ._check.mjs)",
+      "Bash(node _verify.mjs)",
+      "Bash(pkill -f http-server)",
+      "Bash(rm -f _verify.mjs _verify2.mjs _verify3.mjs _verify_shot.png _srv.log ._check.mjs package-lock.json)",
+      "Bash(rm -rf node_modules)",
+      "Bash(node _vcheck.mjs)",
+      "Bash(rm -f _vcheck.mjs _srv.log ._check.mjs package-lock.json)",
+      "Bash(node _vhover.mjs)",
+      "Bash(rm -f _vcheck.mjs _vhover.mjs _srv.log ._check.mjs package-lock.json)"
     ]
   }
 }

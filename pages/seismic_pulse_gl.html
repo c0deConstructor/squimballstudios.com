@@ -59,7 +59,7 @@
   .q-section-label { grid-column: 1/-1; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--accent2); text-transform: uppercase; padding-top: 4px; }
   #fetch-btn { margin-top: 24px; width: 100%; background: transparent; border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; padding: 14px; cursor: pointer; position: relative; overflow: hidden; transition: color 0.2s, background 0.2s; }
   #fetch-btn::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform 0.25s ease; z-index: -1; }
-  #fetch-btn:hover { color: var(--bg); }
+  #fetch-btn:hover { color: #fff; }
   #fetch-btn:hover::before { transform: scaleX(1); }
   #fetch-error { margin-top: 12px; font-family: var(--mono); font-size: 12px; color: var(--accent2); min-height: 16px; }
   #btn-map-pick { grid-column: 1/-1; background: transparent; border: 1px solid rgba(0,200,180,0.3); color: var(--text-dim); font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; padding: 9px 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: border-color 0.2s, color 0.2s; margin-top: 2px; }
@@ -104,6 +104,8 @@
   .roll-track { position: relative; height: 6px; background: rgba(0,200,180,0.12); border: 1px solid rgba(0,200,180,0.18); cursor: ew-resize; }
   .roll-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(0,200,180,0.45), var(--accent)); }
   .roll-handle { position: absolute; top: 50%; width: 13px; height: 13px; margin-left: -6.5px; margin-top: -6.5px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 6px rgba(0,200,180,0.6); }
+  /* Centre row + the row above/below are draggable; cue them with a brighter track. */
+  .roll-row.adjustable .roll-track { border-color: rgba(0,200,180,0.4); background: rgba(0,200,180,0.16); }
   .roll-row.active .roll-track { height: 8px; box-shadow: 0 0 12px rgba(0,200,180,0.22); }
   .roll-row.active .rl-name { color: #fff; }
   .roll-row.active .rl-val { color: var(--accent3); }
@@ -198,7 +200,7 @@
   /* ── HISTORIC EARTHQUAKES ── */
   #btn-historic { grid-column: 1/-1; width: 100%; margin-bottom: 24px; background: transparent; border: 1px solid var(--accent3); color: var(--accent3); font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; padding: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: color 0.2s, background 0.2s; position: relative; overflow: hidden; }
   #btn-historic::before { content: ''; position: absolute; inset: 0; background: var(--accent3); transform: scaleX(0); transform-origin: left; transition: transform 0.25s ease; z-index: -1; }
-  #btn-historic:hover { color: var(--bg); }
+  #btn-historic:hover { color: #fff; }
   #btn-historic:hover::before { transform: scaleX(1); }
   #historic-modal { position: fixed; inset: 0; z-index: 110; display: none; align-items: center; justify-content: center; background: rgba(2,6,16,0.82); backdrop-filter: blur(4px); }
   #historic-modal.open { display: flex; }
@@ -320,6 +322,7 @@
     </div>
     <div class="panel-section">
       <div class="panel-section-title">Visual Options</div>
+      <div class="checkbox-row"><input type="checkbox" id="chk-showinfo" checked><label for="chk-showinfo">Show Info (hover)</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-glow" checked><label for="chk-glow">Glow Effect</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-depth" checked><label for="chk-depth">Depth Tinting</label></div>
       <div class="checkbox-row"><input type="checkbox" id="chk-atmos" checked><label for="chk-atmos">Atmosphere</label></div>
@@ -349,7 +352,7 @@
 </div>
 
 <!-- ── Cross-section toggle + HUD ── -->
-<button id="xsection-btn" title="Cross-section view (hold middle mouse, or tap)">
+<button id="xsection-btn" title="Toggle cross-section view">
   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 12l5 7"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
 </button>
 <div id="xsection-hud">Cross-Section View<small id="xsection-sub"></small></div>
@@ -359,7 +362,7 @@
   <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/><path d="M3 14h18"/><circle cx="9" cy="8" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1" fill="currentColor" stroke="none"/></svg>
 </button>
 <div id="roll-overlay">
-  <div id="roll-title">⚙ Slider Roll<small>drag ↕ to roll · drag ↔ on the centre row to set · the globe stays interactive</small></div>
+  <div id="roll-title">⚙ Slider Roll<small>drag ↕ to roll · drag ↔ on the centre 3 rows to set · the globe stays interactive</small></div>
   <div id="slider-roll-wrap"><div id="slider-roll-stage"></div></div>
 </div>
 
@@ -423,10 +426,11 @@ const MAX_PULSES = Caps.maxPulses;
 /* ════════ SECTION: SETTINGS ════════ */
 const settings = {
   animLen: 20, speed: 100000, fadeTime: 1, rings: 1, ringWidth: 0.04, pulseOpacity: 0.9,
-  baseR: 0.2, magScale: 1.5, maxR: 200, depthScale: 0.5,
-  magRange1: 5, magRange2: 7, scaleLow: 0.1, scaleMid: 1, scaleHigh: 4.5, ringsSmall: false,
+  baseR: 0.2, magScale: 1.5, maxR: 200, depthScale: 0.6,
+  magRange1: 5, magRange2: 7, scaleLow: 1, scaleMid: 2, scaleHigh: 4.5, ringsSmall: false,
   audioVol: 0.1, audioFreq: 0.2,
   glow: true, depth: true, atmos: true, grat: true, borders: true, autorot: false,
+  showInfo: true,
   colLow: '#ffffff', colMid: '#ff0000', colHigh: '#0000ff', colBorders: '#00c8b4',
 };
 
@@ -461,8 +465,7 @@ controls.maxDistance     = EARTH_R * 20;
 controls.autoRotate      = false;
 controls.autoRotateSpeed = 0.4;
 controls.rotateSpeed     = 0.45;
-// MIDDLE button is repurposed for the cross-section peek; dolly stays on wheel + zoom buttons.
-controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: null, RIGHT: null };
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 controls.saveState();
 
@@ -786,7 +789,7 @@ function parseVolcanoCSV(txt) {
   return out;
 }
 function buildVolcanoes(points) {
-  const geo = new THREE.ConeGeometry(0.012, 0.032, 6);
+  const geo = new THREE.ConeGeometry(0.012 * 0.5, 0.032 * 0.5, 6);
   const mat = new THREE.MeshBasicMaterial({ color: 0xff8c42, transparent: true, opacity: 0.92, depthWrite: false });
   const im  = new THREE.InstancedMesh(geo, mat, points.length);
   const q = new THREE.Quaternion(), d = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0);
@@ -1029,6 +1032,7 @@ function worldToScreen(pos3) {
 }
 window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
 function updateTooltip() {
+  if (!settings.showInfo) { tooltip.style.display = 'none'; return; }
   let best = null, bestDist = 40, isVolc = false;
   for (const p of pulses) {
     if (p.dead) continue;
@@ -1113,6 +1117,11 @@ let enterT = 0, exitT = 0;
 const pivot = new THREE.Vector3();
 const sUp = new THREE.Vector3(), sTanA = new THREE.Vector3(), sTanB = new THREE.Vector3();
 let sectAz = 0, sectPolar = THREE.MathUtils.degToRad(78), sectDist = EARTH_R * 0.95;
+// Camera distance from Earth's centre is sqrt(R² + d² + 2·R·d·cos(polar)); that is ≥ R
+// for ANY zoom distance d whenever cos(polar) ≥ 0. Capping polar just under 90° therefore
+// makes it geometrically impossible to enter the globe, while still allowing very close zoom.
+const SECT_DIST_MIN = EARTH_R * 0.1, SECT_DIST_MAX = EARTH_R * 3.5;
+const SECT_POLAR_MIN = THREE.MathUtils.degToRad(12), SECT_POLAR_MAX = THREE.MathUtils.degToRad(89);
 const savedPos = new THREE.Vector3(), savedTarget = new THREE.Vector3(), savedQuat = new THREE.Quaternion();
 const secPos = new THREE.Vector3(), secQuat = new THREE.Quaternion();
 const exitFromPos = new THREE.Vector3(), exitFromQuat = new THREE.Quaternion();
@@ -1216,9 +1225,7 @@ function updateCamera(dt) {
   if (sectionGroup.visible) orientSlice();
 }
 
-/* ── Section input: middle-mouse hold (desktop) + toggle button (touch/desktop) ── */
-canvas.addEventListener('mousedown', e => { if (e.button === 1) { e.preventDefault(); enterSection(); } });
-window.addEventListener('mouseup', e => { if (e.button === 1) exitSection(); });
+/* ── Section input: on-screen toggle button (desktop + touch) ── */
 document.getElementById('xsection-btn').addEventListener('click', () => {
   if (camMode === 'orbit' || camMode === 'exiting') enterSection(); else exitSection();
 });
@@ -1237,7 +1244,7 @@ canvas.addEventListener('pointermove', e => {
   if (secLastX !== null) {
     const dx = e.clientX - secLastX, dy = e.clientY - secLastY;
     sectAz -= dx * 0.005;
-    sectPolar = clamp(sectPolar - dy * 0.005, THREE.MathUtils.degToRad(12), THREE.MathUtils.degToRad(104));
+    sectPolar = clamp(sectPolar - dy * 0.005, SECT_POLAR_MIN, SECT_POLAR_MAX);
   }
   secLastX = e.clientX; secLastY = e.clientY;
 });
@@ -1246,13 +1253,13 @@ canvas.addEventListener('pointerdown', e => { if (camMode === 'section') { secLa
 canvas.addEventListener('wheel', e => {
   if (camMode !== 'section') return;
   e.preventDefault();
-  sectDist = clamp(sectDist * (1 + Math.sign(e.deltaY) * 0.08), EARTH_R * 0.25, EARTH_R * 3.5);
+  sectDist = clamp(sectDist * (1 + Math.sign(e.deltaY) * 0.08), SECT_DIST_MIN, SECT_DIST_MAX);
 }, { passive: false });
 window.addEventListener('keydown', e => {
   if (camMode !== 'section') return;
   const k = e.key.toLowerCase();
-  if (k === 'w') sectDist = clamp(sectDist * 0.92, EARTH_R * 0.25, EARTH_R * 3.5);
-  else if (k === 's') sectDist = clamp(sectDist * 1.08, EARTH_R * 0.25, EARTH_R * 3.5);
+  if (k === 'w') sectDist = clamp(sectDist * 0.92, SECT_DIST_MIN, SECT_DIST_MAX);
+  else if (k === 's') sectDist = clamp(sectDist * 1.08, SECT_DIST_MIN, SECT_DIST_MAX);
   else if (k === 'a') sectAz -= 0.08;
   else if (k === 'd') sectAz += 0.08;
 });
@@ -1445,8 +1452,10 @@ function setRollTransforms() {
     row.style.transform = `translateY(-50%) rotateX(${-rel}deg) translateZ(${ROLL_R}px)`;
     const c = Math.cos(rel * Math.PI / 180);
     row.style.opacity = c > 0.06 ? c.toFixed(3) : '0';
-    row.style.pointerEvents = Math.abs(rel) < ROLL_STEP * 0.6 ? 'auto' : 'none';
+    // Centre row + the one directly above/below are interactive (up to 3 adjustable at once).
+    row.style.pointerEvents = Math.abs(rel) < ROLL_STEP * 1.5 ? 'auto' : 'none';
     row.classList.toggle('active', i === ai);
+    row.classList.toggle('adjustable', Math.abs(i - ai) <= 1);
   });
 }
 function updateRowVisual(def) {
@@ -1493,7 +1502,8 @@ rollWrap.addEventListener('pointermove', e => {
   if (rDecided === null) {
     if (Math.hypot(dx, dy) < 6) return;
     rDecided = Math.abs(dy) >= Math.abs(dx) ? 'roll' : 'value';
-    if (rDecided === 'value' && !(rStartDef && rStartDef._i === activeRollIndex() && rOnTrack)) rDecided = 'roll';
+    const adjustable = rStartDef && Math.abs(rStartDef._i - activeRollIndex()) <= 1;
+    if (rDecided === 'value' && !(adjustable && rOnTrack)) rDecided = 'roll';
   }
   if (rDecided === 'roll') {
     rollAngle = rollClampAngle(rStartAngle - dy * (ROLL_STEP / ROLL_ROWH));
@@ -1509,7 +1519,7 @@ rollWrap.addEventListener('pointerup', e => {
     const rowEl = e.target.closest('.roll-row');
     if (rowEl) {
       const i = +rowEl.dataset.i;
-      if (i === activeRollIndex() && e.target.closest('.roll-track')) setValueFromClientX(SLIDER_DEFS[i], e.clientX);
+      if (Math.abs(i - activeRollIndex()) <= 1 && e.target.closest('.roll-track')) setValueFromClientX(SLIDER_DEFS[i], e.clientX);
       else animateRollTo(i * ROLL_STEP);
     }
   } else if (rDecided === 'roll') {
@@ -1547,6 +1557,7 @@ function bindCheck(id, key, cb) {
   el.checked = settings[key];
   el.addEventListener('change', () => { settings[key] = el.checked; if (cb) cb(); });
 }
+bindCheck('chk-showinfo', 'showInfo');
 bindCheck('chk-glow', 'glow');
 bindCheck('chk-depth', 'depth');
 bindCheck('chk-atmos', 'atmos');
