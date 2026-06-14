@@ -135,6 +135,14 @@
   #roll-btn:hover { background: rgba(0,200,180,0.12); border-color: var(--accent); }
   #roll-btn.active { background: rgba(0,200,180,0.2); border-color: var(--accent); box-shadow: 0 0 14px rgba(0,200,180,0.3); }
   #roll-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.4; }
+  /* ── VR / WebXR ── (hidden until immersive-vr support is confirmed) */
+  #vr-btn { position: fixed; bottom: 242px; left: 20px; z-index: 41; width: 40px; height: 40px; background: var(--panel-bg); border: 1px solid var(--border); color: var(--accent); cursor: pointer; display: none; align-items: center; justify-content: center; transition: background 0.2s, border-color 0.2s, left 0.35s cubic-bezier(0.4,0,0.2,1); }
+  #vr-btn:hover { background: rgba(0,200,180,0.12); border-color: var(--accent); }
+  #vr-btn.active { background: rgba(0,200,180,0.2); border-color: var(--accent); box-shadow: 0 0 14px rgba(0,200,180,0.3); }
+  #vr-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.4; }
+  /* While presenting in VR, declutter the mirrored desktop view. */
+  body.in-vr #hud, body.in-vr #settings-panel, body.in-vr #zoom-controls, body.in-vr #xsection-btn,
+  body.in-vr #roll-btn, body.in-vr #roll-overlay, body.in-vr #credits-btn, body.in-vr #progress-bar-wrap { display: none !important; }
 
   /* ── HUD ── */
   #hud { position: fixed; top: 20px; right: 20px; z-index: 40; text-align: right; pointer-events: none; }
@@ -171,6 +179,7 @@
   /* Keep the left-edge controls clear of the settings panel when it's expanded. */
   #settings-panel:not(.collapsed) ~ #zoom-controls,
   #settings-panel:not(.collapsed) ~ #xsection-btn,
+  #settings-panel:not(.collapsed) ~ #vr-btn,
   #settings-panel:not(.collapsed) ~ #roll-btn { left: calc(var(--panel-w) + 20px); }
   .zoom-btn { width: 32px; height: 32px; background: var(--panel-bg); border: 1px solid var(--border); color: var(--accent); font-family: var(--mono); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, border-color 0.2s; line-height: 1; }
   .zoom-btn:hover { background: rgba(0,200,180,0.12); border-color: var(--accent); }
@@ -440,7 +449,7 @@
       <button id="credits-close">✕ Close</button>
     </div>
     <div id="credits-list"></div>
-    <div id="credits-foot"><span>Thank you</span> to every project below. All datasets remain © their respective providers.</div>
+    <div id="credits-foot"><span>Thank you</span> to all listed projects/sources. All datasets remain © their respective providers.</div>
   </div>
 </div>
 
@@ -470,6 +479,11 @@
   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 12l5 7"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
 </button>
 <div id="xsection-hud">Cross-Section View<small id="xsection-sub"></small></div>
+
+<!-- ── VR / WebXR toggle (shown only when immersive-vr is supported) ── -->
+<button id="vr-btn" title="Enter VR — stand inside the earthquake swarm">
+  <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="3"/><path d="M9.5 17l-1.2-2.5a2 2 0 0 0-1.8-1.1H5M14.5 17l1.2-2.5a2 2 0 0 1 1.8-1.1H19"/></svg>
+</button>
 
 <!-- ── Slider Roll toggle + centred overlay ── -->
 <button id="roll-btn" title="Toggle Slider Roll settings">
@@ -512,6 +526,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
 /* ════════ SECTION: CONFIG + DEVICE CAPS ════════ */
 const EARTH_R     = 2.0;
@@ -520,7 +535,7 @@ const WORLD_SCALE = EARTH_R * 0.45 / 200;
 const MAX_RINGS   = 5;
 const UP_Z        = new THREE.Vector3(0, 0, 1);
 const WORLD_UP    = new THREE.Vector3(0, 1, 0);
-const SECTION_TRANS_MS = 320;
+const SECTION_TRANS_MS = 600;   // orbit↔cross-section transition duration (ms)
 const DEPTH_MAX_KM = 700;   // deepest seismicity ≈ 700 km maps the inward radius range
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -571,12 +586,16 @@ renderer.setPixelRatio(Caps.pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
+renderer.xr.enabled = true;                       // WebXR / VR
+renderer.xr.setReferenceSpaceType('local-floor');
 document.getElementById('gl-container').appendChild(renderer.domElement);
 const canvas = renderer.domElement;
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 2000);
 camera.position.set(0, 0.8, INIT_DIST);
+// The camera actually rendered each frame: the desktop `camera`, or the XR rig camera while presenting.
+let activeCam = camera;
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping   = true;
@@ -1068,7 +1087,10 @@ const _outCol = new THREE.Color();
 const _vPos = new THREE.Vector3();
 const _vDir = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
+const _camPos = new THREE.Vector3();
+const _camQuat = new THREE.Quaternion();
 const _ringQuat = new THREE.Quaternion();
+const instanceEq = [];   // instanceId -> earthquake, for VR laser picking of live pulses
 let sectionMix = 0;   // eased 0(orbit)→1(section); drives depth exaggeration
 
 function depthRadius(depthKm) {
@@ -1128,8 +1150,11 @@ function updateLinks() {
 }
 
 function updatePulses(now) {
-  _camDir.copy(camera.position).normalize();
-  const bq = camera.quaternion;
+  // Use the camera actually being rendered (the live XR head pose while presenting).
+  const presenting = renderer.xr.isPresenting;
+  const renderCam = presenting ? renderer.xr.getCamera() : activeCam;
+  renderCam.getWorldPosition(_camPos); _camDir.copy(_camPos).normalize();
+  const bq = renderCam.getWorldQuaternion(_camQuat);
   let n = 0;
   for (const p of pulses) {
     const age = (now - p.born) / 1000;
@@ -1140,7 +1165,8 @@ function updatePulses(now) {
     const pos = geo3D(eq.lat, eq.lon, depthRadius(eq.depth));
     p.pos = pos;
     _vDir.copy(pos).normalize();
-    const front = camMode === 'orbit' ? _vDir.dot(_camDir) > -0.12 : true;
+    // In VR you're inside/among the swarm, so show every pulse (no front-hemisphere cull).
+    const front = presenting ? true : (camMode === 'orbit' ? _vDir.dot(_camDir) > -0.12 : true);
     if (!front || n >= MAX_PULSES) continue;
 
     _col.set(magColor(eq.mag));
@@ -1151,7 +1177,7 @@ function updatePulses(now) {
     // core
     const coreR = Math.max(wPeak * (0.35 + norm * 0.15), 1e-4);
     _dummy.position.copy(pos); _dummy.quaternion.identity(); _dummy.scale.setScalar(coreR); _dummy.updateMatrix();
-    coreIM.setMatrixAt(n, _dummy.matrix);
+    coreIM.setMatrixAt(n, _dummy.matrix); instanceEq[n] = eq;
     _outCol.copy(_col).multiplyScalar(alpha * settings.pulseOpacity * 1.0); setIColor(coreIM, n, _outCol);
 
     // halo (billboarded toward camera)
@@ -1181,6 +1207,7 @@ function updatePulses(now) {
   }
 
   coreIM.count = n; coreIM.instanceMatrix.needsUpdate = true; coreIM.instanceColor.needsUpdate = true;
+  instanceEq.length = n;
   haloIM.count = settings.glow ? n : 0;
   if (settings.glow) { haloIM.instanceMatrix.needsUpdate = true; haloIM.instanceColor.needsUpdate = true; }
   for (let i = 0; i < MAX_RINGS; i++) {
@@ -1281,20 +1308,28 @@ function playThud(mag, pan = 0) {
    on-screen button on touch) descends to a side cross-section pivoting around the
    targeted surface point, so quake depths read as a vertical column. ── */
 let camMode = 'orbit';   // 'orbit' | 'entering' | 'section' | 'exiting'
-let enterT = 0, exitT = 0;
+let transT = 0;          // 0→1 progress for the orbit↔section transition
 const pivot = new THREE.Vector3();
 const sUp = new THREE.Vector3(), sTanA = new THREE.Vector3(), sTanB = new THREE.Vector3();
-let sectAz = 0, sectPolar = THREE.MathUtils.degToRad(78), sectDist = EARTH_R * 0.95;
+let sectAz = 0, sectPolar = THREE.MathUtils.degToRad(90), sectDist = EARTH_R * 0.85;
 // Camera distance from Earth's centre is sqrt(R² + d² + 2·R·d·cos(polar)); that is ≥ R
-// for ANY zoom distance d whenever cos(polar) ≥ 0. Capping polar just under 90° therefore
+// for ANY zoom distance d whenever cos(polar) ≥ 0. Capping polar at 90° therefore
 // makes it geometrically impossible to enter the globe, while still allowing very close zoom.
 const SECT_DIST_MIN = EARTH_R * 0.1, SECT_DIST_MAX = EARTH_R * 3.5;
-const SECT_POLAR_MIN = THREE.MathUtils.degToRad(12), SECT_POLAR_MAX = THREE.MathUtils.degToRad(89);
+const SECT_POLAR_MIN = THREE.MathUtils.degToRad(12), SECT_POLAR_MAX = THREE.MathUtils.degToRad(90);
+// ── Tunables for the orbit → cross-section entry ──
+const SECT_ENTER_POLAR = THREE.MathUtils.degToRad(90);  // how far to tilt back (90° = look straight along the surface, down the depth column)
+const SECT_ENTER_DIST  = EARTH_R * 0.25;                // how close to zoom in on the pivot after tilting back
 const savedPos = new THREE.Vector3(), savedTarget = new THREE.Vector3(), savedQuat = new THREE.Quaternion();
-const secPos = new THREE.Vector3(), secQuat = new THREE.Quaternion();
-const exitFromPos = new THREE.Vector3(), exitFromQuat = new THREE.Quaternion();
-const _tmpObj = new THREE.Object3D();
+// The transition is a single arc about the pivot: slerp the offset direction, lerp the
+// distance, nlerp the up vector, and always look at the pivot — no chord-lerp jerk, no yaw.
+const trFromDir = new THREE.Vector3(), trToDir = new THREE.Vector3();
+const trFromUp  = new THREE.Vector3(), trToUp  = new THREE.Vector3();
+let trFromDist = 0, trToDist = 0;
+const _arcDir = new THREE.Vector3(), _arcUp = new THREE.Vector3();
+const _slQ = new THREE.Quaternion(), _slQp = new THREE.Quaternion();
 const _sd = new THREE.Vector3();
+const _camUp = new THREE.Vector3();
 
 function pickPivot() {
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
@@ -1307,11 +1342,11 @@ function sectionDir(out) {
            .addScaledVector(sTanB, Math.sin(sectPolar) * Math.sin(sectAz))
            .addScaledVector(sUp, Math.cos(sectPolar));
 }
-function computeSectionPose(outPos, outQuat) {
-  sectionDir(_sd);
-  outPos.copy(pivot).addScaledVector(_sd, sectDist);
-  _tmpObj.position.copy(outPos); _tmpObj.up.copy(sUp); _tmpObj.lookAt(pivot);
-  outQuat.copy(_tmpObj.quaternion);
+// Spherical interpolation between two unit direction vectors (for arcing about the pivot).
+function slerpDir(a, b, t, out) {
+  _slQ.setFromUnitVectors(a, b);
+  _slQp.identity().slerp(_slQ, t);
+  return out.copy(a).applyQuaternion(_slQp);
 }
 const _bt = new THREE.Vector3(), _bn = new THREE.Vector3(), _bm = new THREE.Matrix4(), _bq = new THREE.Quaternion();
 function orientSlice() {
@@ -1325,20 +1360,27 @@ function orientSlice() {
 }
 function enterSection() {
   if (camMode === 'section' || camMode === 'entering') return;
-  pivot.copy(pickPivot());
+  pivot.copy(pickPivot());                                   // pivot = point on the globe at screen centre
   savedPos.copy(camera.position); savedQuat.copy(camera.quaternion); savedTarget.copy(controls.target);
   controls.enabled = false;
   sUp.copy(pivot).normalize();
-  sTanA.crossVectors(sUp, WORLD_UP); if (sTanA.lengthSq() < 1e-6) sTanA.set(1, 0, 0); sTanA.normalize();
+  // Heading = the screen-up bearing (camera's up projected onto the tangent plane). This is
+  // stable when looking straight down — the camera *position* there is ~radial, so its
+  // tangent projection is ~zero, which is exactly why the old heading came out random.
+  _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  _camUp.addScaledVector(sUp, -_camUp.dot(sUp));             // project onto the tangent plane
+  if (_camUp.lengthSq() < 1e-9) { _camUp.crossVectors(sUp, WORLD_UP); if (_camUp.lengthSq() < 1e-9) _camUp.set(1, 0, 0); }
+  _camUp.normalize();
+  sTanA.copy(_camUp).multiplyScalar(-1);                     // tilt back onto the screen-down side; az 0 = this heading
+  // cross(sTanA, sUp) (not cross(sUp, sTanA)) keeps (sTanA, sUp, sTanB) a proper right-handed
+  // basis — this sets the drag direction AND keeps orientSlice's makeBasis a valid rotation.
   sTanB.crossVectors(sTanA, sUp).normalize();
-  // Preserve the current heading so entry is a straight descend/tilt (down→forward),
-  // not a sideways swing: aim the section azimuth at where the camera already sits.
-  const toCam = _sd.subVectors(camera.position, pivot);
-  sectAz = Math.atan2(toCam.dot(sTanB), toCam.dot(sTanA));
-  sectPolar = THREE.MathUtils.degToRad(74); sectDist = EARTH_R * 0.95;
-  computeSectionPose(secPos, secQuat);
+  sectAz = 0; sectPolar = SECT_ENTER_POLAR; sectDist = SECT_ENTER_DIST;
+  // Set up a single arc about the pivot from the current orbit pose to the section pose.
+  trFromDir.copy(camera.position).sub(pivot).normalize(); trFromDist = camera.position.distanceTo(pivot); trFromUp.set(0, 1, 0);
+  sectionDir(trToDir); trToDist = sectDist; trToUp.copy(sUp);
+  transT = 0; camMode = 'entering';
   orientSlice();
-  enterT = 0; camMode = 'entering';
   for (const id in LAYERS) { const L = LAYERS[id]; if (L.planes) L.planes.visible = L.enabled; }
   document.getElementById('xsection-hud').style.display = 'block';
   document.getElementById('xsection-btn').classList.add('active');
@@ -1346,8 +1388,11 @@ function enterSection() {
 }
 function exitSection() {
   if (camMode === 'orbit' || camMode === 'exiting') return;
-  exitFromPos.copy(camera.position); exitFromQuat.copy(camera.quaternion);
-  exitT = 0; camMode = 'exiting';
+  // Reverse arc: from wherever the section camera is now, back to the saved orbit pose.
+  trFromDir.copy(camera.position).sub(pivot).normalize(); trFromDist = camera.position.distanceTo(pivot);
+  trFromUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  trToDir.copy(savedPos).sub(pivot).normalize(); trToDist = savedPos.distanceTo(pivot); trToUp.set(0, 1, 0);
+  transT = 0; camMode = 'exiting';
 }
 function abortSection() {
   if (camMode === 'orbit') return;
@@ -1376,18 +1421,16 @@ function updateCamera(dt) {
     controls.rotateSpeed = 0.45 * (camera.position.length() / INIT_DIST);
     controls.autoRotate = settings.autorot;
     controls.update();
-  } else if (camMode === 'entering') {
-    enterT += dt / SECTION_TRANS_MS; const e = smooth(Math.min(1, enterT));
-    camera.position.lerpVectors(savedPos, secPos, e);
-    camera.quaternion.copy(savedQuat).slerp(secQuat, e);
-    if (enterT >= 1) camMode = 'section';
+  } else if (camMode === 'entering' || camMode === 'exiting') {
+    transT += dt / SECTION_TRANS_MS; const e = smooth(Math.min(1, transT));
+    slerpDir(trFromDir, trToDir, e, _arcDir);                       // arc the offset direction about the pivot
+    const dist = trFromDist + (trToDist - trFromDist) * e;         // dolly the distance
+    camera.position.copy(pivot).addScaledVector(_arcDir, dist);
+    _arcUp.copy(trFromUp).lerp(trToUp, e); if (_arcUp.lengthSq() < 1e-9) _arcUp.copy(trToUp);
+    camera.up.copy(_arcUp.normalize()); camera.lookAt(pivot);      // always look at the pivot — no swoop, no yaw
+    if (transT >= 1) { if (camMode === 'entering') camMode = 'section'; else abortSection(); }
   } else if (camMode === 'section') {
     applySection();
-  } else if (camMode === 'exiting') {
-    exitT += dt / SECTION_TRANS_MS; const e = smooth(Math.min(1, exitT));
-    camera.position.lerpVectors(exitFromPos, savedPos, e);
-    camera.quaternion.copy(exitFromQuat).slerp(savedQuat, e);
-    if (exitT >= 1) abortSection();
   }
   sectionGroup.visible = camMode !== 'orbit';
   if (sectionGroup.visible) orientSlice();
@@ -1433,9 +1476,7 @@ window.addEventListener('keydown', e => {
 });
 
 /* ════════ SECTION: MAIN RENDER LOOP ════════ */
-let rafId = 0;
-function animate(ts) {
-  rafId = requestAnimationFrame(animate);
+function animate(ts, frame) {
   const dt = prevFrameTs === null ? 16 : (ts - prevFrameTs);
   prevFrameTs = ts;
 
@@ -1474,20 +1515,326 @@ function animate(ts) {
   updateLinks();
   atmosLayers.forEach(m => m.visible = settings.atmos);
   globeMat.uniforms.uGridAlpha.value = settings.grat ? 0.55 : 0.0;
-  updateCamera(dt);
-  if (camMode === 'section') updateSectionHud();
-  updateTooltip();
 
-  const camDist = camera.position.length();
-  document.getElementById('hud-zoom').textContent = 'zoom ' + (INIT_DIST / camDist).toFixed(2) + '×';
-  renderer.render(scene, camera);
+  if (renderer.xr.isPresenting) {
+    activeCam = xrCam;
+    vrUpdate(dt, frame);
+  } else {
+    activeCam = camera;
+    updateCamera(dt);
+    if (camMode === 'section') updateSectionHud();
+    updateTooltip();
+    const camDist = camera.position.length();
+    document.getElementById('hud-zoom').textContent = 'zoom ' + (INIT_DIST / camDist).toFixed(2) + '×';
+  }
+  renderer.render(scene, activeCam);
 }
-rafId = requestAnimationFrame(animate);
+renderer.setAnimationLoop(animate);
 
 // Stop the loop + audio when this iframe is backgrounded/unloaded.
-function teardown() { cancelAnimationFrame(rafId); if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {}); }
+function teardown() { renderer.setAnimationLoop(null); if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {}); }
 window.addEventListener('pagehide', teardown);
 document.addEventListener('visibilitychange', () => { if (document.hidden && audioCtx) audioCtx.suspend && audioCtx.suspend(); });
+
+/* ════════ SECTION: WEBXR / VR ════════
+   Put the headset on and stand inside the earthquake swarm (or hold the globe).
+   Full head tracking + dual controllers (lasers + models), teleport/snap-turn and
+   smooth/vignette locomotion (switchable), grab-to-spin the globe, and point a
+   controller at a live quake to read it. Brand-agnostic: any WebXR/OpenXR runtime
+   (Valve Index, Quest, Vive, WMR, Pico …). All of this is inert until a session starts. */
+const xrRig = new THREE.Group();
+const xrCam = new THREE.PerspectiveCamera(60, 1, 0.01, 4000);
+xrRig.add(xrCam);
+scene.add(xrRig);
+
+let vrMode = 'globe';            // 'globe' | 'immersion'
+let vrLoco = 'smooth';           // 'smooth' | 'teleport'
+let vrScale = 1;                 // current uniform rig scale
+const VR_ROOM_M = 5.0;           // target apparent size (m) of the globe / local swarm
+const VR_SNAP   = THREE.MathUtils.degToRad(30);
+const VR_SCALE_MIN = 0.0004, VR_SCALE_MAX = 60;
+
+const xrV1 = new THREE.Vector3(), xrV2 = new THREE.Vector3(), xrV3 = new THREE.Vector3(), xrV4 = new THREE.Vector3();
+const xrQ = new THREE.Quaternion(), xrIdentQ = new THREE.Quaternion();
+const xrM = new THREE.Matrix4(), xrM2 = new THREE.Matrix4();
+const vrUp = new THREE.Vector3(0, 1, 0);   // current "up" axis (radial in immersion, +Y in globe mode)
+
+// Make world point `wp` appear at tracking-space point `tp` (metres) with uniform scale `s` and orientation `q`.
+// (Scaling the rig is the standard WebXR way to change the apparent size of the world.)
+function vrAnchor(wp, tp, s, q) {
+  vrScale = s;
+  xrRig.scale.setScalar(s);
+  xrRig.quaternion.copy(q);
+  xrV4.copy(tp).multiplyScalar(s).applyQuaternion(q);
+  xrRig.position.copy(wp).sub(xrV4);
+  xrRig.updateMatrixWorld(true);
+}
+
+function vrInitialTarget() {
+  if (queryParams && isFinite(queryParams.lat) && isFinite(queryParams.lon)) return geo3D(queryParams.lat, queryParams.lon, EARTH_R);
+  if (camMode !== 'orbit') return pivot.clone();
+  return geo3D(39.8, -98.6, EARTH_R);   // continental-USA fallback
+}
+
+function placeGlobeMode() {
+  vrMode = 'globe';
+  vrUp.set(0, 1, 0);
+  const s = (EARTH_R * 2) / 0.6;                                   // globe ≈ 0.6 m across
+  vrAnchor(xrV1.set(0, 0, 0), xrV2.set(0, 1.25, -0.85), s, xrIdentQ); // ~0.85 m in front, chest height
+}
+
+const xrCloud = new THREE.Vector3();
+function placeImmersion(surfacePoint) {
+  vrMode = 'immersion';
+  vrUp.copy(surfacePoint).normalize();
+  xrQ.setFromUnitVectors(WORLD_UP, vrUp);                          // local +Y → radial up
+  const LOCAL = EARTH_R * 0.5;
+  let cx = 0, cy = 0, cz = 0, nn = 0;
+  for (const eq of earthquakes) {
+    xrV1.copy(geo3D(eq.lat, eq.lon, depthRadius(eq.depth)));
+    if (xrV1.distanceTo(surfacePoint) < LOCAL) { cx += xrV1.x; cy += xrV1.y; cz += xrV1.z; nn++; }
+  }
+  if (nn) xrCloud.set(cx / nn, cy / nn, cz / nn); else xrCloud.copy(surfacePoint).multiplyScalar(0.96);
+  let radius = EARTH_R * 0.02;
+  if (nn) for (const eq of earthquakes) {
+    xrV1.copy(geo3D(eq.lat, eq.lon, depthRadius(eq.depth)));
+    if (xrV1.distanceTo(surfacePoint) < LOCAL) radius = Math.max(radius, xrV1.distanceTo(xrCloud));
+  }
+  const s = (radius * 2) / VR_ROOM_M;                             // local cloud ≈ VR_ROOM_M metres across
+  vrAnchor(xrCloud, xrV2.set(0, 1.45, 0), s, xrQ);                // cloud centre at standing/chest height
+}
+
+function toggleVrMode() {
+  if (vrMode === 'globe') placeImmersion(vrInitialTarget()); else placeGlobeMode();
+}
+
+/* ── Controllers (added to the rig so they track + scale with the player) ── */
+const xrControllers = [];
+const xrModelFactory = new XRControllerModelFactory();
+function makeLaser() {
+  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
+  const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x00c8b4, transparent: true, opacity: 0.75 }));
+  line.name = 'laser'; line.scale.z = 5; return line;
+}
+for (let i = 0; i < 2; i++) {
+  const c = renderer.xr.getController(i);
+  c.add(makeLaser());
+  c.userData.prev = {}; c.userData.snapReady = true;
+  c.addEventListener('connected', e => { c.userData.handedness = e.data && e.data.handedness; c.userData.gamepad = e.data && e.data.gamepad; });
+  c.addEventListener('disconnected', () => { c.userData.gamepad = null; });
+  c.addEventListener('selectstart', () => onVrSelect(c, true));
+  c.addEventListener('selectend',   () => onVrSelect(c, false));
+  c.addEventListener('squeezestart', () => onVrSqueeze(c, true));
+  c.addEventListener('squeezeend',   () => onVrSqueeze(c, false));
+  xrRig.add(c);
+  const grip = renderer.xr.getControllerGrip(i);
+  grip.add(xrModelFactory.createControllerModel(grip));
+  xrRig.add(grip);
+  xrControllers.push(c);
+}
+function rightController() { return xrControllers.find(c => c.userData.handedness === 'right') || xrControllers[0]; }
+function leftController()  { return xrControllers.find(c => c.userData.handedness === 'left')  || xrControllers[1]; }
+function controllerRaycast(c, objects) {
+  xrM.identity().extractRotation(c.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(c.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(xrM).normalize();
+  return raycaster.intersectObjects(objects, false);
+}
+
+/* ── Rig rotation / scale helpers (world space; the rig's parent is the scene) ── */
+function rigRotateAround(point, axis, angle) {
+  xrM.makeTranslation(point.x, point.y, point.z);
+  xrM2.makeRotationAxis(xrV3.copy(axis).normalize(), angle); xrM.multiply(xrM2);
+  xrM2.makeTranslation(-point.x, -point.y, -point.z); xrM.multiply(xrM2);
+  xrRig.applyMatrix4(xrM); xrRig.updateMatrixWorld(true);
+}
+function rigRotateQuatAround(point, quat) {
+  xrM.makeTranslation(point.x, point.y, point.z);
+  xrM2.makeRotationFromQuaternion(quat); xrM.multiply(xrM2);
+  xrM2.makeTranslation(-point.x, -point.y, -point.z); xrM.multiply(xrM2);
+  xrRig.applyMatrix4(xrM); xrRig.updateMatrixWorld(true);
+}
+function headWorld(out) { return renderer.xr.getCamera().getWorldPosition(out); }
+function snapTurn(dir) { rigRotateAround(headWorld(xrV1), vrUp, VR_SNAP * dir); }
+function vrZoom(mult) {
+  const ns = clamp(vrScale * mult, VR_SCALE_MIN, VR_SCALE_MAX);
+  const k = ns / vrScale; if (k === 1) return;
+  headWorld(xrV1);
+  xrRig.position.sub(xrV1).multiplyScalar(k).add(xrV1);          // keep the world point at the head fixed
+  xrRig.scale.setScalar(ns); vrScale = ns; xrRig.updateMatrixWorld(true);
+}
+
+/* ── Grab-to-spin the globe (globe mode, squeeze) ── */
+let xrGrabCtrl = null;
+const xrGrabDir = new THREE.Vector3();
+function controllerDir(c, out) { return out.setFromMatrixPosition(c.matrixWorld).normalize(); }
+function onVrSqueeze(c, down) {
+  if (down && vrMode === 'globe') { xrGrabCtrl = c; controllerDir(c, xrGrabDir); }
+  else if (!down && xrGrabCtrl === c) xrGrabCtrl = null;
+}
+function vrGrabSpin() {
+  if (!xrGrabCtrl) return;
+  controllerDir(xrGrabCtrl, xrV2);
+  xrQ.setFromUnitVectors(xrGrabDir, xrV2);
+  rigRotateQuatAround(xrV1.set(0, 0, 0), xrQ.invert());          // rotate rig opposite so the globe follows the hand
+  xrGrabDir.copy(xrV2);
+}
+
+/* ── Teleport (immersion locomotion): reticle on the globe surface ── */
+const vrTeleMark = new THREE.Mesh(
+  new THREE.RingGeometry(0.6, 1.0, 32),
+  new THREE.MeshBasicMaterial({ color: 0x00c8b4, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthTest: false })
+);
+vrTeleMark.visible = false; vrTeleMark.renderOrder = 9; scene.add(vrTeleMark);
+function hideTeleportMarker() { vrTeleMark.visible = false; }
+function vrTeleportAim() {
+  if (vrLoco !== 'teleport') { hideTeleportMarker(); return; }
+  const c = rightController(); if (!c) { hideTeleportMarker(); return; }
+  const hits = controllerRaycast(c, [globe]);
+  if (hits.length) {
+    vrTeleMark.visible = true;
+    vrTeleMark.position.copy(hits[0].point);
+    vrTeleMark.quaternion.setFromUnitVectors(UP_Z, xrV1.copy(hits[0].point).normalize());
+    vrTeleMark.scale.setScalar(Math.max(1e-4, vrScale * 0.05));
+    c.userData.teleAt = hits[0].point.clone();
+  } else { hideTeleportMarker(); c.userData.teleAt = null; }
+}
+function onVrSelect(c, down) {
+  if (!down && vrLoco === 'teleport' && c.userData.teleAt) placeImmersion(c.userData.teleAt);
+}
+
+/* ── Quake info label: point a controller at a live pulse ── */
+const vrInfoCanvas = document.createElement('canvas'); vrInfoCanvas.width = 512; vrInfoCanvas.height = 256;
+const vrInfoCtx = vrInfoCanvas.getContext('2d');
+const vrInfoTex = new THREE.CanvasTexture(vrInfoCanvas);
+const vrInfoMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.25), new THREE.MeshBasicMaterial({ map: vrInfoTex, transparent: true, depthTest: false }));
+vrInfoMesh.visible = false; vrInfoMesh.renderOrder = 10; scene.add(vrInfoMesh);
+let vrInfoEq = null;
+function drawVrInfo(eq) {
+  const x = vrInfoCtx; x.clearRect(0, 0, 512, 256);
+  x.fillStyle = 'rgba(2,6,16,0.88)'; x.fillRect(0, 0, 512, 256);
+  x.strokeStyle = '#00c8b4'; x.lineWidth = 4; x.strokeRect(3, 3, 506, 250);
+  x.fillStyle = '#ffd166'; x.font = 'bold 70px sans-serif'; x.fillText('M ' + (eq.mag != null ? eq.mag.toFixed(1) : '?'), 26, 84);
+  x.fillStyle = '#ffffff'; x.font = '34px sans-serif'; x.fillText((eq.depth != null ? eq.depth.toFixed(0) : '?') + ' km deep', 26, 138);
+  x.fillStyle = '#9fb3c8'; x.font = '26px sans-serif'; x.fillText(String(eq.place || '').slice(0, 38), 26, 194);
+  vrInfoTex.needsUpdate = true;
+}
+function showVrInfoAt(point, eq) {
+  if (eq !== vrInfoEq) { vrInfoEq = eq; drawVrInfo(eq); }
+  vrInfoMesh.visible = true;
+  vrInfoMesh.position.copy(point);
+  vrInfoMesh.scale.setScalar(Math.max(1e-4, vrScale));            // world size so apparent size ≈ constant
+  vrInfoMesh.lookAt(headWorld(xrV1));
+}
+function hideVrInfo() { vrInfoMesh.visible = false; vrInfoEq = null; }
+function vrHoverQuake() {
+  if (!coreIM.count) { hideVrInfo(); return; }
+  const c = rightController(); if (!c) { hideVrInfo(); return; }
+  const hits = controllerRaycast(c, [coreIM]);
+  if (hits.length && hits[0].instanceId != null && instanceEq[hits[0].instanceId]) showVrInfoAt(hits[0].point, instanceEq[hits[0].instanceId]);
+  else hideVrInfo();
+}
+
+/* ── Comfort vignette (smooth-locomotion tunnelling); world-space, re-pinned to the head each frame ── */
+const vrVignetteMesh = new THREE.Mesh(
+  new THREE.RingGeometry(0.16, 0.6, 48),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, side: THREE.DoubleSide, depthTest: false, depthWrite: false })
+);
+vrVignetteMesh.visible = false; vrVignetteMesh.renderOrder = 999; vrVignetteMesh.frustumCulled = false; scene.add(vrVignetteMesh);
+let vrVigO = 0;
+function vrVignette(target, dt) {
+  vrVigO += (target - vrVigO) * Math.min(1, (dt / 1000) * 9);
+  const o = vrVigO * 0.85;
+  vrVignetteMesh.material.opacity = o;
+  vrVignetteMesh.visible = o > 0.01;
+  if (!vrVignetteMesh.visible) return;
+  const cam = renderer.xr.getCamera();
+  cam.getWorldPosition(xrV1); cam.getWorldQuaternion(xrQ);
+  xrV2.set(0, 0, -0.28 * vrScale).applyQuaternion(xrQ).add(xrV1);
+  vrVignetteMesh.position.copy(xrV2);
+  vrVignetteMesh.quaternion.copy(xrQ);
+  vrVignetteMesh.scale.setScalar(vrScale);
+}
+
+/* ── Smooth locomotion (left stick flies on the local tangent plane) ── */
+function vrSmoothMove(dt) {
+  const c = leftController(); const gp = c && c.userData.gamepad;
+  if (!gp) { vrVignette(0, dt); return; }
+  const ax = gp.axes; const sx = ax.length >= 4 ? ax[2] : ax[0]; const sy = ax.length >= 4 ? ax[3] : ax[1];
+  const mag = Math.hypot(sx, sy);
+  if (mag < 0.12) { vrVignette(0, dt); return; }
+  const cam = renderer.xr.getCamera();
+  cam.getWorldDirection(xrV1);
+  xrV1.addScaledVector(vrUp, -xrV1.dot(vrUp));                    // forward projected onto the tangent plane
+  if (xrV1.lengthSq() < 1e-6) cam.getWorldDirection(xrV1);
+  xrV1.normalize();
+  xrV2.crossVectors(xrV1, vrUp).normalize();                     // right
+  const speed = 1.8;                                             // m/s apparent
+  const wdelta = speed * (dt / 1000) * vrScale * mag;
+  xrV3.copy(xrV1).multiplyScalar(-sy).addScaledVector(xrV2, sx).normalize().multiplyScalar(wdelta);
+  xrRig.position.add(xrV3); xrRig.updateMatrixWorld(true);
+  vrVignette(Math.min(1, mag), dt);
+}
+
+/* ── Per-controller buttons / sticks (xr-standard layout, with fallbacks) ── */
+function readVrButtons(c, dt) {
+  const gp = c.userData.gamepad; if (!gp) return;
+  const prev = c.userData.prev;
+  const pressed = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+  if (pressed(4) && !prev[4]) toggleVrMode();                                          // A / X → toggle globe ↔ immersion
+  if (pressed(5) && !prev[5]) vrLoco = (vrLoco === 'smooth' ? 'teleport' : 'smooth');  // B / Y → cycle locomotion
+  prev[4] = pressed(4); prev[5] = pressed(5);
+  if (c.userData.handedness === 'right') {
+    const ax = gp.axes; const sx = ax.length >= 4 ? ax[2] : ax[0]; const sy = ax.length >= 4 ? ax[3] : ax[1];
+    if (Math.abs(sx) > 0.7) { if (c.userData.snapReady) { snapTurn(sx > 0 ? -1 : 1); c.userData.snapReady = false; } }
+    else if (Math.abs(sx) < 0.3) c.userData.snapReady = true;
+    if (Math.abs(sy) > 0.6) vrZoom(1 + sy * 0.6 * (dt / 1000));                         // right stick Y → zoom / scale
+  }
+}
+
+/* ── Per-frame VR update (called from the render loop while presenting) ── */
+function vrUpdate(dt, frame) {
+  for (const c of xrControllers) readVrButtons(c, dt);
+  vrGrabSpin();
+  if (vrLoco === 'smooth') vrSmoothMove(dt); else vrVignette(0, dt);
+  vrTeleportAim();
+  vrHoverQuake();
+}
+
+/* ── VR session button + lifecycle ── */
+const vrBtn = document.getElementById('vr-btn');
+let xrSession = null;
+async function initVrButton() {
+  if (!vrBtn || !('xr' in navigator) || !navigator.xr.isSessionSupported) return;
+  let supported = false;
+  try { supported = await navigator.xr.isSessionSupported('immersive-vr'); } catch (_) {}
+  if (!supported) return;
+  vrBtn.style.display = 'flex';
+  vrBtn.addEventListener('click', toggleVrSession);
+}
+async function toggleVrSession() {
+  if (xrSession) { xrSession.end(); return; }
+  try {
+    xrSession = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] });
+    await renderer.xr.setSession(xrSession);
+    xrSession.addEventListener('end', onVrSessionEnd);
+    onVrSessionStart();
+  } catch (e) { console.warn('VR session request failed:', e); xrSession = null; }
+}
+function onVrSessionStart() {
+  activeCam = xrCam;
+  vrMode = 'globe'; vrLoco = 'smooth'; vrVigO = 0; xrGrabCtrl = null;
+  vrBtn.classList.add('active');
+  document.body.classList.add('in-vr');
+  placeGlobeMode();
+}
+function onVrSessionEnd() {
+  xrSession = null; activeCam = camera;
+  vrBtn.classList.remove('active');
+  document.body.classList.remove('in-vr');
+  hideVrInfo(); hideTeleportMarker(); xrGrabCtrl = null;
+}
+initVrButton();
 
 /* ════════ SECTION: ANIMATION CONTROL ════════ */
 function startAnimation() {
