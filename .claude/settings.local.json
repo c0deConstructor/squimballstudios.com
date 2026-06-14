@@ -13,7 +13,13 @@
       "Bash(node _vcheck.mjs)",
       "Bash(rm -f _vcheck.mjs _srv.log ._check.mjs package-lock.json)",
       "Bash(node _vhover.mjs)",
-      "Bash(rm -f _vcheck.mjs _vhover.mjs _srv.log ._check.mjs package-lock.json)"
+      "Bash(rm -f _vcheck.mjs _vhover.mjs _srv.log ._check.mjs package-lock.json)",
+      "Bash(node verify2.js)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8099 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Remove-Item -Recurse -Force \"c:/Users/squim/eqgl_verify\" -ErrorAction SilentlyContinue; git -C \"c:/Users/squim/Desktop/AI Projects/squimballstudios.com\" status --short)",
+      "Bash(node server.js \"c:/Users/squim/Desktop/AI Projects/squimballstudios.com\")",
+      "Bash(curl -s -o /dev/null -w \"server:%{http_code}\\\\n\" \"http://127.0.0.1:8099/pages/earthquake_animator_gl.html\")",
+      "Bash(node diag.js)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8099 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Remove-Item -Recurse -Force \"c:/Users/squim/eqgl_verify\" -ErrorAction SilentlyContinue; Write-Output \"cleaned\")"
     ]
   }
 }
