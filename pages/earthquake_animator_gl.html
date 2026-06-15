@@ -1924,21 +1924,21 @@ window.addEventListener('pointerup', () => { _scrubbing = false; });
 function applyAnimLength() { if (dataSpanMs > 0) settings.speed = dataSpanMs / (settings.animLen * 1000); }
 const SLIDER_DEFS = [
   { key:'animLen',      label:'Animation Length', min:3,    max:180, step:0.5,  fmt:v=>v.toFixed(1)+'s',  onChange:applyAnimLength },
-  { key:'fadeTime',     label:'Fade Out',         min:0.3,  max:15,  step:0.1,  fmt:v=>v.toFixed(1)+'s' },
+  { key:'fadeTime',     label:'Pulse Fade Out',         min:0.3,  max:15,  step:0.1,  fmt:v=>v.toFixed(1)+'s' },
+  { key:'pulseOpacity', label:'Pulse Opacity',    min:0.05, max:1,   step:0.05, fmt:v=>v.toFixed(2) },
+  { key:'depthScale',   label:'Depth Scale',      min:0,    max:1,   step:0.01, fmt:v=>v.toFixed(2) },  
+  { key:'baseR',        label:'Base Radius',      min:0.1,  max:10,  step:0.1,  fmt:v=>v.toFixed(1) },
+  { key:'magScale',     label:'Magnitude Scale',  min:0.1,  max:4,   step:0.1,  fmt:v=>v.toFixed(1) },
+  { key:'maxR',         label:'Max Radius Cap',   min:10,   max:250, step:1,    fmt:v=>String(v) },  
+  { key:'magRange1',    label:'Low / Mid Range Split',  min:0.1,  max:9.7, step:0.1,  fmt:v=>v.toFixed(1), onChange:()=>onMagRange('r1') },
+  { key:'magRange2',    label:'Mid / High Range Split', min:0.2,  max:9.8, step:0.1,  fmt:v=>v.toFixed(1), onChange:()=>onMagRange('r2') },
+  { key:'scaleLow',     label:'Low Range Visual Scale',  min:0.1,  max:5,   step:0.1,  fmt:v=>v.toFixed(1)+'×' },
+  { key:'scaleMid',     label:'Mid Range Visual Scale',  min:0.1,  max:5,   step:0.1,  fmt:v=>v.toFixed(1)+'×' },
+  { key:'scaleHigh',    label:'High Range Visual Scale', min:0.1,  max:5,   step:0.1,  fmt:v=>v.toFixed(1)+'×' },
   { key:'rings',        label:'Ripple Rings',     min:0,    max:5,   step:1,    fmt:v=>String(v) },
   { key:'ringWidth',    label:'Ripple Line Width',min:0.02, max:0.5, step:0.01, fmt:v=>v.toFixed(2) },
-  { key:'baseR',        label:'Base Radius',      min:0.1,  max:10,  step:0.1,  fmt:v=>v.toFixed(1) },
-  { key:'magScale',     label:'Mag Scale',        min:0.1,  max:4,   step:0.1,  fmt:v=>v.toFixed(1) },
-  { key:'maxR',         label:'Max Radius Cap',   min:10,   max:250, step:1,    fmt:v=>String(v) },
-  { key:'depthScale',   label:'Depth Scale',      min:0,    max:1,   step:0.01, fmt:v=>v.toFixed(2) },
-  { key:'pulseOpacity', label:'Pulse Opacity',    min:0.05, max:1,   step:0.05, fmt:v=>v.toFixed(2) },
   { key:'audioVol',     label:'Audio Volume',     min:0,    max:1,   step:0.05, fmt:v=>v===0?'off':v.toFixed(2) },
   { key:'audioFreq',    label:'Audio Frequencies',min:0,    max:1,   step:0.05, fmt:v=>v<=0.15?'Sub':v<0.45?'Low':v<0.70?'Mid':'High' },
-  { key:'magRange1',    label:'Low / Mid Split',  min:0.1,  max:9.7, step:0.1,  fmt:v=>v.toFixed(1), onChange:()=>onMagRange('r1') },
-  { key:'magRange2',    label:'Mid / High Split', min:0.2,  max:9.8, step:0.1,  fmt:v=>v.toFixed(1), onChange:()=>onMagRange('r2') },
-  { key:'scaleLow',     label:'Low Range Scale',  min:0.1,  max:5,   step:0.1,  fmt:v=>v.toFixed(1)+'×' },
-  { key:'scaleMid',     label:'Mid Range Scale',  min:0.1,  max:5,   step:0.1,  fmt:v=>v.toFixed(1)+'×' },
-  { key:'scaleHigh',    label:'High Range Scale', min:0.1,  max:5,   step:0.1,  fmt:v=>v.toFixed(1)+'×' },
 ];
 function onMagRange(source) {
   let r1 = settings.magRange1, r2 = settings.magRange2;
