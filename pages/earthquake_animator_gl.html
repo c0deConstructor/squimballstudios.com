@@ -285,6 +285,28 @@
   #credits-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 11px 20px 13px; font-family: var(--mono); font-size: 10px; letter-spacing: .05em; line-height: 1.6; color: var(--text-dim); }
   #credits-foot span { color: var(--accent); }
 
+  /* ── HELP / HOW-TO VIDEO ── */
+  #help-btn { position: fixed; top: 54px; left: 12px; z-index: 46; width: 34px; height: 34px; border-radius: 50%; background: var(--panel-bg); border: 1px solid var(--accent); color: var(--accent); font-family: var(--mono); font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; padding-bottom: 1px; transition: background .2s, box-shadow .2s, color .2s, left .35s cubic-bezier(.4,0,.2,1); animation: creditsPulse 2.8s ease-in-out 1.4s infinite; }
+  #help-btn:hover { background: rgba(0,200,180,0.16); color: #fff; box-shadow: 0 0 16px rgba(0,200,180,0.5); }
+  #settings-panel:not(.collapsed) ~ #help-btn { left: calc(var(--panel-w) + 12px); }
+  body.in-vr #help-btn { display: none !important; }
+
+  #help-modal { position: fixed; inset: 0; z-index: 111; display: none; align-items: center; justify-content: center; background: rgba(2,6,16,0.86); backdrop-filter: blur(4px); }
+  #help-modal.open { display: flex; }
+  #help-box { background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent3); box-shadow: 0 0 80px rgba(255,209,102,0.14); width: min(900px, 96vw); display: flex; flex-direction: column; position: relative; animation: creditsIn .34s cubic-bezier(.2,.7,.3,1); }
+  #help-box::before { content: ''; position: absolute; top: -1px; left: 40px; width: 60px; height: 2px; background: var(--accent); }
+  #help-header { padding: 16px 20px 13px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  #help-title { font-family: var(--mono); font-size: 12px; letter-spacing: .22em; color: var(--accent3); text-transform: uppercase; }
+  #help-title .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent2); margin-right: 9px; vertical-align: middle; animation: helpBlink 1.3s step-end infinite; }
+  @keyframes helpBlink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  #help-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; letter-spacing: .02em; }
+  #help-close { background: transparent; border: 1px solid rgba(255,209,102,0.3); color: var(--text-dim); font-family: var(--mono); font-size: 11px; padding: 4px 10px; cursor: pointer; letter-spacing: .1em; transition: color .2s, border-color .2s; flex-shrink: 0; }
+  #help-close:hover { color: var(--accent3); border-color: var(--accent3); }
+  #help-video { position: relative; width: 100%; padding-top: 56.25%; background: #000; overflow: hidden; }
+  #help-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  #help-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 11px 20px 13px; font-family: var(--mono); font-size: 10px; letter-spacing: .05em; line-height: 1.6; color: var(--text-dim); }
+  #help-foot span { color: var(--accent3); }
+
   /* ── CONFIRM DIALOG ── */
   #confirm-modal { position: fixed; inset: 0; z-index: 120; display: none; align-items: center; justify-content: center; background: rgba(2,6,16,0.78); backdrop-filter: blur(3px); }
   #confirm-modal.open { display: flex; }
@@ -450,6 +472,22 @@
     </div>
     <div id="credits-list"></div>
     <div id="credits-foot"><span>Thank you</span> to all listed projects/sources. All datasets remain © their respective providers.</div>
+  </div>
+</div>
+
+<!-- ── Help / How-to video ── -->
+<button id="help-btn" title="How-to video guide" aria-label="How-to video guide">?</button>
+<div id="help-modal">
+  <div id="help-box">
+    <div id="help-header">
+      <div>
+        <div id="help-title"><span class="dot"></span>How-To · Video Guide</div>
+        <div id="help-sub">A quick visual tour of the Earthquake Animator ↗</div>
+      </div>
+      <button id="help-close">✕ Close</button>
+    </div>
+    <div id="help-video"></div>
+    <div id="help-foot"><span>▶ Walkthrough</span> · the video loads here on demand and stops when you close this panel.</div>
   </div>
 </div>
 
@@ -2566,6 +2604,25 @@ const SOURCES = [
   function close() { modal.classList.remove('open'); }
   document.getElementById('credits-btn').addEventListener('click', open);
   document.getElementById('credits-close').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) close(); });
+})();
+
+/* ── Help / how-to video popup (lazy-loads the YouTube embed on open, clears it on close so it stops) ── */
+(function () {
+  const btn = document.getElementById('help-btn');
+  const modal = document.getElementById('help-modal');
+  const host = document.getElementById('help-video');
+  const closeBtn = document.getElementById('help-close');
+  const EMBED = 'https://www.youtube.com/embed/FUae0LsO8Qk?si=qsmryrM24F6Chba3';
+  function open() {
+    host.innerHTML = '<iframe src="' + EMBED + '" title="Earthquake Animator — How-To" ' +
+      'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>';
+    modal.classList.add('open');
+  }
+  function close() { modal.classList.remove('open'); host.innerHTML = ''; }   // clearing the iframe stops playback
+  btn.addEventListener('click', open);
+  closeBtn.addEventListener('click', close);
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) close(); });
 })();
