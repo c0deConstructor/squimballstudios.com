@@ -176,7 +176,17 @@
   #scrim.active { display: block; }
 
   /* ── CONTENT PANE ─────────────────────────────────────── */
-  #content { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; }
+  #content { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; transition: top .2s ease; }
+
+  /* ── FULLSCREEN (collapse the top bar so the content fills the screen) ── */
+  body.fullscreen #topbar { display: none; }
+  body.fullscreen #content { top: 0; }
+  #fs-exit { display: none; position: fixed; top: 8px; left: 80px; z-index: 320; width: 30px; height: 30px;
+    align-items: center; justify-content: center; background: var(--bar); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--muted); cursor: pointer; opacity: .55; transition: opacity .15s, color .15s, background .15s; }
+  body.fullscreen #fs-exit { display: flex; }
+  #fs-exit:hover { opacity: 1; color: var(--text); background: var(--hover-bg); }
+  #fs-exit svg { width: 15px; height: 15px; fill: currentColor; }
 
   .page-frame { width: 100%; height: 100%; border: none; display: none; background: var(--bg); }
   .page-frame.active { display: block; }
@@ -204,6 +214,10 @@
   <button class="pg-btn" data-tip="PIT Game"            onclick="show(5)">5</button>
   <button class="pg-btn" data-tip="Wildlife Globe"      onclick="show(6)">6</button>
   <button class="pg-btn" data-tip="Orbit Simulator"     onclick="show(7)">7</button>
+  <div class="sep"></div>
+  <button class="icon-btn" id="fs-btn" data-tip="Fullscreen" onclick="toggleFullscreen()">
+    <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+  </button>
 
   <div class="spacer"></div>
 
@@ -246,6 +260,11 @@
   </button>
 
 </nav>
+
+<!-- Fullscreen exit (only visible while the top bar is collapsed) -->
+<button id="fs-exit" onclick="toggleFullscreen()" title="Exit fullscreen" aria-label="Exit fullscreen">
+  <svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+</button>
 
 <!-- click-outside scrim -->
 <div id="scrim" onclick="closeAllPanels()"></div>
@@ -354,11 +373,14 @@
   });
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeAllPanels(); return; }
+    if (e.key === 'Escape') { document.body.classList.remove('fullscreen'); closeAllPanels(); return; }
     const n = parseInt(e.key);
     // Keys 1-3 map to pages 1-3; key 0 goes home
     if (!isNaN(n) && n >= 0 && n <= pgBtns.length - 1) show(n);
   });
+
+  /* ── fullscreen: collapse the top bar so the content fills the screen ── */
+  function toggleFullscreen() { document.body.classList.toggle('fullscreen'); }
 
   /* ── panel toggle ────────────────────────────────────── */
   function togglePanel(panelId, btn) {
