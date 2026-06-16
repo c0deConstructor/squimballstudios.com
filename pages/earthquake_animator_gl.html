@@ -75,6 +75,7 @@
   #panel-inner::-webkit-scrollbar-thumb { background: var(--border); }
   #panel-toggle { position: absolute; right: -36px; top: 50%; transform: translateY(-50%); width: 36px; height: 80px; background: var(--panel-bg); border: 1px solid var(--border); border-left: none; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: all; color: var(--accent); transition: background 0.2s; writing-mode: vertical-lr; font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; }
   #panel-toggle:hover { background: rgba(0,200,180,0.1); }
+  #panel-toggle-ls { display: none; }   /* only shown on landscape phones (see media query) */
   .panel-section { margin-bottom: 13px; }
   .panel-section-title { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
   .color-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
@@ -142,7 +143,7 @@
   #vr-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.4; }
   /* While presenting in VR, declutter the mirrored desktop view. */
   body.in-vr #hud, body.in-vr #settings-panel, body.in-vr #zoom-controls, body.in-vr #xsection-btn,
-  body.in-vr #roll-btn, body.in-vr #roll-overlay, body.in-vr #credits-btn, body.in-vr #progress-bar-wrap { display: none !important; }
+  body.in-vr #roll-btn, body.in-vr #roll-overlay, body.in-vr #credits-btn, body.in-vr #progress-bar-wrap, body.in-vr #panel-toggle-ls { display: none !important; }
 
   /* ── HUD ── */
   #hud { position: fixed; top: 20px; right: 20px; z-index: 40; text-align: right; pointer-events: none; }
@@ -208,11 +209,15 @@
   #map-picker-modal.open { display: flex; }
   #map-picker-box { background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent); box-shadow: 0 0 80px rgba(0,200,180,0.15); display: flex; flex-direction: column; width: min(760px, 96vw); max-height: 90vh; position: relative; }
   #map-picker-box::before { content: ''; position: absolute; top: -1px; left: 40px; width: 60px; height: 2px; background: var(--accent2); }
-  #map-picker-header { padding: 16px 20px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  #map-picker-header { padding: 16px 20px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; gap: 8px 10px; }
   #map-picker-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; }
   #map-picker-hint { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; }
   #map-picker-close { background: transparent; border: 1px solid rgba(0,200,180,0.25); color: var(--text-dim); font-family: var(--mono); font-size: 11px; padding: 4px 10px; cursor: pointer; letter-spacing: 0.1em; transition: color 0.2s, border-color 0.2s; }
   #map-picker-close:hover { color: var(--accent2); border-color: var(--accent2); }
+  .mp-head-btns { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  #mp-draw-toggle { background: transparent; border: 1px solid rgba(0,200,180,0.4); color: var(--accent); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 11px; cursor: pointer; transition: background 0.2s, color 0.2s; }
+  #mp-draw-toggle:hover { background: rgba(0,200,180,0.12); }
+  #mp-draw-toggle.active { background: var(--accent); color: var(--bg); }
   #map-picker-canvas-wrap { position: relative; flex: 1; min-height: 0; height: 420px; overflow: hidden; }
   #map-picker-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
   #map-picker-canvas.map-panning { cursor: grabbing; }
@@ -325,6 +330,42 @@
     .q-heading { font-size: 22px; }
     #credits-list { grid-template-columns: 1fr; }
   }
+
+  /* ───────── MOBILE LAYOUT — phones only; desktop layout is untouched ───────── */
+  /* Both phone orientations: bring the left control stack toward the bottom-left corner. */
+  @media (orientation: portrait) and (max-width: 760px),
+         (orientation: landscape) and (max-height: 520px) {
+    #vr-btn        { bottom: 214px; left: 12px; }
+    #roll-btn      { bottom: 166px; left: 12px; }
+    #xsection-btn  { bottom: 118px; left: 12px; }
+    #zoom-controls { bottom: 42px;  left: 12px; }
+  }
+
+  /* Portrait phones */
+  @media (orientation: portrait) and (max-width: 760px) {
+    /* Settings stub higher up — roughly midway between the "?" button and the VR button. */
+    #panel-toggle { top: 40%; }
+    /* Play / Pause / Restart / New Query as a compact 2×2 grid (flex-basis so the JS-set
+       inline display:flex still applies — two buttons per row, wrapping to two rows). */
+    #controls-bar { gap: 6px; padding: 8px 10px; width: min(84vw, 290px); }
+    #controls-bar .ctrl-btn { flex: 1 1 calc(50% - 6px); box-sizing: border-box; font-size: 10px; letter-spacing: 0.06em; padding: 7px 4px; text-align: center; }
+  }
+
+  /* Landscape phones */
+  @media (orientation: landscape) and (max-height: 520px) {
+    /* "!" and "?" become a small horizontal pair at the lower-right. */
+    #credits-btn { top: auto; left: auto; bottom: 12px; right: 52px; width: 30px; height: 30px; font-size: 16px; }
+    #help-btn    { top: auto; left: auto; bottom: 12px; right: 16px; width: 30px; height: 30px; font-size: 16px; }
+    #settings-panel:not(.collapsed) ~ #credits-btn { left: auto; right: 52px; }
+    #settings-panel:not(.collapsed) ~ #help-btn    { left: auto; right: 16px; }
+    /* Play / Pause / Restart / New Query forced onto a single row. */
+    #controls-bar { flex-wrap: nowrap; gap: 5px; padding: 7px 10px; max-width: 96vw; }
+    #controls-bar .ctrl-btn { font-size: 10px; letter-spacing: 0.05em; padding: 6px 8px; white-space: nowrap; }
+    /* Settings toggle: no left-edge stub — a normal-orientation button at the lower-right, left of "!". */
+    #panel-toggle { display: none; }
+    #panel-toggle-ls { display: flex; align-items: center; justify-content: center; position: fixed; z-index: 47; bottom: 12px; right: 90px; height: 30px; padding: 0 12px; background: var(--panel-bg); border: 1px solid var(--border); color: var(--accent); font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+    #panel-toggle-ls:hover { background: rgba(0,200,180,0.1); border-color: var(--accent); }
+  }
 </style>
 </head>
 <body>
@@ -367,8 +408,11 @@
 <div id="map-picker-modal">
   <div id="map-picker-box">
     <div id="map-picker-header">
-      <div><div id="map-picker-title">⊕ Select Search Area</div><div id="map-picker-hint">Pan/zoom freely · Shift+drag to draw search circle</div></div>
-      <button id="map-picker-close">✕ Cancel</button>
+      <div><div id="map-picker-title">⊕ Select Search Area</div><div id="map-picker-hint">Drag to pan · +/− to zoom · then “Set Search Area”</div></div>
+      <div class="mp-head-btns">
+        <button id="mp-draw-toggle">◎ Set Search Area</button>
+        <button id="map-picker-close">✕ Cancel</button>
+      </div>
     </div>
     <div id="map-picker-canvas-wrap"><canvas id="map-picker-canvas"></canvas></div>
     <div id="map-picker-footer">
@@ -458,6 +502,8 @@
   </div>
   <button id="panel-toggle">SETTINGS</button>
 </div>
+<!-- Landscape-only settings toggle (lives outside the panel so the panel's slide transform doesn't move it). -->
+<button id="panel-toggle-ls">⚙ Settings</button>
 
 <!-- ── Credits ── -->
 <button id="credits-btn" title="Data sources &amp; credits" aria-label="Data sources and credits">!</button>
@@ -1495,8 +1541,17 @@ document.getElementById('roll-btn').addEventListener('click', () => {
 // Drag to pivot/look. Works for a held middle button (buttons & 4), a left-drag
 // after the toggle, and one-finger touch — without needing a fresh pointerdown.
 let secLastX = null, secLastY = null;
+const secPtrs = new Map();          // active pointers (for two-finger pinch-zoom on touch)
+let secPinchPrev = 0;
 canvas.addEventListener('pointermove', e => {
-  if (camMode !== 'section' || e.buttons === 0) { secLastX = secLastY = null; return; }
+  if (camMode !== 'section') { secLastX = secLastY = null; return; }
+  if (secPtrs.has(e.pointerId)) secPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (secPtrs.size >= 2) {          // two fingers → pinch to dolly (no look)
+    const p = [...secPtrs.values()], d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    if (secPinchPrev > 0 && d > 0) sectDist = clamp(sectDist * (secPinchPrev / d), SECT_DIST_MIN, SECT_DIST_MAX);
+    secPinchPrev = d; secLastX = secLastY = null; return;
+  }
+  if (e.buttons === 0) { secLastX = secLastY = null; return; }
   if (secLastX !== null) {
     const dx = e.clientX - secLastX, dy = e.clientY - secLastY;
     sectAz += dx * 0.005;
@@ -1504,8 +1559,21 @@ canvas.addEventListener('pointermove', e => {
   }
   secLastX = e.clientX; secLastY = e.clientY;
 });
-canvas.addEventListener('pointerup', () => { secLastX = secLastY = null; });
-canvas.addEventListener('pointerdown', e => { if (camMode === 'section') { secLastX = e.clientX; secLastY = e.clientY; try { canvas.setPointerCapture(e.pointerId); } catch (_) {} } });
+canvas.addEventListener('pointerdown', e => {
+  if (camMode !== 'section') return;
+  secPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  if (secPtrs.size >= 2) { const p = [...secPtrs.values()]; secPinchPrev = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); secLastX = secLastY = null; }
+  else { secLastX = e.clientX; secLastY = e.clientY; }
+});
+function secPtrEnd(e) {
+  secPtrs.delete(e.pointerId);
+  if (secPtrs.size < 2) secPinchPrev = 0;
+  if (secPtrs.size === 0) { secLastX = secLastY = null; }
+  else { const p = [...secPtrs.values()][0]; secLastX = p.x; secLastY = p.y; }   // resume look from the remaining finger
+}
+canvas.addEventListener('pointerup', secPtrEnd);
+canvas.addEventListener('pointercancel', secPtrEnd);
 canvas.addEventListener('wheel', e => {
   if (camMode !== 'section') return;
   e.preventDefault();
@@ -1917,13 +1985,21 @@ document.getElementById('btn-restart').addEventListener('click', () => { if (ear
 document.getElementById('btn-new-query').addEventListener('click', openQuery);
 document.getElementById('btn-pause-panel').addEventListener('click', () => document.getElementById('btn-pause').click());
 document.getElementById('btn-reset-view').addEventListener('click', () => { abortSection(); controls.reset(); controls.update(); });
-document.getElementById('btn-zoom-in').addEventListener('click', () => { camera.position.multiplyScalar(0.8); controls.update(); });
-document.getElementById('btn-zoom-out').addEventListener('click', () => { camera.position.multiplyScalar(1.25); controls.update(); });
+document.getElementById('btn-zoom-in').addEventListener('click', () => {
+  if (camMode === 'section') sectDist = clamp(sectDist * 0.85, SECT_DIST_MIN, SECT_DIST_MAX);   // zoom works in cross-section too (no scroll wheel on mobile)
+  else { camera.position.multiplyScalar(0.8); controls.update(); }
+});
+document.getElementById('btn-zoom-out').addEventListener('click', () => {
+  if (camMode === 'section') sectDist = clamp(sectDist * 1.18, SECT_DIST_MIN, SECT_DIST_MAX);
+  else { camera.position.multiplyScalar(1.25); controls.update(); }
+});
 document.getElementById('panel-toggle').addEventListener('click', () => {
   const collapsed = document.getElementById('settings-panel').classList.toggle('collapsed');
   // Slide the progress bar clear of the open panel so it's fully visible.
   document.getElementById('progress-bar-wrap').style.left = collapsed ? '0' : 'var(--panel-w)';
 });
+// Landscape-phone settings button mirrors the stub's toggle.
+document.getElementById('panel-toggle-ls').addEventListener('click', () => document.getElementById('panel-toggle').click());
 
 /* ════════ SECTION: SCRUBBABLE PROGRESS BAR ════════ */
 const _progWrap = document.getElementById('progress-bar-wrap');
@@ -2489,6 +2565,7 @@ clampInput('q-lat', -90, 90); clampInput('q-lon', -180, 180); clampInput('q-radi
   }
   window.openMapPicker = function() {
     modal.classList.add('open');
+    setDrawMode(false);
     requestAnimationFrame(()=>{
       mpResize();
       const lat=parseFloat(document.getElementById('q-lat').value), lon=parseFloat(document.getElementById('q-lon').value), rKm=parseFloat(document.getElementById('q-radius').value);
@@ -2512,23 +2589,38 @@ clampInput('q-lat', -90, 90); clampInput('q-lon', -180, 180); clampInput('q-radi
   document.getElementById('mp-zoom-in').addEventListener('click', ()=>mpApplyZoom(1.5,mpW/2,mpH/2));
   document.getElementById('mp-zoom-out').addEventListener('click', ()=>mpApplyZoom(1/1.5,mpW/2,mpH/2));
   mpCanvas.addEventListener('wheel', e=>{ e.preventDefault(); const r=mpCanvas.getBoundingClientRect(); mpApplyZoom(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top); },{passive:false});
-  mpCanvas.addEventListener('mousedown', e=>{
+  // Draw-mode toggle: works without a Shift key, so touch (and plain click) can set the area.
+  let drawMode = false;
+  const drawToggle = document.getElementById('mp-draw-toggle'), hintEl = document.getElementById('map-picker-hint');
+  function setDrawMode(on){
+    drawMode = on;
+    drawToggle.classList.toggle('active', on);
+    drawToggle.textContent = on ? '✋ Pan / Zoom' : '◎ Set Search Area';
+    hintEl.textContent = on ? 'Drag from the centre outward to set the radius' : 'Drag to pan · +/− to zoom · then “Set Search Area”';
+    mpCanvas.style.cursor = on ? 'crosshair' : 'grab';
+  }
+  drawToggle.addEventListener('click', ()=>setDrawMode(!drawMode));
+  // Pointer Events → one code path for mouse, touch and pen.
+  mpCanvas.addEventListener('pointerdown', e=>{
     const r=mpCanvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-    if (e.shiftKey){e.preventDefault();const g=mpUnproj(mx,my);selLat=Math.max(-90,Math.min(90,g.lat));selLon=Math.max(-180,Math.min(180,g.lon));selCurX=mx;selCurY=my;selActive=true;selRadiusKm=0;confirmBtn.disabled=true;}
+    try{mpCanvas.setPointerCapture(e.pointerId);}catch(_){}
+    if (drawMode || e.shiftKey){e.preventDefault();const g=mpUnproj(mx,my);selLat=Math.max(-90,Math.min(90,g.lat));selLon=Math.max(-180,Math.min(180,g.lon));selCurX=mx;selCurY=my;selActive=true;selRadiusKm=0;confirmBtn.disabled=true;mpDraw();}
     else{mpDragging=true;mpDragStartX=mx;mpDragStartY=my;mpDragPanX=mpPanX;mpDragPanY=mpPanY;mpCanvas.classList.add('map-panning');e.preventDefault();}
   });
-  window.addEventListener('mousemove', e=>{
+  mpCanvas.addEventListener('pointermove', e=>{
     if (!modal.classList.contains('open')) return;
     const r=mpCanvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
     if (selActive){selCurX=mx;selCurY=my;const c=mpProj(selLat,selLon),rPx=Math.hypot(mx-c.x,my-c.y);selRadiusKm=Math.max(1,Math.min(20000,rPx/(mpBaseScale*mpZoom)*111.32));updateCoords();mpDraw();}
     else if (mpDragging){mpPanX=mpDragPanX+(mx-mpDragStartX);mpPanY=mpDragPanY+(my-mpDragStartY);mpRebuild();mpDraw();}
     else{const g=mpUnproj(mx,my);if(selLat!==null&&selRadiusKm>0)updateCoords();else coordsEl.innerHTML=`Cursor: <span>${g.lat.toFixed(3)}°, ${g.lon.toFixed(3)}°</span>`;}
   });
-  window.addEventListener('mouseup', e=>{
+  function mpPointerEnd(){
     if (!modal.classList.contains('open')) return;
     if (selActive){selActive=false;if(selRadiusKm>1){confirmBtn.disabled=false;updateCoords();}else{selLat=null;selLon=null;selRadiusKm=null;confirmBtn.disabled=true;coordsEl.innerHTML='No selection yet';}mpDraw();}
     if (mpDragging){mpDragging=false;mpCanvas.classList.remove('map-panning');}
-  });
+  }
+  mpCanvas.addEventListener('pointerup', mpPointerEnd);
+  mpCanvas.addEventListener('pointercancel', mpPointerEnd);
   modal.addEventListener('click', e=>{ if(e.target===modal)modal.classList.remove('open'); });
   window.addEventListener('keydown', e=>{ if(e.key==='Escape'&&modal.classList.contains('open'))modal.classList.remove('open'); });
   const poll = setInterval(()=>{ if(worldGeoReady&&modal.classList.contains('open')){mpRebuild();mpDraw();clearInterval(poll);}else if(worldGeoReady)clearInterval(poll); }, 200);
