@@ -1040,10 +1040,10 @@ function lerpColor(a, b, t) {
   return `#${[0,1,2].map(i=>[ca.r,ca.g,ca.b][i]+([cb.r-ca.r,cb.g-ca.g,cb.b-ca.b][i])*t).map(v=>Math.round(v).toString(16).padStart(2,'0')).join('')}`;
 }
 function magColor(mag) {
-  const r1 = settings.magRange1, r2 = settings.magRange2;
-  if (mag <= r1) return settings.colLow;
-  if (mag <= r2) return lerpColor(settings.colLow, settings.colMid, (mag - r1) / Math.max(0.0001, r2 - r1));
-  return lerpColor(settings.colMid, settings.colHigh, Math.min(1, (mag - r2) / Math.max(0.0001, 10 - r2)));
+  // Solid, discrete colour per magnitude group — NOT a magnitude-faded gradient.
+  return mag <= settings.magRange1 ? settings.colLow
+       : mag <= settings.magRange2 ? settings.colMid
+       : settings.colHigh;
 }
 function magRangeScale(mag) {
   if (mag <= settings.magRange1) return settings.scaleLow;
@@ -1138,8 +1138,15 @@ function buildLink(group, on, count) {
     const b = 0.12 + 0.88 * (i / (n - 1));   // oldest dim → newest brightest
     col[i*3] = _linkCol.r * b; col[i*3+1] = _linkCol.g * b; col[i*3+2] = _linkCol.b * b;
   }
-  line.geometry.setPositions(pos);
-  line.geometry.setColors(col);
+  // Build a FRESH geometry each rebuild. Reusing one LineGeometry and re-calling
+  // setPositions() does NOT reliably re-render when the point count changes — the line
+  // gets stuck at its first segment count, which was the "links 1→2 then skips" bug.
+  const geo = new LineGeometry();
+  geo.setPositions(pos);
+  geo.setColors(col);
+  const old = line.geometry;
+  line.geometry = geo;
+  if (old && old.dispose) old.dispose();
   line.visible = true;
 }
 function updateLinks() {

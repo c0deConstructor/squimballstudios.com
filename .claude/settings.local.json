@@ -22,7 +22,9 @@
       "PowerShell(Get-NetTCPConnection -LocalPort 8099 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Remove-Item -Recurse -Force \"c:/Users/squim/eqgl_verify\" -ErrorAction SilentlyContinue; Write-Output \"cleaned\")",
       "Bash(node desk_check.js)",
       "Bash(node xsec_check.js)",
-      "Bash(node xsec_anim.js)"
+      "Bash(node xsec_anim.js)",
+      "Bash(node link_repro.js after)",
+      "Bash(node color_check.js)"
     ]
   }
 }
