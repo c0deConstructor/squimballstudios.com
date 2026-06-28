@@ -1,0 +1,34 @@
+PIT GAME NEXT-GEN — ASSET CREDITS & PROVENANCE
+==============================================
+All 3D models below are CC0 (public domain, no attribution required) and were
+downloaded directly over HTTPS from the official Kenney website on 2026-06-18.
+Kenney (kenney.nl) is a long-established, reputable CC0 game-asset publisher.
+
+MODELS (CC0 — Kenney.nl)
+------------------------
+Source kit:  Car Kit      https://kenney.nl/assets/car-kit
+  police.glb, sedan.glb, sedan-sports.glb, hatchback-sports.glb,
+  suv.glb, van.glb, delivery.glb, taxi.glb, truck.glb
+  Shared texture atlas: Textures/colormap.png (referenced by each car GLB)
+
+Source kit:  Nature Kit   https://kenney.nl/assets/nature-kit
+  tree_default.glb, tree_oak.glb, tree_fat.glb, tree_detailed.glb,
+  tree_pineDefaultA.glb, tree_pineRoundA.glb
+  (self-contained; colored via material, no external texture)
+
+License: Creative Commons Zero (CC0 1.0). https://creativecommons.org/publicdomain/zero/1.0/
+
+TEXTURES (surfaces: road / ground / buildings / windows)
+--------------------------------------------------------
+Generated procedurally in-page (HTML canvas) at runtime. No external image
+files — nothing to download or host. See pit_game_nextgen.html.
+
+AUDIO
+-----
+Synthesized procedurally in-browser via the Web Audio API (oscillators +
+filtered noise). No external audio files. Optionally override with your own
+samples placed in audio/ (see audio/README.txt).
+
+NOTE ON SAFETY: .glb (models) and .png (images) are inert data formats. They
+contain geometry/pixels only — no scripts or executable code. Three.js parses
+them strictly as data.

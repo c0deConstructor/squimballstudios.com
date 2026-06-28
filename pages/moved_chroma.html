@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chroma Match — New Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07080c;
+    --panel-bg: rgba(10, 11, 18, 0.94);
+    --border: rgba(255,255,255,0.12);
+    --accent: #5dff7c;
+    --accent2: #ff5a5a;
+    --accent3: #5a9bff;
+    --text: #cfd6e4;
+    --text-dim: #5a6477;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 42%, rgba(90,155,255,0.08) 0%, var(--bg) 70%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #tiles { position: fixed; inset: 0; z-index: 0; opacity: 0.5; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+  /* pulsing color swatches behind the card */
+  .swatches { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 1; pointer-events: none; display: flex; gap: 22px; }
+  .swatches span {
+    width: 120px; height: 120px; border-radius: 24px; opacity: 0;
+    animation: glowtile 4.2s ease-in-out infinite;
+  }
+  .swatches span:nth-child(1) { background: var(--accent2); }
+  .swatches span:nth-child(2) { background: var(--accent);  animation-delay: 1.4s; }
+  .swatches span:nth-child(3) { background: var(--accent3); animation-delay: 2.8s; }
+  @keyframes glowtile {
+    0%   { transform: scale(0.85); opacity: 0; }
+    12%  { opacity: 0.22; }
+    50%  { transform: scale(1.05); opacity: 0.10; }
+    100% { transform: scale(1.4);  opacity: 0; }
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(90,255,124,0.12); backdrop-filter: blur(3px);
+    padding: clamp(28px, 5vw, 52px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 20px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #f1f4fa; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(90,255,124,0.20);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 30em; margin: 0 auto 30px; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(90,255,124,0.05);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(90,255,124,0.4); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(18px, 3.4vw, 26px); letter-spacing: .02em; color: #f1f4fa; font-weight: 700; }
+  .cta-arrow { font-size: clamp(18px, 3.4vw, 24px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #062; }
+  .cta:hover .cta-url   { color: #04140a; }
+  .cta:hover .cta-arrow { color: #04140a; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); }
+  .foot span { color: var(--accent); }
+
+  @media (max-width: 480px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+    .swatches span { width: 84px; height: 84px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="tiles"></canvas>
+<div id="grid"></div>
+<div class="swatches"><span></span><span></span><span></span></div>
+
+<main class="card">
+  <div class="tag">// GAME &nbsp;&middot;&nbsp; <b>Relocated</b></div>
+  <h1>Chroma Match Game<br>has a <span class="hl">new home</span>.</h1>
+  <p class="lead">The color-matching challenge &mdash; train your eye, race the clock and test your color vision &mdash; now lives on its own dedicated site.</p>
+  <a class="cta" href="https://chromamatchgame.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">chromamatchgame.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Bookmark the new address &nearr;<br>The rest of <span>squimballstudios.com</span> is unchanged.</div>
+</main>
+
+<script>
+'use strict';
+/* Drifting color tiles that gently fade between hues -- a calm nod to the matching game. */
+(function () {
+  const cvs = document.getElementById('tiles');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0, tiles = [];
+
+  const PALETTE = ['#ff5a5a', '#5dff7c', '#5a9bff', '#ffd166', '#c77dff', '#4dd6c4'];
+
+  function makeTile() {
+    const size = (40 + Math.random() * 80);
+    return {
+      x: Math.random() * innerWidth,
+      y: Math.random() * innerHeight,
+      s: size,
+      vx: (Math.random() - 0.5) * 0.18,
+      vy: (Math.random() - 0.5) * 0.18,
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.0035,
+      color: PALETTE[(Math.random() * PALETTE.length) | 0],
+      alpha: 0.05 + Math.random() * 0.12
+    };
+  }
+
+  function resize() {
+    W = cvs.width = Math.floor(innerWidth * dpr);
+    H = cvs.height = Math.floor(innerHeight * dpr);
+    cvs.style.width = innerWidth + 'px';
+    cvs.style.height = innerHeight + 'px';
+    const target = Math.min(26, Math.round((innerWidth * innerHeight) / 42000));
+    tiles = Array.from({ length: target }, makeTile);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (const t of tiles) {
+      t.x += t.vx; t.y += t.vy; t.rot += t.vr;
+      if (t.x < -t.s) t.x = innerWidth + t.s; else if (t.x > innerWidth + t.s) t.x = -t.s;
+      if (t.y < -t.s) t.y = innerHeight + t.s; else if (t.y > innerHeight + t.s) t.y = -t.s;
+      ctx.save();
+      ctx.translate(t.x * dpr, t.y * dpr);
+      ctx.rotate(t.rot);
+      ctx.globalAlpha = t.alpha;
+      ctx.fillStyle = t.color;
+      const r = 14 * dpr, sz = t.s * dpr;
+      roundRect(ctx, -sz / 2, -sz / 2, sz, sz, r);
+      ctx.fill();
+      ctx.restore();
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf); else raf = requestAnimationFrame(frame);
+  });
+})();
+</script>
+</body>
+</html>

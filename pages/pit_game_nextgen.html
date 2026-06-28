@@ -1,0 +1,2603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIT — Police Intercept (Next-Gen)</title>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/","cannon-es":"https://esm.sh/cannon-es@0.20.0"}}
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Share Tech Mono',monospace}
+#three-canvas{display:block;position:fixed;inset:0}
+
+/* ── HUD ── */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+#hud-timer{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-size:42px;font-weight:700;letter-spacing:.08em;color:#e8d060;text-shadow:0 0 20px rgba(232,208,96,.4);transition:color .3s}
+#hud-timer.warn{color:#ff6020;text-shadow:0 0 20px rgba(255,96,32,.5)}
+#hud-timer.crit{color:#ff2020;animation:pulse-crit .5s infinite alternate}
+@keyframes pulse-crit{from{text-shadow:0 0 12px rgba(255,32,32,.6)}to{text-shadow:0 0 32px rgba(255,32,32,1)}}
+#hud-speed{position:absolute;top:22px;right:24px;font-size:13px;letter-spacing:.14em;color:#8a9aaa;text-transform:uppercase}
+#hud-state{position:absolute;top:42px;right:24px;font-size:10px;letter-spacing:.14em;color:#4a5a6a;text-transform:uppercase}
+#wheel-wrap{position:absolute;bottom:80px;left:22px}
+#wheel-cvs{display:block}
+#wheel-label{font-size:9px;letter-spacing:.2em;color:#4a5a6a;text-transform:uppercase;text-align:center;margin-top:4px}
+#minimap-wrap{position:absolute;bottom:14px;right:14px;border:1px solid rgba(255,255,255,.12)}
+#minimap-cvs{display:block;background:#0a0a0a}
+#toast{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:24px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;pointer-events:none;opacity:0;transition:opacity .2s;text-shadow:0 2px 8px rgba(0,0,0,.8)}
+#chatter{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);background:rgba(0,0,20,.7);border:1px solid rgba(80,120,200,.35);color:#8aacf0;font-size:10px;letter-spacing:.14em;padding:6px 18px;pointer-events:none;opacity:0;transition:opacity .4s;white-space:nowrap}
+#suspect-marker{position:fixed;z-index:12;pointer-events:none;display:none;border:2px solid #ffe000;box-shadow:0 0 12px rgba(255,224,0,.55),inset 0 0 10px rgba(255,224,0,.2)}
+#suspect-marker-label{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;white-space:nowrap;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#ffe000;text-shadow:0 0 6px rgba(255,224,0,.75)}
+
+/* ── OVERLAYS ── */
+.overlay{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(2,4,12,.84)}
+.overlay.hidden{display:none}
+.ov-title{font-size:72px;font-weight:900;letter-spacing:.12em;color:#e8a020;text-shadow:0 0 60px rgba(232,160,32,.3)}
+.ov-sub{font-size:11px;letter-spacing:.3em;color:#4a5a6a;text-transform:uppercase}
+.diff-group{display:flex;gap:0;border:1px solid #2a3040}
+.diff-btn{background:transparent;border:none;color:#4a5a6a;font-family:inherit;font-size:11px;letter-spacing:.2em;text-transform:uppercase;padding:8px 22px;cursor:pointer;transition:background .15s,color .15s}
+.diff-btn.active{background:#2a3a50;color:#8aacf0}
+.seed-row{display:flex;gap:8px;align-items:center}
+.seed-row label{font-size:9px;letter-spacing:.22em;color:#3a4a5a;text-transform:uppercase}
+.seed-row input{background:#0a0e18;border:1px solid #2a3040;color:#c0d0e0;font-family:inherit;font-size:13px;padding:7px 12px;width:130px;outline:none}
+.seed-row input:focus{border-color:#4a6a90}
+.ov-btn{background:transparent;border:1px solid #2a3040;color:#4a5a6a;font-family:inherit;font-size:10px;letter-spacing:.18em;padding:7px 16px;cursor:pointer;text-transform:uppercase;transition:border-color .15s,color .15s}
+.ov-btn:hover{border-color:#4a6a90;color:#8aacf0}
+.start-btn{background:#c08020;border:none;color:#0a0a0a;font-family:inherit;font-size:13px;letter-spacing:.28em;text-transform:uppercase;padding:14px 52px;cursor:pointer;transition:opacity .15s;margin-top:6px}
+.start-btn:hover{opacity:.88}
+.steer-section{display:flex;flex-direction:column;gap:9px;width:300px}
+.steer-section-lbl{font-size:9px;letter-spacing:.22em;color:#2a3a4a;text-transform:uppercase}
+.steer-row{display:flex;align-items:center;gap:12px}
+.steer-row label{font-size:9px;letter-spacing:.14em;color:#3a5060;text-transform:uppercase;width:118px;flex-shrink:0}
+.steer-row input[type=range]{flex:1;-webkit-appearance:none;height:3px;background:rgba(60,100,140,.35);outline:none;cursor:pointer;border-radius:2px}
+.steer-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#5a8ab0;border:1px solid #0a0e18;box-shadow:0 0 4px rgba(80,130,180,.5)}
+.steer-row input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#5a8ab0;border:1px solid #0a0e18}
+.steer-val{font-size:10px;color:#5a8ab0;width:40px;text-align:right;letter-spacing:.06em}
+.ov-tip{font-size:9px;letter-spacing:.16em;color:#2a3540;text-transform:uppercase;text-align:center;line-height:2.2}
+.result-title{font-size:54px;font-weight:900;letter-spacing:.1em}
+.result-meta{font-size:11px;letter-spacing:.18em;color:#4a5a6a;text-transform:uppercase;text-align:center;line-height:2.2}
+.result-btns{display:flex;gap:12px;margin-top:8px}
+#cal-wheel-cvs{display:block}
+#cal-readout{font-size:12px;letter-spacing:.2em;color:#5a8ab0;text-transform:uppercase;transition:color .15s}
+#cal-readout.full{color:#44dd88}
+</style>
+</head>
+<body>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="hud-timer">60</div>
+  <div id="hud-speed">0 mph</div>
+  <div id="hud-state">COP</div>
+  <div id="wheel-wrap">
+    <canvas id="wheel-cvs" width="80" height="80"></canvas>
+    <div id="wheel-label">steer</div>
+  </div>
+  <div id="minimap-wrap">
+    <canvas id="minimap-cvs" width="160" height="100"></canvas>
+  </div>
+  <div id="toast"></div>
+  <div id="chatter"></div>
+</div>
+
+<!-- Suspect targeting box (flashes at round start to identify the suspect) -->
+<div id="suspect-marker"><span id="suspect-marker-label">◤ Suspect Vehicle ◥</span></div>
+
+<!-- Start overlay -->
+<div id="ov-start" class="overlay">
+  <div class="ov-title">PIT</div>
+  <div class="ov-sub">Pursuit Intervention Technique</div>
+  <div class="diff-group" id="diff-group">
+    <button class="diff-btn" data-diff="easy">Easy</button>
+    <button class="diff-btn active" data-diff="normal">Normal</button>
+    <button class="diff-btn" data-diff="hard">Hard</button>
+  </div>
+  <div style="display:flex;gap:16px;align-items:center">
+    <div class="diff-group" id="time-group">
+      <button class="diff-btn active" data-time="day">&#9728; Day</button>
+      <button class="diff-btn" data-time="night">&#9789; Night</button>
+    </div>
+    <div class="diff-group" id="gfx-group">
+      <button class="diff-btn active" data-gfx="high">Ultra</button>
+      <button class="diff-btn" data-gfx="low">Lite</button>
+    </div>
+  </div>
+  <div class="seed-row">
+    <label>Seed</label>
+    <input type="text" id="seed-input" maxlength="9" placeholder="random">
+    <button class="ov-btn" id="btn-rng">⟳</button>
+  </div>
+  <button class="ov-btn" id="btn-calibrate" style="margin-top:2px">⊕ Calibrate Steering</button>
+  <div class="steer-section">
+    <div class="steer-section-lbl">Steering</div>
+    <div class="steer-row">
+      <label>Sensitivity</label>
+      <input type="range" id="sl-sens" min="0.0001" max="0.002" step="0.0001" value="0.0007">
+      <span class="steer-val" id="lbl-sens">0.0007</span>
+    </div>
+    <div class="steer-row" style="display:none">
+      <label>Non-Linearity</label>
+      <input type="range" id="sl-nonlin" min="0" max="0.75" step="0.025" value="0.0">
+      <span class="steer-val" id="lbl-nonlin">0.0</span>
+    </div>
+    <div class="steer-row">
+      <label>Auto-Recenter</label>
+      <input type="range" id="sl-recenter" min="0" max="3" step="0.05" value="2">
+      <span class="steer-val" id="lbl-recenter">2</span>
+    </div>
+  </div>
+  <div class="steer-section">
+    <div class="steer-section-lbl">Traffic</div>
+    <div class="steer-row">
+      <label>Density</label>
+      <input type="range" id="sl-density" min="0" max="3" step="0.1" value="2">
+      <span class="steer-val" id="lbl-density">2.0</span>
+    </div>
+  </div>
+  <button class="start-btn" id="btn-start">▶ BEGIN PURSUIT</button>
+  <div class="ov-tip">
+    LMB / W / ↑ — Throttle &nbsp;·&nbsp; RMB / S / ↓ — Brake &nbsp;·&nbsp; MMB — Handbrake<br>
+    Mouse or A&nbsp;D / ←&nbsp;→ — Steer &nbsp;·&nbsp; ESC — Pause
+  </div>
+</div>
+
+<!-- End overlay -->
+<div id="ov-end" class="overlay hidden">
+  <div class="result-title" id="result-title"></div>
+  <div class="result-meta" id="result-meta"></div>
+  <div class="result-btns">
+    <button class="ov-btn" id="btn-copy-seed">⧉ Copy Seed</button>
+  </div>
+  <div class="ov-sub" id="return-countdown" style="margin-top:10px"></div>
+</div>
+
+<!-- Pause overlay -->
+<div id="ov-pause" class="overlay hidden">
+  <div style="font-size:40px;font-weight:900;letter-spacing:.3em;color:#c08020;margin-bottom:4px">PAUSED</div>
+  <div class="steer-section" style="margin-top:4px">
+    <div class="steer-section-lbl">Steering</div>
+    <div class="steer-row">
+      <label>Sensitivity</label>
+      <input type="range" id="p-sl-sens" min="0.0001" max="0.002" step="0.0001" value="0.0007">
+      <span class="steer-val" id="p-lbl-sens">0.0007</span>
+    </div>
+    <div class="steer-row" style="display:none">
+      <label>Non-Linearity</label>
+      <input type="range" id="p-sl-nonlin" min="0" max="0.75" step="0.025" value="0.2">
+      <span class="steer-val" id="p-lbl-nonlin">0.2</span>
+    </div>
+    <div class="steer-row">
+      <label>Auto-Recenter</label>
+      <input type="range" id="p-sl-recenter" min="0" max="3" step="0.05" value="2">
+      <span class="steer-val" id="p-lbl-recenter">2</span>
+    </div>
+  </div>
+  <div class="steer-section">
+    <div class="steer-section-lbl">Traffic</div>
+    <div class="steer-row">
+      <label>Density</label>
+      <input type="range" id="p-sl-density" min="0" max="3" step="0.1" value="2">
+      <span class="steer-val" id="p-lbl-density">2.0</span>
+    </div>
+  </div>
+  <button class="start-btn" id="btn-pause-resume" style="margin-top:8px">▶ Resume</button>
+  <div style="display:flex;gap:10px;margin-top:2px">
+    <button class="ov-btn" id="btn-pause-restart">↺ Restart</button>
+    <button class="ov-btn" id="btn-pause-newseed">⟳ New Seed</button>
+    <button class="ov-btn" id="btn-pause-exit">⌂ Exit</button>
+  </div>
+  <div class="ov-sub" style="margin-top:10px">ESC or click background to resume</div>
+</div>
+
+<!-- Calibration overlay -->
+<div id="ov-calibrate" class="overlay hidden">
+  <div style="font-size:30px;font-weight:900;letter-spacing:.22em;color:#c08020">STEERING CALIBRATION</div>
+  <canvas id="cal-wheel-cvs" width="220" height="220"></canvas>
+  <div id="cal-readout">Centered</div>
+  <div class="ov-tip" style="max-width:360px">
+    Move your mouse left and right to test your steering.<br>
+    Adjust the sliders until you can steer the about <b>+-50%</b> smoothly without it jerking around.
+  </div>
+  <div class="steer-section">
+    <div class="steer-section-lbl">Steering</div>
+    <div class="steer-row">
+      <label>Sensitivity</label>
+      <input type="range" id="c-sl-sens" min="0.0001" max="0.002" step="0.0001" value="0.0007">
+      <span class="steer-val" id="c-lbl-sens">0.0007</span>
+    </div>
+    <div class="steer-row" style="display:none">
+      <label>Non-Linearity</label>
+      <input type="range" id="c-sl-nonlin" min="0" max="0.75" step="0.025" value="0.2">
+      <span class="steer-val" id="c-lbl-nonlin">0.2</span>
+    </div>
+    <div class="steer-row">
+      <label>Auto-Recenter</label>
+      <input type="range" id="c-sl-recenter" min="0" max="3" step="0.05" value="2">
+      <span class="steer-val" id="c-lbl-recenter">2</span>
+    </div>
+  </div>
+  <button class="ov-btn" id="btn-cal-done" style="margin-top:6px">✓ Return to Menu</button>
+  <div class="ov-sub" style="margin-top:2px">ESC or click "Return to Menu" to go back</div>
+</div>
+
+<script type="module">
+'use strict';
+import * as THREE   from 'three';
+import * as CANNON  from 'cannon-es';
+// ── Next-gen rendering add-ons (all from the existing three/addons import map) ──
+import { GLTFLoader }      from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Sky }             from 'three/addons/objects/Sky.js';
+import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }      from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass }      from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass }        from 'three/addons/postprocessing/SMAAPass.js';
+
+// ═══════════════════════════════════════════════════════
+//  THREE.JS SCENE SETUP
+// ═══════════════════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// Next-gen colour pipeline: physically-based tone mapping for real models/PBR.
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.domElement.id = 'three-canvas';
+document.body.prepend(renderer.domElement);
+
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0x5a7088);
+scene.fog = new THREE.Fog(0x5a7088, 180, 480);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 600);
+camera.position.set(0, 40, 35);
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+  if (bloomPass) bloomPass.setSize(window.innerWidth, window.innerHeight);
+});
+
+const ambient = new THREE.AmbientLight(0x8898aa, 1.6);
+const sun     = new THREE.DirectionalLight(0xfff5e0, 2.8);
+sun.position.set(60, 100, 40);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 600;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -200;
+sun.shadow.camera.right = sun.shadow.camera.top = 200;
+sun.shadow.bias = -0.0006;
+scene.add(ambient, sun);
+
+// ═══════════════════════════════════════════════════════
+//  NEXT-GEN: QUALITY, ENVIRONMENT (DAY/NIGHT), POST-FX
+// ═══════════════════════════════════════════════════════
+const ASSET_BASE = 'assets/pit_nextgen/';
+let gfxQuality = 'high';   // 'high' | 'low'  (start-overlay toggle)
+let timeOfDay  = 'day';    // 'day' | 'night' (start-overlay toggle)
+
+// Image-based environment lighting → real reflections on PBR car paint/glass.
+let envMap = null;
+function ensureEnvMap() {
+  if (envMap) return envMap;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
+  return envMap;
+}
+
+// Physical sky (daytime). Hidden at night in favour of a dark background.
+const sky = new Sky();
+sky.scale.setScalar(10000);
+sky.visible = false;
+scene.add(sky);
+function setSky(elevDeg, azimuthDeg, turbidity, rayleigh) {
+  const u = sky.material.uniforms;
+  u.turbidity.value = turbidity; u.rayleigh.value = rayleigh;
+  u.mieCoefficient.value = 0.005; u.mieDirectionalG.value = 0.8;
+  const phi = THREE.MathUtils.degToRad(90 - elevDeg);
+  const theta = THREE.MathUtils.degToRad(azimuthDeg);
+  u.sunPosition.value.setFromSphericalCoords(1, phi, theta);
+}
+
+// Switch the whole scene between day and night lighting/mood.
+function applyEnvironment(mode) {
+  timeOfDay = mode;
+  scene.environment = (gfxQuality === 'high') ? ensureEnvMap() : null;
+  if (mode === 'night') {
+    sky.visible = false;
+    scene.background = new THREE.Color(0x070a14);
+    scene.fog = new THREE.Fog(0x070a14, 80, 340);
+    sun.color.setHex(0x7d92cf); sun.intensity = 0.5; sun.position.set(-80, 90, -50);
+    ambient.color.setHex(0x222d4a); ambient.intensity = 0.85;
+    renderer.toneMappingExposure = 1.18;
+  } else {
+    sky.visible = true;
+    scene.background = null;
+    scene.fog = new THREE.Fog(0xa6bcd8, 170, 520);
+    setSky(7, 165, 4, 2.6);
+    sun.color.setHex(0xfff2dc); sun.intensity = 2.9; sun.position.set(60, 100, 40);
+    ambient.color.setHex(0x9fb2cb); ambient.intensity = 1.45;
+    renderer.toneMappingExposure = 1.18;
+  }
+  if (typeof MAT !== 'undefined' && MAT.applyTimeOfDay) MAT.applyTimeOfDay(mode);
+  if (bloomPass) bloomPass.strength = (mode === 'night') ? 1.05 : 0.42;
+}
+
+// Post-processing: bloom (glowing light bar / headlights) + SMAA + tone-mapped output.
+let composer = null, bloomPass = null;
+function setupComposer() {
+  if (composer) composer.dispose();
+  composer = new EffectComposer(renderer);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(window.innerWidth, window.innerHeight);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = null;
+  if (gfxQuality === 'high') {
+    bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.42, 0.8, 0.85);
+    composer.addPass(bloomPass);
+  }
+  const pr = renderer.getPixelRatio();
+  composer.addPass(new SMAAPass(window.innerWidth * pr, window.innerHeight * pr));
+  composer.addPass(new OutputPass());
+}
+
+// ═══════════════════════════════════════════════════════
+//  NEXT-GEN: MODEL ASSETS (CC0 Kenney) + ASYNC PRELOAD
+// ═══════════════════════════════════════════════════════
+const MODELS = { cop:null, suspect:null, traffic:[], trees:[] };
+const TRAFFIC_FILES = ['sedan','suv','van','taxi','truck','hatchback-sports','delivery'];
+const TREE_FILES    = ['tree_default','tree_oak','tree_fat','tree_detailed','tree_pineDefaultA','tree_pineRoundA'];
+const _gltf = new GLTFLoader();
+function _loadGLB(file) {
+  return new Promise((res, rej) =>
+    _gltf.load(ASSET_BASE + 'models/' + file + '.glb', g => res(g.scene), undefined, rej));
+}
+
+// Normalize a Kenney car: face -Z (game forward), scale to CAR_L, centre X/Z, wheels on y=0.
+function _prepCar(model) {
+  model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true;
+    if (o.material) { o.material.envMapIntensity = 1.15; } } });
+  model.rotation.y = 0;   // face the game's forward (-Z); Kenney cars were 180 deg reversed
+  model.updateMatrixWorld(true);
+  let box = new THREE.Box3().setFromObject(model);
+  const s = CAR_L / (box.max.z - box.min.z);
+  model.scale.setScalar(s);
+  model.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(model);
+  model.userData.h = box.max.y - box.min.y;   // scaled car height (for light bar / lights)
+  const c = box.getCenter(new THREE.Vector3());
+  model.position.x -= c.x; model.position.z -= c.z; model.position.y -= box.min.y;
+  return model;
+}
+// Prep a tree: shadows on, record natural height for per-instance scaling, base on y=0.
+function _prepTree(model) {
+  model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true;
+    // Kenney's foliage baseColor is a stylized teal; warm strongly-teal leaves to a
+    // more natural green (proper-green pines are left untouched by the guard).
+    (Array.isArray(o.material)?o.material:[o.material]).forEach(m => {
+      if (m && m.color && m.color.g > m.color.r && m.color.b > m.color.g*0.55) {
+        m.color.b *= 0.4; m.color.r = Math.min(1, m.color.r + 0.06);
+      }
+    });
+  }});
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  model.userData.h0 = Math.max(0.01, box.max.y - box.min.y);
+  model.position.y -= box.min.y;
+  return model;
+}
+
+let assetsReady = false;
+const audioSampleData = {};   // raw ArrayBuffers (optional samples), decoded in initAudio
+
+async function preloadAssets() {
+  MODELS.cop     = _prepCar(await _loadGLB('police'));
+  MODELS.suspect = _prepCar(await _loadGLB('sedan-sports'));
+  MODELS.traffic = [];
+  for (const f of TRAFFIC_FILES) { try { MODELS.traffic.push(_prepCar(await _loadGLB(f))); } catch(e){} }
+  MODELS.trees = [];
+  for (const f of TREE_FILES) { try { MODELS.trees.push(_prepTree(await _loadGLB(f))); } catch(e){} }
+  // Optional audio samples — only fetch files named in audio/manifest.json (empty by
+  // default → no requests, no 404s). Missing/empty → procedural synth is used instead.
+  try {
+    const mr = await fetch(ASSET_BASE + 'audio/manifest.json');
+    if (mr.ok) {
+      const man = await mr.json();
+      for (const k in man) {
+        if (k[0]==='_' || !man[k]) continue;
+        try { const r = await fetch(ASSET_BASE + 'audio/' + man[k]);
+          if (r.ok) audioSampleData[k] = await r.arrayBuffer(); } catch(e){}
+      }
+    }
+  } catch(e){}
+  assetsReady = true;
+}
+
+// Selective disposal: only release per-instance resources, never shared prototype geometry.
+function releaseMesh(root) {
+  root.traverse(o => {
+    if (o.userData && o.userData.disposeGeometry && o.geometry) o.geometry.dispose();
+    if (o.userData && o.userData.disposeMaterial && o.material) {
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m && m.dispose && m.dispose());
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════
+const CAR_W   = 2.2, CAR_L = 4.5, CAR_H = 1.3;
+const ROAD_HALF = 7;
+const LANE_HALF = 3.5;
+const WHEELBASE = 2.6;
+const MAX_STEER = 0.46;
+const ROAD_STEP = 2;
+
+const ROAD_BUFFER_AHEAD  = 1200;  // m ahead of player
+const ROAD_BUFFER_BEHIND = 600;   // m behind player
+const SCENERY_SKIP       = 10;    // road points between scenery placements
+const ROAD_MESH_CAP      = 1100;  // max pts in dynamic road mesh buffer
+
+const DIFF_SETTINGS = {
+  //          time  speed  traffic  evasion  angDamp  spdMulMax
+  // angDamp: low = spins easily (easy to PIT), high = resists spin (hard to PIT)
+  // spdMulMax: per-seed speed range; higher = more unpredictable on hard
+  easy:   { time:90, aiSpd:0.90, traffic:8,  evasion:0.25, angDamp:0.12, spdMulMax:0.10 },
+  normal: { time:60, aiSpd:1.00, traffic:14, evasion:0.60, angDamp:0.30, spdMulMax:0.45 },
+  hard:   { time:45, aiSpd:1.50, traffic:20, evasion:0.90, angDamp:0.55, spdMulMax:0.25 },
+};
+const CHATTER_LINES = [
+  'All units — suspect is running','PIT manoeuvre authorised',
+  'Watch for civilian traffic','Cobra 1, I have the visual',
+  'Requesting backup — 10-80','Stand by for PIT attempt',
+  'Suspect heading northbound','Stay on him, don\'t lose him',
+];
+const TRAFFIC_COLS = [0xc8a87e,0x8a3535,0x35558a,0x7a8a35,0x8a357a,0x3a7a7a,0xaaaaaa,0x6a503a];
+
+// ═══════════════════════════════════════════════════════
+//  PRNG — mulberry32
+// ═══════════════════════════════════════════════════════
+function mkRNG(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = (t + Math.imul(t ^ t >>> 7, 61 | t)) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+//  MATH HELPERS
+// ═══════════════════════════════════════════════════════
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp  = (a,b,t) => a+(b-a)*t;
+function angleDiff(a,b){ let d=((a-b)%(Math.PI*2)+Math.PI*3)%(Math.PI*2)-Math.PI; return d; }
+
+// Extract Y-axis rotation angle from a cannon-es/Three.js quaternion
+function getYAngle(q) {
+  return Math.atan2(2*(q.w*q.y + q.x*q.z), 1 - 2*(q.y*q.y + q.z*q.z));
+}
+// Forward and right vectors in XZ plane (road coord space) from a cannon-es body.
+// Returns same {x,y} convention as old Planck helpers so AI code is unchanged.
+function bodyFwd(body) {
+  const a = -getYAngle(body.quaternion);
+  return { x: -Math.sin(a), y: Math.cos(a) };
+}
+function bodyRt(body) {
+  const a = -getYAngle(body.quaternion);
+  return { x: Math.cos(a), y: Math.sin(a) };
+}
+// Convert Planck-convention angle θ to cannon-es Y-Euler (negated)
+function roadFwdAngle_3D(theta) { return -theta; }
+
+// ═══════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════
+let state   = 'start';
+let diff    = 'normal';
+let seed    = 0;
+let rng     = null;
+let timer   = 60, cdCount = 3, cdTimer = 0;
+let pitDone = false, pitRating = '', endReason = '';
+let locked  = false;
+let sirenT  = 0, sirenPhase = 0;
+
+let roadPts    = [];  // sliding window [{x,y,tx,ty,zone}]
+let scenery    = [];  // [{mesh, body}]
+let trafficArr = [];  // [{mesh, body, spd, lane, roadSeq}]
+let skidLines  = [];
+let skidGeo    = null;
+
+// Infinite road generation state
+let genX = 0, genY = 0, genAngle = 0;
+let genCurvature = 0, genCurveTimer = 0;
+let genZone = 'country', genZoneTimer = 0;
+let roadBaseSeq = 0, roadGenSeq = 0;
+
+// Road tracking (sequence numbers)
+let copRoadSeq = 0, suspRoadSeq = 0;
+let trafficSpawnSeq = { fwd: 0, onc: 0 };
+let scenerySeedSeq = 0;
+let suspectLatShift = 0;
+
+// Dynamic road mesh
+let roadPosBuf = null, roadMeshDynamic = null, roadMarkMesh = null;
+
+// World objects — cannon-es
+let cannonWorld = null, groundMat = null, carMat = null;
+let copBody = null, suspBody = null;
+let copMesh = null, suspMesh = null;
+let copLights = null;
+
+const camPos  = new THREE.Vector3();
+const camLook = new THREE.Vector3();
+
+const inp = { throttle:false, brake:false, handbrake:false, steer:0 };
+let   calSteer = 0;  // steering value while in the calibration screen
+// Raw per-source input state; combined into `inp` each frame so mouse + keyboard
+// (WASD / arrows) work simultaneously without fighting over the same flags.
+const mouse = { gas:false, brake:false, hand:false };
+const keys  = { gas:false, brake:false, left:false, right:false };
+const KEY_STEER_RATE = 3000;   // held-key steer ramp multiplier (per second)
+const KEY_SENS       = 0.0001; // fixed keyboard steer feel — NOT tied to the mouse slider
+const KEY_RECENTER   = 4.5;    // stronger auto-recenter when driving with the keyboard
+let   kbSteering     = false;  // true when the keyboard is the active steering method
+const steerCfg   = { sensitivity: 0.0007, nonlin: 0.0, recenter: 2.0 };
+const trafficCfg = { density: 2.0 };
+
+let suspStopTimer      = 0;    // seconds suspect has been nearly stopped after a PIT
+let suspSpdMul         = 1.0;  // per-seed speed multiplier for the suspect
+let suspEngineDisabled = false; // set true when PIT condition is met
+let pitTrackActive     = false; // tracking suspect rotation after a PIT contact
+let pitAccumRot        = 0;    // accumulated suspect Y rotation (radians) since contact
+let pitLastAngle       = 0;    // last frame's suspect Y angle for delta computation
+let pitTrackTime       = 0;    // seconds the suspect has been free-spinning (steering off)
+let suspOvertakeTimer  = 0;        // seconds remaining in active overtake pass
+let suspPanicTimer     = 0;        // seconds remaining in a head-on panic swerve-back
+let suspUrgencyTimer   = 0;        // seconds of boosted aggression after a panic swerve
+let suspMarkerT        = 0;        // seconds remaining to flash the "suspect vehicle" target box
+let suspHitCivilian    = false;    // set true when the suspect strikes a civilian → player loses
+
+const SKID_MAX = 2000;
+const skidPositions = new Float32Array(SKID_MAX * 3);
+let   skidCount = 0;
+let   skidMesh  = null;
+
+// ═══════════════════════════════════════════════════════
+//  AUDIO
+// ═══════════════════════════════════════════════════════
+let aCtx, masterGain, engOsc, engOsc2, engGain, engFilter, sirenG, sirenO1, sirenO2, screechG, screechSrc;
+let engSampleSrc=null, sirenSampleSrc=null, skidSampleSrc=null;
+let engineIsSample=false, sirenIsSample=false, skidIsSample=false;
+// Mute the generic synthesized voices for now. Real samples added via
+// audio/manifest.json still play (each loaded sample un-mutes only its own voice).
+let synthMuted = true;
+const audioDecoded = {};   // decoded one-shot AudioBuffers (crash variants)
+
+function initAudio() {
+  if (aCtx) return;
+  aCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (aCtx.resume) aCtx.resume();
+  // Master bus → compressor → speakers. (Master is now AUDIBLE — the original
+  // page left masterGain at 0, which silenced the whole game.)
+  masterGain = aCtx.createGain(); masterGain.gain.value = 0.7;
+  const comp = aCtx.createDynamicsCompressor();
+  comp.threshold.value=-16; comp.knee.value=14; comp.ratio.value=4;
+  comp.attack.value=0.003; comp.release.value=0.25;
+  masterGain.connect(comp); comp.connect(aCtx.destination);
+
+  // ENGINE — twin detuned oscillators through a low-pass (richer than one saw).
+  engGain = aCtx.createGain(); engGain.gain.value=0;
+  engFilter = aCtx.createBiquadFilter(); engFilter.type='lowpass'; engFilter.frequency.value=800; engFilter.Q.value=5;
+  engFilter.connect(engGain); engGain.connect(masterGain);
+  engOsc  = aCtx.createOscillator(); engOsc.type ='sawtooth'; engOsc.frequency.value =70;
+  engOsc2 = aCtx.createOscillator(); engOsc2.type='square';   engOsc2.frequency.value=70; engOsc2.detune.value=-8;
+  const engMix = aCtx.createGain(); engMix.gain.value=0.5;
+  engOsc.connect(engMix); engOsc2.connect(engMix); engMix.connect(engFilter);
+  engOsc.start(); engOsc2.start();
+
+  // SIREN — two-tone wail.
+  sirenO1=aCtx.createOscillator(); sirenO1.type='sine'; sirenO1.frequency.value=660;
+  sirenO2=aCtx.createOscillator(); sirenO2.type='sine'; sirenO2.frequency.value=880;
+  sirenG=aCtx.createGain(); sirenG.gain.value=0;
+  sirenO1.connect(sirenG); sirenO2.connect(sirenG); sirenG.connect(masterGain);
+  sirenO1.start(); sirenO2.start();
+
+  // SKID — band-passed white noise.
+  screechG=aCtx.createGain(); screechG.gain.value=0;
+  const sbuf=aCtx.createBuffer(1,aCtx.sampleRate,aCtx.sampleRate);
+  const sd=sbuf.getChannelData(0); for(let i=0;i<sd.length;i++) sd[i]=Math.random()*2-1;
+  screechSrc=aCtx.createBufferSource(); screechSrc.buffer=sbuf; screechSrc.loop=true;
+  const sflt=aCtx.createBiquadFilter(); sflt.type='bandpass'; sflt.frequency.value=1100; sflt.Q.value=0.8;
+  screechSrc.connect(sflt); sflt.connect(screechG); screechG.connect(masterGain); screechSrc.start();
+
+  decodeOptionalSamples();
+}
+
+// If CC0 sample files were found at load, decode them and swap them in for the
+// matching synth voice (same gain nodes, so updateAudio() keeps controlling them).
+function decodeOptionalSamples() {
+  const dec = (k) => audioSampleData[k]
+    ? aCtx.decodeAudioData(audioSampleData[k].slice(0)) : Promise.reject();
+  dec('engine').then(buf => { try{engOsc.stop();engOsc2.stop();}catch(e){}
+    engSampleSrc=aCtx.createBufferSource(); engSampleSrc.buffer=buf; engSampleSrc.loop=true;
+    engSampleSrc.connect(engGain); engSampleSrc.start(); engineIsSample=true; }).catch(()=>{});
+  dec('siren').then(buf => { try{sirenO1.stop();sirenO2.stop();}catch(e){}
+    sirenSampleSrc=aCtx.createBufferSource(); sirenSampleSrc.buffer=buf; sirenSampleSrc.loop=true;
+    sirenSampleSrc.connect(sirenG); sirenSampleSrc.start(); sirenIsSample=true; }).catch(()=>{});
+  dec('skid').then(buf => { try{screechSrc.stop();}catch(e){}
+    skidSampleSrc=aCtx.createBufferSource(); skidSampleSrc.buffer=buf; skidSampleSrc.loop=true;
+    skidSampleSrc.connect(screechG); skidSampleSrc.start(); skidIsSample=true; }).catch(()=>{});
+  ['crash1','crash2'].forEach(k => { if (audioSampleData[k])
+    aCtx.decodeAudioData(audioSampleData[k].slice(0)).then(b=>audioDecoded[k]=b).catch(()=>{}); });
+}
+
+function playImpact(freq, intensity) {
+  if (!aCtx) return;
+  const t=aCtx.currentTime;
+  // Real crash sample if available (random of the loaded variants).
+  const cb = (audioDecoded.crash1 && audioDecoded.crash2)
+    ? (Math.random()<0.5?audioDecoded.crash1:audioDecoded.crash2)
+    : (audioDecoded.crash1 || audioDecoded.crash2);
+  if (cb) {
+    const s=aCtx.createBufferSource(); s.buffer=cb;
+    const g=aCtx.createGain(); g.gain.value=clamp(intensity*1.6,0.05,1.3);
+    s.connect(g); g.connect(masterGain); s.start(t); return;
+  }
+  if (synthMuted) return;   // no generic synth crash while muted
+  // Synth crash: tonal thud + filtered noise burst.
+  const o=aCtx.createOscillator(), g=aCtx.createGain();
+  o.type='sine'; o.connect(g); g.connect(masterGain);
+  o.frequency.setValueAtTime(freq*2.5,t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(freq,8),t+0.12);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(intensity,t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.85);
+  o.start(t); o.stop(t+1.0);
+  const nb=aCtx.createBuffer(1,(aCtx.sampleRate*0.3)|0,aCtx.sampleRate), nd=nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++) nd[i]=(Math.random()*2-1)*(1-i/nd.length);
+  const ns=aCtx.createBufferSource(); ns.buffer=nb;
+  const nf=aCtx.createBiquadFilter(); nf.type='lowpass'; nf.frequency.value=1800;
+  const ng=aCtx.createGain(); ng.gain.value=intensity*0.8;
+  ns.connect(nf); nf.connect(ng); ng.connect(masterGain); ns.start(t);
+}
+
+function playJingle(win) {
+  if (!aCtx || synthMuted) return;
+  const notes = win ? [261,330,392,523] : [392,349,311,261];
+  notes.forEach((f,i) => {
+    const o=aCtx.createOscillator(), g=aCtx.createGain();
+    o.type='sine'; o.connect(g); g.connect(masterGain);
+    const t=aCtx.currentTime+i*0.13;
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.3,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.22);
+    o.frequency.value=f; o.start(t); o.stop(t+0.3);
+  });
+}
+
+function updateAudio(dt) {
+  if (!aCtx || !copBody) return;
+  const vel = copBody.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
+
+  // Engine: drive sample playback-rate (RPM) or oscillator frequency. Synth voice
+  // is held at 0 gain while muted; a loaded engine sample plays normally.
+  if (engineIsSample) {
+    engSampleSrc.playbackRate.value = 0.7 + spd*0.022 + (inp.throttle?0.08:0);
+    engGain.gain.value += ((inp.throttle ? 0.16 + spd*0.0006 : 0.05) - engGain.gain.value) * 0.12;
+  } else {
+    const f = 70 + spd*3.6;
+    engOsc.frequency.value = f; engOsc2.frequency.value = f*1.005;
+    engFilter.frequency.value = 600 + spd*60;
+    engGain.gain.value += ((synthMuted ? 0 : (inp.throttle ? 0.16 + spd*0.0006 : 0.05)) - engGain.gain.value) * 0.12;
+  }
+
+  // Siren: sample loop, or synthesised two-tone wail (silenced while muted).
+  if (sirenIsSample) {
+    sirenG.gain.value += ((spd>1 ? 0.18 : 0) - sirenG.gain.value) * 0.1;
+  } else if (synthMuted) {
+    sirenG.gain.value = 0;
+  } else {
+    sirenT += dt;
+    if (sirenT > 0.42) { sirenT=0; sirenPhase^=1; sirenG.gain.value = spd>1 ? (sirenPhase?0.13:0.07) : 0; }
+  }
+
+  // Skid: gain follows lateral slip (handbrake amplifies); silenced while muted.
+  const rt  = bodyRt(copBody);
+  const lat = Math.abs(vel.x*rt.x + vel.z*rt.y);
+  const skidTarget = (skidIsSample || !synthMuted) ? clamp((lat-2)/9,0,1)*(inp.handbrake?1.4:1)*0.18 : 0;
+  screechG.gain.value += (skidTarget - screechG.gain.value)*0.14;
+}
+
+// ═══════════════════════════════════════════════════════
+//  INFINITE ROAD GENERATION
+// ═══════════════════════════════════════════════════════
+function getRoadPt(seq) {
+  const i = seq - roadBaseSeq;
+  if (i < 0 || i >= roadPts.length) return null;
+  return roadPts[i];
+}
+
+// Planck angle for a car facing along road tangent in given lane direction
+// lane=+1 → forward, lane=-1 → oncoming (backward along road)
+function roadFwdAngle(p, lane) {
+  return Math.atan2(-p.tx * lane, p.ty * lane);
+}
+
+function findNearRoad(x, y, hintSeq) {
+  const WINDOW = 80;
+  const hi = clamp(hintSeq - roadBaseSeq, 0, roadPts.length - 1);
+  let best = hi, bestD = Infinity;
+  for (let di = -WINDOW; di <= WINDOW; di++) {
+    const ai = hi + di;
+    if (ai < 0 || ai >= roadPts.length) continue;
+    const p = roadPts[ai];
+    const d = Math.hypot(x - p.x, y - p.y);
+    if (d < bestD) { bestD = d; best = ai; }
+  }
+  return { seq: best + roadBaseSeq, dist: bestD };
+}
+
+// Get lane-centre target point lookaheadM ahead for AI steering
+// lane=+1 looks in +seq direction (forward), lane=-1 looks in -seq direction (oncoming)
+function laneLookAhead(hintSeq, lane, lookaheadM) {
+  const ahead = Math.round(lookaheadM / ROAD_STEP);
+  const targetSeq = clamp(hintSeq + lane * ahead, roadBaseSeq, roadBaseSeq + roadPts.length - 1);
+  const p = getRoadPt(targetSeq);
+  if (!p) return null;
+  // Camera right = world -X, so forward lane (+1) sits on world -X = player's right
+  return { x: p.x - p.ty * LANE_HALF * lane, y: p.y + p.tx * LANE_HALF * lane, p };
+}
+
+function initRoad() {
+  roadPts = [];
+  roadBaseSeq = 0; roadGenSeq = 0;
+  genX = 0; genY = 0; genAngle = 0;
+  genCurvature = 0; genCurveTimer = 0;
+  genZone = 'country'; genZoneTimer = 0;
+  extendRoadTo(Math.ceil((ROAD_BUFFER_AHEAD + 300) / ROAD_STEP));
+}
+
+function extendRoadTo(targetSeq) {
+  while (roadGenSeq < targetSeq) {
+    genCurveTimer -= ROAD_STEP;
+    if (genCurveTimer <= 0) {
+      genCurvature  = (rng() - 0.5) * 0.006;
+      genCurveTimer = 120 + rng() * 300;
+    }
+    genZoneTimer -= ROAD_STEP;
+    if (genZoneTimer <= 0) {
+      genZone      = rng() < 0.25 ? 'city' : 'country';
+      genZoneTimer = 350 + rng() * 650;
+    }
+    genAngle += genCurvature * ROAD_STEP;
+    genX     += Math.sin(genAngle) * ROAD_STEP;
+    genY     += Math.cos(genAngle) * ROAD_STEP;
+    roadPts.push({ x:genX, y:genY, tx:Math.sin(genAngle), ty:Math.cos(genAngle), zone:genZone });
+    roadGenSeq++;
+  }
+}
+
+function manageRoadBuffer() {
+  const aheadNeeded = copRoadSeq + Math.ceil(ROAD_BUFFER_AHEAD / ROAD_STEP);
+  if (roadGenSeq < aheadNeeded) extendRoadTo(aheadNeeded);
+
+  const cullBefore = copRoadSeq - Math.ceil(ROAD_BUFFER_BEHIND / ROAD_STEP);
+  if (cullBefore > roadBaseSeq + 100) {
+    const cullCount = cullBefore - roadBaseSeq;
+    roadPts.splice(0, cullCount);
+    roadBaseSeq += cullCount;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  DYNAMIC ROAD MESH
+// ═══════════════════════════════════════════════════════
+// ── Procedural PBR textures (generated in-canvas; no external image files) ──
+const _MAXANISO = renderer.capabilities.getMaxAnisotropy();
+function _canvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h||w; return c; }
+function _mkTex(cvs, srgb, rep){
+  const t=new THREE.CanvasTexture(cvs);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=_MAXANISO;
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  if(rep) t.repeat.set(rep,rep);
+  return t;
+}
+// Sobel height->normal map from a grayscale canvas (tileable, wraps at edges).
+function _normalFromHeight(srcCvs, strength){
+  const s=srcCvs.width, src=srcCvs.getContext('2d').getImageData(0,0,s,s).data;
+  const out=_canvas(s), oc=out.getContext('2d'), img=oc.createImageData(s,s), o=img.data;
+  const H=(x,y)=>src[((((y%s)+s)%s)*s+(((x%s)+s)%s))*4]/255;
+  for(let y=0;y<s;y++)for(let x=0;x<s;x++){
+    const dx=(H(x-1,y)-H(x+1,y))*strength, dy=(H(x,y-1)-H(x,y+1))*strength;
+    const l=Math.hypot(dx,dy,1), i=(y*s+x)*4;
+    o[i]=(dx/l*0.5+0.5)*255; o[i+1]=(dy/l*0.5+0.5)*255; o[i+2]=(1/l*0.5+0.5)*255; o[i+3]=255;
+  }
+  oc.putImageData(img,0,0); return out;
+}
+function _noiseGray(size, base, amp){
+  const c=_canvas(size), x=c.getContext('2d'), img=x.createImageData(size,size), d=img.data;
+  for(let i=0;i<size*size;i++){ const v=clamp(base+(Math.random()*2-1)*amp,0,1)*255; d[i*4]=d[i*4+1]=d[i*4+2]=v; d[i*4+3]=255; }
+  x.putImageData(img,0,0); return c;
+}
+function makeAsphalt(){
+  const S=256, c=_canvas(S), x=c.getContext('2d');
+  x.fillStyle='#2b2b2f'; x.fillRect(0,0,S,S);
+  for(let i=0;i<14000;i++){ const g=40+(Math.random()*70|0); x.fillStyle='rgba('+g+','+g+','+(g+4)+','+(0.04+Math.random()*0.12)+')'; x.beginPath(); x.arc(Math.random()*S,Math.random()*S,Math.random()*1.6,0,7); x.fill(); }
+  return { map:_mkTex(c,true), normalMap:_mkTex(_normalFromHeight(_noiseGray(S,0.5,0.5),2.2),false) };
+}
+function makeGrass(){
+  const S=256, c=_canvas(S), x=c.getContext('2d');
+  x.fillStyle='#33521f'; x.fillRect(0,0,S,S);
+  for(let i=0;i<9000;i++){ const g=30+(Math.random()*70|0); x.fillStyle='rgba('+((g*0.6)|0)+','+(g+30)+','+((g*0.5)|0)+','+(0.05+Math.random()*0.15)+')'; x.fillRect(Math.random()*S,Math.random()*S,1,2+Math.random()*3); }
+  return { map:_mkTex(c,true), normalMap:_mkTex(_normalFromHeight(_noiseGray(S,0.5,0.4),1.4),false) };
+}
+// Building facade: albedo (windows) + matching emissive map (windows light up at night).
+function makeFacade(){
+  const S=256, alb=_canvas(S), a=alb.getContext('2d'), emi=_canvas(S), e=emi.getContext('2d');
+  a.fillStyle='#9a9a9a'; a.fillRect(0,0,S,S); e.fillStyle='#000'; e.fillRect(0,0,S,S);
+  const cols=4, m=S/cols, pad=m*0.22;
+  for(let r=0;r<cols;r++)for(let cI=0;cI<cols;cI++){
+    const wx=cI*m+pad, wy=r*m+pad, ww=m-2*pad, wh=m-2*pad;
+    a.fillStyle='#2d3340'; a.fillRect(wx,wy,ww,wh);
+    a.fillStyle='#7d7d7d'; a.fillRect(wx,wy,ww,2);
+    e.fillStyle = (Math.random()<0.5) ? (Math.random()<0.7?'#ffce72':'#bcd4ff') : '#090b11';
+    e.fillRect(wx,wy,ww,wh);
+  }
+  for(let i=0;i<2000;i++){ const g=120+(Math.random()*60|0); a.fillStyle='rgba('+g+','+g+','+g+','+(0.03+Math.random()*0.05)+')'; a.fillRect(Math.random()*S,Math.random()*S,1,1); }
+  return { map:_mkTex(alb,true), emissiveMap:_mkTex(emi,true) };
+}
+const _asph=makeAsphalt(), _grass=makeGrass(), _facade=makeFacade();
+const FACADE_TILE_M = 9;   // ~one 4x4 window block per 9 metres of facade
+
+const MAT = {
+  road:     new THREE.MeshStandardMaterial({ color:0x70706f, roughness:0.92, metalness:0.0, map:_asph.map, normalMap:_asph.normalMap }),
+  ground:   new THREE.MeshStandardMaterial({ color:0x74905a, roughness:1.0,  metalness:0.0, map:_grass.map, normalMap:_grass.normalMap }),
+  marking:  new THREE.MeshStandardMaterial({ color:0xd8cc80, roughness:0.55, metalness:0.0, emissive:0xb8a850, emissiveIntensity:0.0 }),
+  tree:     new THREE.MeshStandardMaterial({ color:0x2a5520, roughness:0.9 }),
+  trunk:    new THREE.MeshStandardMaterial({ color:0x5a3818, roughness:0.9 }),
+  building: (col) => new THREE.MeshStandardMaterial({ color:col, roughness:0.82, metalness:0.0,
+              map:_facade.map, emissiveMap:_facade.emissiveMap, emissive:0xffffff,
+              emissiveIntensity:(timeOfDay==='night'?1.0:0.0) }),
+  // Solid roof — dark tar/gravel on tall buildings, lighter on small ones (no windows).
+  roof:     (h) => new THREE.MeshStandardMaterial({ color: h>9 ? 0x32353b : 0x6a6258, roughness:0.96, metalness:0.0 }),
+  wheel:    new THREE.MeshStandardMaterial({ color:0x111111, roughness:0.55, metalness:0.1 }),
+  glass:    new THREE.MeshStandardMaterial({ color:0x1a2838, roughness:0.12, metalness:0.0, transparent:true, opacity:0.6 }),
+  applyTimeOfDay(mode){
+    this.road.roughness   = mode==='night' ? 0.5 : 0.92;   // wet sheen / reflections at night
+    this.marking.emissiveIntensity = mode==='night' ? 0.5 : 0.0;
+  },
+};
+
+function initRoadMesh() {
+  const VERTS = ROAD_MESH_CAP * 2;
+
+  roadPosBuf = new Float32Array(VERTS * 3);
+  const geo  = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(roadPosBuf, 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+
+  // UVs (streamed): u across road width, v along travelled distance → asphalt tiling
+  const uvBuf = new Float32Array(VERTS * 2);
+  const uvAttr = new THREE.BufferAttribute(uvBuf, 2);
+  uvAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('uv', uvAttr);
+
+  // Upward normals — road is flat in XZ plane, always lit correctly from above
+  const normBuf = new Float32Array(VERTS * 3);
+  for (let i = 1; i < normBuf.length; i += 3) normBuf[i] = 1.0;
+  geo.setAttribute('normal', new THREE.BufferAttribute(normBuf, 3));
+
+  const iArr = new Uint32Array((ROAD_MESH_CAP - 1) * 6);
+  for (let i = 0; i < ROAD_MESH_CAP - 1; i++) {
+    const a=i*2, b=a+1, c=a+2, d=a+3;
+    iArr.set([a,c,b, b,c,d], i*6);  // CCW winding for upward-facing normal
+  }
+  geo.setIndex(new THREE.BufferAttribute(iArr, 1));
+  geo.setDrawRange(0, 0);
+
+  roadMeshDynamic = new THREE.Mesh(geo, MAT.road);
+  roadMeshDynamic.receiveShadow = true;
+  // Positions are streamed in-place; the cached bounding sphere goes stale and
+  // would frustum-cull the road mid-chase. It's always near the camera, so skip culling.
+  roadMeshDynamic.frustumCulled = false;
+  scene.add(roadMeshDynamic);
+
+  // Lane marking mesh (dashed centre line)
+  const markBuf  = new Float32Array(VERTS * 3);
+  const markGeo  = new THREE.BufferGeometry();
+  const markAttr = new THREE.BufferAttribute(markBuf, 3);
+  markAttr.setUsage(THREE.DynamicDrawUsage);
+  markGeo.setAttribute('position', markAttr);
+  const markNorm = new Float32Array(VERTS * 3);
+  for (let i = 1; i < markNorm.length; i += 3) markNorm[i] = 1.0;
+  markGeo.setAttribute('normal', new THREE.BufferAttribute(markNorm, 3));
+  const mIdx = new Uint32Array((ROAD_MESH_CAP - 1) * 6);
+  for (let i = 0; i < ROAD_MESH_CAP - 1; i++) {
+    const a=i*2, b=a+1, c=a+2, d=a+3;
+    mIdx.set([a,c,b, b,c,d], i*6);
+  }
+  markGeo.setIndex(new THREE.BufferAttribute(mIdx, 1));
+  markGeo.setDrawRange(0, 0);
+  roadMarkMesh = new THREE.Mesh(markGeo, MAT.marking);
+  roadMarkMesh.renderOrder = 1;
+  roadMarkMesh.frustumCulled = false;
+  scene.add(roadMarkMesh);
+}
+
+function updateRoadMesh() {
+  if (!roadMeshDynamic) return;
+  const N   = Math.min(roadPts.length, ROAD_MESH_CAP);
+  const pos = roadPosBuf;
+  const uvArr = roadMeshDynamic.geometry.attributes.uv.array;
+  const markPos = roadMarkMesh.geometry.attributes.position.array;
+
+  const dashLen = 8, dashGap = 12, dashStep = dashLen + dashGap;
+  const ROAD_TEX_TILE = 4;   // metres per asphalt texture tile
+  let accum = 0;
+
+  for (let i = 0; i < N; i++) {
+    const p  = roadPts[i];
+    const hw = ROAD_HALF + 0.5;
+    const vi = i * 6;
+    pos[vi]   = p.x - p.ty*hw; pos[vi+1] = 0.08; pos[vi+2] = p.y + p.tx*hw;
+    pos[vi+3] = p.x + p.ty*hw; pos[vi+4] = 0.08; pos[vi+5] = p.y - p.tx*hw;
+
+    const ui = i*4, uvv = accum/ROAD_TEX_TILE;
+    uvArr[ui] = 0; uvArr[ui+1] = uvv;
+    uvArr[ui+2] = (2*hw)/ROAD_TEX_TILE; uvArr[ui+3] = uvv;
+
+    // Dashed centre marking — degenerate quad when in gap (zero-area → invisible)
+    const inDash = (accum % dashStep) < dashLen;
+    const mw = 0.18;
+    if (inDash) {
+      markPos[vi]   = p.x - p.ty*mw; markPos[vi+1] = 0.13; markPos[vi+2] = p.y + p.tx*mw;
+      markPos[vi+3] = p.x + p.ty*mw; markPos[vi+4] = 0.13; markPos[vi+5] = p.y - p.tx*mw;
+    } else {
+      markPos[vi]   = p.x; markPos[vi+1] = 0.13; markPos[vi+2] = p.y;
+      markPos[vi+3] = p.x; markPos[vi+4] = 0.13; markPos[vi+5] = p.y;
+    }
+    if (i > 0) accum += ROAD_STEP;
+  }
+
+  roadMeshDynamic.geometry.attributes.position.needsUpdate = true;
+  roadMeshDynamic.geometry.attributes.uv.needsUpdate = true;
+  roadMeshDynamic.geometry.setDrawRange(0, Math.max(0, (N-1)*6));
+  roadMarkMesh.geometry.attributes.position.needsUpdate = true;
+  roadMarkMesh.geometry.setDrawRange(0, Math.max(0, (N-1)*6));
+}
+
+function buildGroundPlane() {
+  MAT.ground.map.repeat.set(800,800);
+  MAT.ground.normalMap.repeat.set(800,800);
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(12000,12000), MAT.ground);
+  g.rotation.x = -Math.PI/2; g.position.y = 0; g.receiveShadow = true;
+  scene.add(g);
+}
+
+// Real CC0 tree models (cloned, shared geometry); procedural cone as fallback.
+function buildTree(x, y, h) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, y);
+  if (MODELS.trees && MODELS.trees.length) {
+    const proto = MODELS.trees[(Math.random()*MODELS.trees.length)|0];
+    const m = proto.clone();
+    m.scale.setScalar(h / (proto.userData.h0 || 1));
+    m.rotation.y = Math.random()*Math.PI*2;
+    g.add(m);
+  } else {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.4, h*0.45, 8), MAT.trunk);
+    trunk.position.y = h*0.225; trunk.castShadow=true;
+    const canopy = new THREE.Mesh(new THREE.ConeGeometry(h*0.55, h*0.72, 8), MAT.tree);
+    canopy.position.y = h*0.45+h*0.36; canopy.castShadow=true;
+    g.add(trunk, canopy);
+  }
+  return g;
+}
+
+// Textured box building. Per-building UVs are scaled so window blocks stay a
+// consistent real-world size; material/geometry are unique → flagged disposable.
+function buildBuilding(x, y, w, d, h, col) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, y);
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const uv = geo.attributes.uv;
+  for (let i=0;i<uv.count;i++) uv.setXY(i, uv.getX(i)*(w/FACADE_TILE_M), uv.getY(i)*(h/FACADE_TILE_M));
+  uv.needsUpdate = true;
+  // BoxGeometry face/material order: +X, -X, +Y(top/roof), -Y(bottom), +Z, -Z.
+  // Windowed facade on the 4 sides; solid colour on roof + underside.
+  const sideMat = MAT.building(col), roofMat = MAT.roof(h);
+  const body = new THREE.Mesh(geo, [sideMat, sideMat, roofMat, roofMat, sideMat, sideMat]);
+  body.position.y = h/2; body.castShadow=true; body.receiveShadow=true;
+  body.userData.disposeGeometry = true; body.userData.disposeMaterial = true;
+  g.add(body);
+  return g;
+}
+
+// Roof-top flashing light bar for the cop car (existing flash logic uses userData.lightBar).
+function addLightBar(g, h) {
+  const y = h*0.78;   // sit on the roof, augmenting the model's own bar with a flashing glow
+  const base = new THREE.Mesh(new THREE.BoxGeometry(CAR_W*0.66,0.12,0.5),
+    new THREE.MeshStandardMaterial({ color:0x111317, roughness:0.5, metalness:0.3 }));
+  base.position.set(0,y,0.15); base.castShadow=true; g.add(base);   // front-of-centre on the roof
+  const geoR = new THREE.BoxGeometry(CAR_W*0.28,0.14,0.34);
+  const geoB = geoR.clone();
+  const lbR = new THREE.Mesh(geoR, new THREE.MeshStandardMaterial({ color:0x330006, emissive:0xff1122, emissiveIntensity:1.0, roughness:0.4 }));
+  const lbB = new THREE.Mesh(geoB, new THREE.MeshStandardMaterial({ color:0x000833, emissive:0x1133ff, emissiveIntensity:1.0, roughness:0.4 }));
+  lbR.position.set(-CAR_W*0.18, y+0.1, 0.15);
+  lbB.position.set( CAR_W*0.18, y+0.1, 0.15);
+  g.add(lbR, lbB);
+  g.userData.lightBar = [lbR, lbB];
+}
+
+// Emissive head/tail-light discs (glow via bloom at night; dark in daytime).
+function addHeadlights(g, h) {
+  const on = timeOfDay === 'night';
+  const geo = new THREE.CircleGeometry(0.15, 12), y = h*0.42;
+  const hMat = new THREE.MeshStandardMaterial({ color:0x26261c, emissive:0xfff1c4, emissiveIntensity:on?3.0:0.0, roughness:0.3 });
+  const tMat = new THREE.MeshStandardMaterial({ color:0x200000, emissive:0xff2020, emissiveIntensity:on?1.6:0.0, roughness:0.3 });
+  // Front of travel is +Z: white headlights at +Z, red tail-lights at -Z.
+  [-CAR_W*0.3, CAR_W*0.3].forEach(xx => { const m=new THREE.Mesh(geo,hMat); m.position.set(xx,y, (CAR_L/2)-0.03); g.add(m); });
+  [-CAR_W*0.3, CAR_W*0.3].forEach(xx => { const m=new THREE.Mesh(geo,tMat); m.position.set(xx,y,-(CAR_L/2)+0.03); m.rotation.y=Math.PI; g.add(m); });
+  g.userData.headMat = hMat; g.userData.tailMat = tMat;
+}
+
+// Real CC0 car models (cloned). Cop gets a flashing bar; cop+suspect get lights.
+function buildCarMesh(role) {
+  const g = new THREE.Group();
+  let model = null;
+  if      (role==='cop'     && MODELS.cop)            model = MODELS.cop.clone();
+  else if (role==='suspect' && MODELS.suspect)        model = MODELS.suspect.clone();
+  else if (role==='traffic' && MODELS.traffic.length) model = MODELS.traffic[(Math.random()*MODELS.traffic.length)|0].clone();
+
+  if (model) {
+    g.add(model);
+    const h = model.userData.h || (CAR_H+0.7);
+    if (role==='traffic') {
+      // tint only the body mesh for colour variety (per-instance material → disposable)
+      model.traverse(o => { if (o.isMesh && /body/i.test(o.name)) {
+        o.material = o.material.clone();
+        o.material.color.setHex(TRAFFIC_COLS[(Math.random()*TRAFFIC_COLS.length)|0]);
+        o.userData.disposeMaterial = true;
+      }});
+    }
+    if (role==='cop') addLightBar(g, h);
+    if (role==='cop' || role==='suspect') addHeadlights(g, h);
+  } else {
+    // Minimal procedural fallback (only if a model failed to load).
+    const col = role==='cop'?0x1a2740:role==='suspect'?0xcfc4b4:0x9aa0a8;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(CAR_W,CAR_H,CAR_L),
+      new THREE.MeshStandardMaterial({ color:col, roughness:0.5, metalness:0.2 }));
+    body.position.y = 0.35+CAR_H/2; body.castShadow=true;
+    body.userData.disposeGeometry = true; body.userData.disposeMaterial = true;
+    g.add(body);
+    if (role==='cop') addLightBar(g, CAR_H+0.7);
+  }
+  return g;
+}
+
+function buildSkidSystem() {
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(skidPositions, 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+  // skidPositions is reused across rounds; start with nothing drawn so last
+  // round's marks don't show until fresh skids are laid down (skidCount is 0 here).
+  geo.setDrawRange(0, skidCount);
+  skidMesh = new THREE.Points(geo, new THREE.PointsMaterial({ color:0x1a1208, size:0.4, sizeAttenuation:true }));
+  skidMesh.renderOrder = 1;
+  // Streamed positions → stale bounding sphere would cull skids at some angles.
+  skidMesh.frustumCulled = false;
+  scene.add(skidMesh);
+}
+
+// ═══════════════════════════════════════════════════════
+//  PHYSICS WORLD
+// ═══════════════════════════════════════════════════════
+let crashFlag = false;
+
+function buildPhysWorld() {
+  cannonWorld = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+  cannonWorld.broadphase = new CANNON.SAPBroadphase(cannonWorld);
+  cannonWorld.allowSleep = true;
+  crashFlag = false;
+
+  groundMat = new CANNON.Material('ground');
+  carMat    = new CANNON.Material('car');
+  // Very low ground friction — lateral grip comes from our custom thruster model
+  cannonWorld.addContactMaterial(new CANNON.ContactMaterial(groundMat, carMat, {
+    friction: 0.0005, restitution: 0.08,
+  }));
+  cannonWorld.addContactMaterial(new CANNON.ContactMaterial(carMat, carMat, {
+    friction: 0.015, restitution: 0.25,
+  }));
+
+  const gBody = new CANNON.Body({ mass: 0, material: groundMat });
+  gBody.addShape(new CANNON.Plane());
+  gBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+  cannonWorld.addBody(gBody);
+}
+
+// All cars are simple low-friction boxes — propulsion via explicit thruster forces
+function makeBoxCar(x, y_road, angle, tag) {
+  const mass = tag === 'traffic' ? 120 : 150;
+  const body = new CANNON.Body({ mass, material: carMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(CAR_W/2, CAR_H/2, CAR_L/2)));
+  body.position.set(x, CAR_H / 2, y_road);        // center sits one half-height above ground
+  body.quaternion.setFromEuler(0, roadFwdAngle_3D(angle), 0);
+  // Seed the interpolated transform (used for rendering) so the car never shows
+  // at the origin for a frame before its first physics step.
+  body.interpolatedPosition.copy(body.position);
+  body.interpolatedQuaternion.copy(body.quaternion);
+  body.linearDamping  = 0.06;
+  body.angularDamping = tag === 'suspect' ? 0.35 : 0.7;
+  body.userData = tag;
+  cannonWorld.addBody(body);
+  return body;
+}
+
+function makeStaticBody(x, y, hw, hh) {
+  const body = new CANNON.Body({ mass: 0, material: groundMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(hw, 5, hh)));
+  body.position.set(x, 0, y);
+  body.userData = 'static';
+  cannonWorld.addBody(body);
+  return body;
+}
+
+function makeStaticCircle(x, y, r) {
+  const body = new CANNON.Body({ mass: 0, material: groundMat });
+  body.addShape(new CANNON.Cylinder(r, r, 10, 8));
+  body.position.set(x, 0, y);
+  body.userData = 'static';
+  cannonWorld.addBody(body);
+  return body;
+}
+
+// ═══════════════════════════════════════════════════════
+//  THRUSTER PHYSICS
+// ═══════════════════════════════════════════════════════
+
+// Propel a box car using direct force + bicycle-model yaw rate.
+// Lateral grip, longitudinal thrust, and steering are all independent.
+function applyThrusters(body, input, engineForce, maxSpeedKph, hintRoadSeq) {
+  body.wakeUp();
+
+  const theta = -getYAngle(body.quaternion);
+  const fwdX = -Math.sin(theta), fwdZ = Math.cos(theta);
+  const rtX  =  Math.cos(theta), rtZ  = Math.sin(theta);
+
+  const nr = findNearRoad(body.position.x, body.position.z, hintRoadSeq || 0);
+  const onRoad = nr.dist < ROAD_HALF + 1.5;
+  const pitLoose = (body === suspBody && pitTrackActive);
+  const GRIP = input.handbrake ? 0.8
+             : pitLoose        ? 1.5
+             : onRoad          ? 16
+             : 4;
+
+  // Damp lateral (sideways) velocity each frame
+  const vel = body.velocity;
+  const latV = vel.x * rtX + vel.z * rtZ;
+  body.force.x -= rtX * latV * body.mass * GRIP;
+  body.force.z -= rtZ * latV * body.mass * GRIP;
+
+  const fwdSpd = vel.x * fwdX + vel.z * fwdZ;
+  const curSpd = Math.hypot(vel.x, vel.z);
+  const maxSpd = maxSpeedKph / 3.6;
+
+  // Longitudinal thrust along body's current forward axis.
+  // Factor of 2 matches the old 4-thruster model (2 front + 2 rear each at engineForce/2).
+  if (input.throttle && curSpd < maxSpd) {
+    body.force.x += fwdX * engineForce * 2;
+    body.force.z += fwdZ * engineForce * 2;
+  } else if (input.brake) {
+    // RMB = reverse/brake: stronger thrust, higher speed cap for snappier feel
+    const MAX_REV = 30 / 3.6;
+    if (fwdSpd > -MAX_REV) {
+      body.force.x -= fwdX * engineForce * 2.5;
+      body.force.z -= fwdZ * engineForce * 2.5;
+    }
+  }
+
+  // Bicycle-model steering: drive yaw rate toward kinematic target.
+  // Skipped during PIT spin so collision angular momentum accumulates freely.
+  // In reverse (fwdSpd < 0) the formula naturally inverts turn direction.
+  // Extra yaw boost applied in reverse so it steers as crisply as forward.
+  if (!pitLoose) {
+    const steerRad = input.steer * MAX_STEER;
+    const speedFactor = Math.min(Math.abs(fwdSpd) / 3.0, 1.0);
+    const MAX_YAW = 2.5;
+    const raw = speedFactor > 0.05 ? -fwdSpd * Math.tan(steerRad) / WHEELBASE : 0;
+    // In reverse, boost yaw authority 3× and widen cap; forward uses normal ±MAX_YAW
+    const reversing = fwdSpd < -0.5;
+    const targetAngVel = reversing
+      ? clamp(raw * 3.0, -MAX_YAW * 2, MAX_YAW * 2)
+      : clamp(raw, -MAX_YAW, MAX_YAW);
+    body.angularVelocity.y += (targetAngVel - body.angularVelocity.y) * 0.4;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  DEBUG ARROWS — show thruster directions/forces
+// ═══════════════════════════════════════════════════════
+// Debug directional thruster arrows — OFF by default. Flip to true to visualize forces.
+const DEBUG_ARROWS = false;
+let copArrows = [], suspArrows = [];
+
+function makeDebugArrows(frontCol, rearCol) {
+  if (!DEBUG_ARROWS) return [];
+  const arr = [];
+  for (let i = 0; i < 4; i++) {
+    const a = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1,
+      i < 2 ? frontCol : rearCol, 0.5, 0.25
+    );
+    a.visible = false;
+    scene.add(a);
+    arr.push(a);
+  }
+  return arr;
+}
+
+function updateDebugArrows(arrows, body, input, engineForce, maxSpeedKph) {
+  if (!arrows.length) return;
+  const theta = -getYAngle(body.quaternion);
+  const fwdX = -Math.sin(theta), fwdZ = Math.cos(theta);
+  const rtX  =  Math.cos(theta), rtZ  = Math.sin(theta);
+  const steerRad = input.steer * MAX_STEER;
+  const ts = theta + steerRad;   // +steerRad: arrows correctly point toward intended turn direction
+  const sfwdX = -Math.sin(ts), sfwdZ = Math.cos(ts);
+
+  const vel = body.velocity;
+  const curSpd = Math.hypot(vel.x, vel.z);
+  const maxSpd = maxSpeedKph / 3.6;
+
+  let thrustMag = 0;
+  if (input.throttle && curSpd < maxSpd) thrustMag =  engineForce;
+  else if (input.brake)                  thrustMag = -engineForce * 0.6;
+
+  const fz = CAR_L * 0.38, rz = -CAR_L * 0.38, sx = CAR_W * 0.42;
+  const cx = body.position.x, cy = body.position.y + CAR_H * 0.55, cz = body.position.z;
+
+  const positions = [
+    [cx + fwdX*fz - rtX*sx, cy, cz + fwdZ*fz - rtZ*sx],
+    [cx + fwdX*fz + rtX*sx, cy, cz + fwdZ*fz + rtZ*sx],
+    [cx + fwdX*rz - rtX*sx, cy, cz + fwdZ*rz - rtZ*sx],
+    [cx + fwdX*rz + rtX*sx, cy, cz + fwdZ*rz + rtZ*sx],
+  ];
+  const sign = thrustMag >= 0 ? 1 : -1;
+  const dirs = [
+    [sfwdX * sign, sfwdZ * sign],
+    [sfwdX * sign, sfwdZ * sign],
+    [fwdX  * sign, fwdZ  * sign],
+    [fwdX  * sign, fwdZ  * sign],
+  ];
+
+  const F = Math.abs(thrustMag * 0.5);
+  const arrowLen = Math.min(F * 0.004, 7);
+
+  const _dir = new THREE.Vector3();
+  for (let i = 0; i < 4; i++) {
+    if (F < 5 || arrowLen < 0.05) { arrows[i].visible = false; continue; }
+    arrows[i].visible = true;
+    arrows[i].position.set(positions[i][0], positions[i][1], positions[i][2]);
+    _dir.set(dirs[i][0], 0, dirs[i][1]);
+    if (_dir.lengthSq() > 0.0001) {
+      _dir.normalize();
+      arrows[i].setDirection(_dir);
+    }
+    arrows[i].setLength(arrowLen, Math.min(arrowLen * 0.3, 1.0), Math.min(arrowLen * 0.15, 0.5));
+  }
+}
+
+// For traffic: simpler 2-arrow visualization (just front + rear combined)
+function makeTrafficArrows() {
+  if (!DEBUG_ARROWS) return [];
+  const arr = [];
+  for (let i = 0; i < 4; i++) {
+    const a = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1,
+      i < 2 ? 0x44ff88 : 0xff8844, 0.4, 0.2
+    );
+    a.visible = false;
+    scene.add(a);
+    arr.push(a);
+  }
+  return arr;
+}
+
+function removeArrows(arrows) {
+  for (const a of arrows) scene.remove(a);
+}
+
+// ═══════════════════════════════════════════════════════
+//  AI HELPERS
+// ═══════════════════════════════════════════════════════
+function closestCarAhead(body, lane, cars) {
+  const pos = body.position;
+  const fwd = bodyFwd(body);
+  let minDist = Infinity;
+  for (const c of cars) {
+    if (c.body === body) continue;
+    if (c.lane !== lane) continue;
+    const cp = c.body.position;
+    const dx = cp.x - pos.x, dy = cp.z - pos.z;
+    const ahead = dx*fwd.x + dy*fwd.y;
+    if (ahead < 1 || ahead > 60) continue;
+    const lat = Math.abs(dx*(-fwd.y) + dy*fwd.x);
+    if (lat < CAR_W + 1.5) minDist = Math.min(minDist, ahead);
+  }
+  return minDist;
+}
+
+// True if no lane-(-1) traffic car is within clearDist metres of pos
+function isOncomingClear(pos, clearDist) {
+  for (const c of trafficArr) {
+    if (c.lane !== -1) continue;
+    if (Math.hypot(c.body.position.x - pos.x, c.body.position.z - pos.z) < clearDist) return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════
+//  COP ROAD-FOLLOW (used during countdown so cop stays on road)
+// ═══════════════════════════════════════════════════════
+function copRoadFollowAI() {
+  const pos = copBody.position;
+  const vel = copBody.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
+
+  const nr = findNearRoad(pos.x, pos.z, copRoadSeq);
+  copRoadSeq = nr.seq;
+
+  const tgt = laneLookAhead(copRoadSeq, 1, 14 + spd * 0.4);
+  if (!tgt) return;
+
+  const dx = tgt.x - pos.x, dy = tgt.y - pos.z;
+  const wantAngle = Math.atan2(-dx, dy);
+  const curAngle  = -getYAngle(copBody.quaternion);
+  const steer = clamp(angleDiff(wantAngle, curAngle) * 2.0, -1, 1);
+  applyThrusters(copBody,
+    { throttle: true, brake: false, handbrake: false, steer },
+    1800, 120, copRoadSeq);
+}
+
+// ═══════════════════════════════════════════════════════
+//  SUSPECT AI
+// ═══════════════════════════════════════════════════════
+function suspectAI(dt) {
+  const ds  = DIFF_SETTINGS[diff];
+  const pos = suspBody.position;
+  const vel = suspBody.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
+
+  const nr = findNearRoad(pos.x, pos.z, suspRoadSeq);
+  suspRoadSeq = nr.seq;
+
+  const curAngle = -getYAngle(suspBody.quaternion);
+  // Has the player knocked us off course — shoved us off the road, or spun us far
+  // from the road's heading? If so we drop everything and cut straight back.
+  let roadAng = curAngle;
+  { const ra = getRoadPt(suspRoadSeq), rb = getRoadPt(suspRoadSeq + 2);
+    if (ra && rb) roadAng = Math.atan2(-(rb.x - ra.x), rb.y - ra.y); }
+  const knocked = nr.dist > ROAD_HALF + 3 ||
+                  Math.abs(angleDiff(roadAng, curAngle)) > Math.PI * 0.25;   // >45° off
+
+  // ── Overtake decision ────────────────────────────────────────────────────
+  // Use road-sequence comparison so detection works regardless of suspect lane.
+  // Generous window (~4–60 m ahead) so a pass is ALWAYS initiated in time and the
+  // suspect never gets stuck tailgating a slower car.
+  let blockerSeq = -1;
+  for (const c of trafficArr) {
+    if (c.lane !== 1) continue;
+    const seqDiff = c.roadSeq - suspRoadSeq;
+    if (seqDiff > 2 && seqDiff < 30) {            // anything ahead in our lane
+      if (blockerSeq === -1 || c.roadSeq < blockerSeq) blockerSeq = c.roadSeq;
+    }
+  }
+
+  // Is a car bearing down on us in the oncoming lane, just ahead? (head-on risk)
+  let headOnThreat = false;
+  for (const c of trafficArr) {
+    if (c.lane !== -1) continue;
+    const sd = c.roadSeq - suspRoadSeq;
+    if (sd > 0 && sd < 26) { headOnThreat = true; break; }   // within ~52 m ahead
+  }
+  if (suspPanicTimer > 0)   suspPanicTimer   -= dt;
+  if (suspUrgencyTimer > 0) suspUrgencyTimer -= dt;
+
+  if (knocked) {
+    // Knocked off course → drop the pass and any panic state. The short-lookahead
+    // recovery steering below cuts us straight back to our own lane immediately.
+    suspOvertakeTimer = 0;
+    suspPanicTimer    = 0;
+  } else {
+    // ── Panic swerve-back ─────────────────────────────────────────────────────
+    // Already out in the oncoming lane and a car comes head-on → abandon the pass,
+    // jerk back toward our own lane, and ramp up aggression to escape.
+    if (headOnThreat && suspectLatShift < -0.2) {
+      suspOvertakeTimer = 0;     // give up the pass
+      suspPanicTimer    = 0.7;   // hard correction window
+      suspUrgencyTimer  = Math.max(suspUrgencyTimer, 3.5);  // floor it once clear
+    }
+    // Commit to a pass when a slower car is ahead — but only when the oncoming lane
+    // is clear enough to pull out, and never while recovering from a panic swerve.
+    if (blockerSeq !== -1 && suspOvertakeTimer <= 0 && suspPanicTimer <= 0 && !headOnThreat) {
+      suspOvertakeTimer = 5.0;
+    }
+  }
+  // Once we've road-seq-passed the blocker, allow early return with a small buffer
+  if (suspOvertakeTimer > 0) {
+    suspOvertakeTimer -= dt;
+    if (blockerSeq === -1) suspOvertakeTimer = Math.min(suspOvertakeTimer, 0.8);
+  }
+
+  // suspectLatShift: 0 = own lane, -1 = fully in oncoming lane
+  const targetLatShift = suspOvertakeTimer > 0 ? -1.0 : 0.0;
+  // Snap back extra-fast during a panic swerve or a knock-recovery.
+  const shiftRate = (suspPanicTimer > 0 || knocked) ? 14 : 8;
+  suspectLatShift += (targetLatShift - suspectLatShift) * Math.min(shiftRate * dt, 1);
+
+  // ── Road-following target ─────────────────────────────────────────────────
+  // Short lookahead while changing lanes → steep angle → full steer input.
+  // Shortest of all during a panic swerve so the wheel yanks hard to the right.
+  const lookM = knocked              ? 7    // hard, immediate cut back to our lane
+              : suspPanicTimer > 0   ? 8
+              : suspOvertakeTimer > 0 ? 10 + spd * 0.15
+              :                         18 + spd * 0.4;
+  const tgt   = laneLookAhead(suspRoadSeq, 1, lookM);
+  if (!tgt) return;
+  const tp = tgt.p;
+  const sx = tgt.x - tp.ty * suspectLatShift * LANE_HALF * 2;
+  const sy = tgt.y + tp.tx * suspectLatShift * LANE_HALF * 2;
+
+  const dx = sx - pos.x, dy = sy - pos.z;
+  const wantAngle = Math.atan2(-dx, dy);
+  const headingErr = angleDiff(wantAngle, curAngle);
+  // High gain (3.0) for aggressive, snappy steering toward offset target
+  let steer = clamp(headingErr * 3.0, -1, 1);
+
+  const suspTopSpd = 38 * ds.aiSpd * suspSpdMul;
+  // After a panic swerve, floor it to escape: much harder acceleration (same top
+  // speed, so still catchable) to power past the cars and away from the cop.
+  const suspForce  = 1200 * ds.aiSpd * suspSpdMul * (suspUrgencyTimer > 0 ? 1.7 : 1.0);
+
+  if (suspEngineDisabled) {
+    applyThrusters(suspBody, { throttle:false, brake:false, handbrake:false, steer:0 },
+                   0, suspTopSpd * 3.6, suspRoadSeq);
+    return;
+  }
+
+  const aidInp = { throttle: true, brake: false, handbrake: false, steer };
+
+  // Back off the blocker when we can't pull out to pass. Rear-ending a civilian
+  // now loses the round, so brake early and scale the gap with our speed.
+  if (blockerSeq !== -1 && suspOvertakeTimer <= 0) {
+    const distM = (blockerSeq - suspRoadSeq) * ROAD_STEP;
+    if (distM < 10 + spd * 0.8) { aidInp.throttle = false; aidInp.brake = true; }
+  }
+
+  // ── Off-road / post-PIT recovery ─────────────────────────────────────────
+  // If heading is badly wrong (>80°) AND speed is low, the bicycle model
+  // produces near-zero yaw (it's speed-dependent). Force-spin the body
+  // directly so the suspect can recover even from a dead stop.
+  if (Math.abs(headingErr) > Math.PI * 0.45 && spd < 6) {
+    suspBody.angularVelocity.y = clamp(-headingErr * 2.0, -2.5, 2.5);
+    if (spd > 1.5) { aidInp.throttle = false; } // slow down so spin takes effect
+  }
+  // Brake on tight bend ahead
+  const bSeq = suspRoadSeq + Math.round(10 / ROAD_STEP);
+  const bp   = getRoadPt(bSeq);
+  if (bp && !aidInp.brake) {
+    const bAngle = Math.atan2(-(bp.x - pos.x), bp.y - pos.z);
+    if (Math.abs(angleDiff(bAngle, curAngle)) > 0.45 && spd > suspTopSpd * 0.55) {
+      aidInp.brake = true; aidInp.throttle = false;
+    }
+  }
+  if (spd > suspTopSpd) aidInp.throttle = false;
+
+  applyThrusters(suspBody, aidInp, suspForce, suspTopSpd * 3.6, suspRoadSeq);
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRAFFIC AI
+// ═══════════════════════════════════════════════════════
+function trafficStep(car, dt) {
+  const pos = car.body.position;
+  const vel = car.body.velocity;
+  const spd = Math.hypot(vel.x, vel.z);
+
+  // Knocked out: no engine/steering. Bleed off velocity so it coasts to a stop
+  // and just sits there as an obstacle (collisions still shove it around).
+  if (car.disabled) {
+    const d = Math.max(0, 1 - 0.9 * dt);
+    vel.x *= d; vel.z *= d;
+    car.body.angularVelocity.y *= Math.max(0, 1 - 1.2 * dt);
+    return;
+  }
+
+  const nr = findNearRoad(pos.x, pos.z, car.roadSeq);
+  car.roadSeq = nr.seq;
+
+  const lookM = 12 + spd * 0.35;
+  const tgt   = laneLookAhead(car.roadSeq, car.lane, lookM);
+  if (!tgt) return;
+
+  // Passing: shift toward shoulder when car ahead is close
+  if (car.latShift === undefined) car.latShift = 0;
+  const aheadDist = closestCarAhead(car.body, car.lane, trafficArr);
+  const wantShift = aheadDist < 30 ? 1.0 : 0.0;
+  car.latShift += (wantShift - car.latShift) * clamp(2 * dt, 0, 1);
+
+  const tp = tgt.p;
+  const shiftScale = ROAD_HALF - LANE_HALF - 0.5;
+  const sx = tgt.x - tp.ty * car.latShift * shiftScale * car.lane;
+  const sy = tgt.y + tp.tx * car.latShift * shiftScale * car.lane;
+
+  const dx  = sx - pos.x, dy = sy - pos.z;
+  const wa  = Math.atan2(-dx, dy);
+  const err = angleDiff(wa, -getYAngle(car.body.quaternion));
+
+  const tooClose = aheadDist < 12;
+  const ainp = {
+    throttle: !tooClose && spd < car.spd * 1.05,
+    brake:    tooClose || spd > car.spd * 1.1,
+    handbrake: false,
+    steer:    clamp(err * 1.2, -0.6, 0.6)   // gentler steer → less yaw-induced drag
+  };
+  applyThrusters(car.body, ainp, 1200, car.spd * 3.6, car.roadSeq);
+  updateDebugArrows(car.arrows, car.body, ainp, 1200, car.spd * 3.6);
+}
+
+// ═══════════════════════════════════════════════════════
+//  STREAMING — TRAFFIC
+// ═══════════════════════════════════════════════════════
+function trafficSpawnProb() {
+  return DIFF_SETTINGS[diff].traffic * trafficCfg.density /
+         ((ROAD_BUFFER_AHEAD + ROAD_BUFFER_BEHIND) / ROAD_STEP * 2);
+}
+
+// Knock a civilian car out of action: engine + steering die, it coasts to a stop
+// and remains a physical obstacle. Triggered by being rammed (see spawnTrafficCar).
+function disableTrafficCar(car) {
+  if (car.disabled) return;
+  car.disabled = true;
+  playImpact(34, 0.5);
+}
+
+function spawnTrafficCar(seq, lane) {
+  const p = getRoadPt(seq); if (!p) return;
+  const lx    = p.x - p.ty * LANE_HALF * lane;
+  const ly    = p.y + p.tx * LANE_HALF * lane;
+  const angle = roadFwdAngle(p, lane);
+  const tb    = makeBoxCar(lx, ly, angle, 'traffic');
+  const tm    = buildCarMesh('traffic');   // real model + per-instance body tint inside
+  scene.add(tm);
+  const tspd = 10 + rng() * 18;
+  const arrows = makeTrafficArrows();
+  const car = { mesh:tm, body:tb, spd:tspd, lane, roadSeq:seq, arrows, disabled:false };
+
+  // Disable this civilian when rammed hard by the suspect or another car.
+  tb.addEventListener('collide', evt => {
+    if (car.disabled || state !== 'playing') return;
+    const otherTag = evt.body.userData;
+    if (otherTag !== 'suspect' && otherTag !== 'traffic') return;  // ignore cop / ground
+    const a = tb.velocity, b = evt.body.velocity;
+    const relSpd = Math.hypot(a.x - b.x, a.z - b.z);
+    if (relSpd > 6) disableTrafficCar(car);
+  });
+
+  trafficArr.push(car);
+}
+
+function streamTraffic() {
+  const prob = trafficSpawnProb();
+  const fwdTarget = roadGenSeq - 10;
+
+  while (trafficSpawnSeq.fwd < fwdTarget) {
+    const seq = trafficSpawnSeq.fwd;
+    if (getRoadPt(seq) && rng() < prob) spawnTrafficCar(seq, 1);
+    trafficSpawnSeq.fwd++;
+  }
+  while (trafficSpawnSeq.onc < fwdTarget) {
+    const seq = trafficSpawnSeq.onc;
+    if (getRoadPt(seq) && rng() < prob) spawnTrafficCar(seq, -1);
+    trafficSpawnSeq.onc++;
+  }
+
+  // Cull traffic far behind player
+  const cullSeq = copRoadSeq - Math.ceil(ROAD_BUFFER_BEHIND / ROAD_STEP) - 80;
+  for (let i = trafficArr.length - 1; i >= 0; i--) {
+    const t = trafficArr[i];
+    if (t.roadSeq < cullSeq) {
+      scene.remove(t.mesh);
+      releaseMesh(t.mesh);   // only per-instance resources; shared model geometry is kept
+      try { cannonWorld.removeBody(t.body); } catch(e) {}
+      if (t.arrows) removeArrows(t.arrows);
+      trafficArr.splice(i, 1);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  STREAMING — SCENERY
+// ═══════════════════════════════════════════════════════
+function tryPlaceScenery(p) {
+  for (const side of [-1, 1]) {
+    // minOff accounts for road half-width plus max building half-depth so nothing
+    // can overlap the road surface regardless of building size or road curvature.
+    const minOff = ROAD_HALF + (p.zone === 'city' ? 22 : 12);
+    const maxOff = ROAD_HALF + (p.zone === 'city' ? 70 : 80);
+    const off   = minOff + rng() * (maxOff - minOff);
+    // Jitter along the road tangent only — perpendicular distance stays exactly `off`.
+    const along = (rng() - 0.5) * 14;
+    const sx = p.x + p.ty * off * side + p.tx * along;
+    const sy = p.y - p.tx * off * side + p.ty * along;
+
+    if (p.zone === 'country') {
+      if (rng() < 0.75) {
+        const h    = 3 + rng() * 4;
+        const mesh = buildTree(sx, sy, h);
+        scene.add(mesh);
+        const body = makeStaticCircle(sx, sy, h * 0.4);
+        scenery.push({ mesh, body });
+      } else {
+        const w=7+rng()*6, d=6+rng()*5, h=3+rng()*2;
+        const col=new THREE.Color().setHSL(0.08+rng()*0.05, 0.2+rng()*0.1, 0.28+rng()*0.12).getHex();
+        const mesh = buildBuilding(sx, sy, w, d, h, col);
+        scene.add(mesh);
+        const body = makeStaticBody(sx, sy, w/2, d/2);
+        scenery.push({ mesh, body });
+      }
+    } else {
+      const w=12+rng()*24, d=10+rng()*18, h=5+rng()*15;
+      const grey = 0.20 + rng() * 0.15;
+      const col  = new THREE.Color(grey, grey, grey+0.02).getHex();
+      const mesh = buildBuilding(sx, sy, w, d, h, col);
+      scene.add(mesh);
+      const body = makeStaticBody(sx, sy, w/2, d/2);
+      scenery.push({ mesh, body });
+    }
+  }
+}
+
+function streamScenery() {
+  const target = roadGenSeq - 5;
+  while (scenerySeedSeq < target) {
+    if (scenerySeedSeq % SCENERY_SKIP === 0) {
+      const p = getRoadPt(scenerySeedSeq);
+      if (p) tryPlaceScenery(p);
+    }
+    scenerySeedSeq++;
+  }
+
+  // Cull scenery far behind player
+  if (copBody) {
+    const cop = copBody.position;
+    const cullDist = ROAD_BUFFER_BEHIND + 400;
+    for (let i = scenery.length - 1; i >= 0; i--) {
+      const s  = scenery[i];
+      const sp = s.mesh.position;
+      if (Math.hypot(sp.x - cop.x, sp.z - cop.z) > cullDist) {
+        scene.remove(s.mesh);
+        releaseMesh(s.mesh);   // only per-instance resources; shared model geometry is kept
+        try { cannonWorld.removeBody(s.body); } catch(e) {}
+        scenery.splice(i, 1);
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  PIT DETECTION
+// ═══════════════════════════════════════════════════════
+let pitCooldown = 0;
+
+// Called by cop body's collide event when it hits the suspect
+function tryPITContact(evt) {
+  if (pitDone || pitCooldown > 0) return;
+
+  const copAngle  = -getYAngle(copBody.quaternion);
+  const suspAngle = -getYAngle(suspBody.quaternion);
+  const adiff     = Math.abs(angleDiff(copAngle, suspAngle));
+  if (adiff < 0.12 || adiff > 1.1) return;
+
+  const copFwd = bodyFwd(copBody);
+  const copV   = copBody.velocity, suspV = suspBody.velocity;
+  const relSpd = (copV.x - suspV.x)*copFwd.x + (copV.z - suspV.z)*copFwd.y;
+  if (relSpd < 2.0) return;
+
+  // Valid PIT contact — start rotation tracking
+  pitTrackActive = true;
+  pitAccumRot    = 0;
+  pitTrackTime   = 0;
+  pitLastAngle   = -getYAngle(suspBody.quaternion);
+  pitCooldown    = 1.5;
+
+  const q = (relSpd/20)*0.45 + (1 - Math.abs(adiff - 0.45)/0.5)*0.55;
+  pitRating = q>0.78 ? 'TEXTBOOK' : q>0.55 ? 'GOOD' : q>0.35 ? 'ROUGH' : 'LUCKY';
+  playImpact(42, 0.75);
+}
+
+// Setup cop collision listener — called after buildWorld creates the bodies
+function setupCollisionListeners() {
+  copBody.addEventListener('collide', evt => {
+    if (state !== 'playing' || crashFlag) return;
+    const tag = evt.body.userData;
+    const spd = copBody.velocity.length();
+    if (tag === 'static'  && spd > 4) crashFlag = true;
+    if (tag === 'traffic' && spd > 3) crashFlag = true;
+    if (tag === 'suspect' && !pitDone && pitCooldown <= 0) tryPITContact(evt);
+  });
+
+  // Suspect crashes hard into scenery → engine disabled (player wins).
+  // Suspect strikes a CIVILIAN (on its own, or because the player pushed it into
+  // one) → the round is lost. The civilian is also knocked out by its own listener.
+  suspBody.addEventListener('collide', evt => {
+    if (state !== 'playing' || suspEngineDisabled || suspHitCivilian) return;
+    const tag = evt.body.userData;
+    const sv = suspBody.velocity, ov = evt.body.velocity;
+    const relSpd = Math.hypot(sv.x - ov.x, sv.z - ov.z);
+    if (tag === 'static') {
+      if (relSpd > 8) {   // ~29 km/h relative — serious crash
+        suspEngineDisabled = true;
+        pitDone = true;
+        playImpact(55, 1.0);
+      }
+    } else if (tag === 'traffic') {
+      if (relSpd > 3) {   // any real contact with a civilian → player loses
+        suspHitCivilian = true;
+        playImpact(50, 0.9);
+      }
+    }
+  });
+}
+
+// Per-frame PIT tracking — accumulates suspect rotation after a valid contact
+function checkPIT(dt) {
+  pitCooldown -= dt;
+  if (!pitTrackActive) return;
+  pitTrackTime += dt;
+
+  const angle = -getYAngle(suspBody.quaternion);
+  pitAccumRot += Math.abs(angleDiff(angle, pitLastAngle));
+  pitLastAngle  = angle;
+
+  // 160° spin = engine disabled (no wheels to check anymore — rotation alone is the condition)
+  if (pitAccumRot >= Math.PI * (160 / 180)) {
+    suspEngineDisabled = true;
+    pitDone            = true;
+    pitTrackActive     = false;
+  }
+
+  // Short free-spin window: a real PIT spins the suspect out within ~1.5 s. If it
+  // hasn't (just a nudge/glance), hand steering back so the suspect immediately
+  // recovers its lane instead of coasting off-course for several seconds.
+  if (pitTrackTime > 1.5) { pitTrackActive = false; pitAccumRot = 0; }
+}
+
+// ═══════════════════════════════════════════════════════
+//  SKID MARKS
+// ═══════════════════════════════════════════════════════
+function addSkids(body) {
+  const vel = body.velocity;
+  const rt  = bodyRt(body);
+  const lat = Math.abs(vel.x*rt.x + vel.z*rt.y);
+  if (lat < 1.5 && !inp.handbrake) return;
+  const pos = body.position;
+  const fwd = bodyFwd(body);
+  const bx  = pos.x - fwd.x*CAR_L*0.3;
+  const by  = pos.z - fwd.y*CAR_L*0.3;
+  const hw  = CAR_W*0.42;
+  for (const side of [-1,1]) {
+    if (skidCount < SKID_MAX) {
+      const si = skidCount*3;
+      skidPositions[si]   = bx + rt.x*hw*side;
+      skidPositions[si+1] = 0.18;   // sit clearly above the road (0.08) to avoid z-fighting
+      skidPositions[si+2] = by + rt.y*hw*side;
+      skidCount++;
+    }
+  }
+  skidMesh.geometry.attributes.position.needsUpdate = true;
+  skidMesh.geometry.setDrawRange(0, skidCount);
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOAST / CHATTER
+// ═══════════════════════════════════════════════════════
+let toastTimer=0;
+function showToast(msg, col) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.style.color=col||'#e8d040'; el.style.opacity='1';
+  toastTimer=1.8;
+}
+function showChatter(msg) {
+  const el=document.getElementById('chatter');
+  el.textContent=msg; el.style.opacity='1';
+  setTimeout(()=>el.style.opacity='0', 2800);
+}
+let chatCooldown=8;
+function maybeChatUpdate(dt) {
+  chatCooldown-=dt;
+  if (chatCooldown<=0) {
+    chatCooldown=12+rng()*14;
+    showChatter(CHATTER_LINES[Math.floor(rng()*CHATTER_LINES.length)]);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  HUD UPDATE
+// ═══════════════════════════════════════════════════════
+const wCtx = document.getElementById('wheel-cvs').getContext('2d');
+const mCtx = document.getElementById('minimap-cvs').getContext('2d');
+
+// ═══════════════════════════════════════════════════════
+//  STEERING CALIBRATION
+// ═══════════════════════════════════════════════════════
+const calCvs = document.getElementById('cal-wheel-cvs');
+const calCtx = calCvs.getContext('2d');
+const calReadout = document.getElementById('cal-readout');
+
+function drawCalWheel() {
+  const S = calCvs.width, c = S / 2, R = S * 0.36;
+  const atFull = Math.abs(calSteer) >= 0.985;
+  calCtx.clearRect(0, 0, S, S);
+
+  // Faint full-lock reference ring
+  calCtx.strokeStyle = 'rgba(90,138,176,.18)';
+  calCtx.lineWidth = 1;
+  calCtx.beginPath(); calCtx.arc(c, c, R + S * 0.05, 0, Math.PI * 2); calCtx.stroke();
+
+  calCtx.save();
+  calCtx.translate(c, c);
+  calCtx.rotate(calSteer * MAX_STEER * 2.2);
+  calCtx.strokeStyle = atFull ? '#44dd88' : '#5a4838';
+  calCtx.lineWidth = S * 0.06;
+  calCtx.beginPath(); calCtx.arc(0, 0, R, 0, Math.PI * 2); calCtx.stroke();
+  calCtx.lineWidth = S * 0.035;
+  for (let i = 0; i < 3; i++) {
+    calCtx.save(); calCtx.rotate(i * Math.PI * 2 / 3);
+    calCtx.beginPath(); calCtx.moveTo(0, 0); calCtx.lineTo(0, -R * 0.9); calCtx.stroke();
+    calCtx.restore();
+  }
+  calCtx.fillStyle = atFull ? '#44dd88' : '#5a4838';
+  calCtx.beginPath(); calCtx.arc(0, 0, S * 0.06, 0, Math.PI * 2); calCtx.fill();
+  calCtx.restore();
+
+  const pct = Math.round(Math.abs(calSteer) * 100);
+  const dir = calSteer > 0.01 ? 'Right' : calSteer < -0.01 ? 'Left' : '';
+  calReadout.textContent = atFull ? 'Full Lock · ' + dir
+                         : pct > 0 ? 'Steer ' + dir + ' ' + pct + '%'
+                         : 'Centered';
+  calReadout.classList.toggle('full', atFull);
+}
+
+function calibrationUpdate(dt) {
+  // Mirror the in-game auto-recenter so the feel matches exactly.
+  if (steerCfg.recenter > 0) {
+    calSteer *= Math.max(0, 1 - steerCfg.recenter * dt);
+    if (Math.abs(calSteer) < 0.001) calSteer = 0;
+  }
+  drawCalWheel();
+}
+
+function syncCalSliders() {
+  const s = steerCfg;
+  const fmt = (v, d) => v === 0 ? 'off' : (+v).toFixed(d).replace(/\.?0+$/, '');
+  document.getElementById('c-sl-sens').value = s.sensitivity;
+  document.getElementById('c-lbl-sens').textContent = fmt(s.sensitivity, 4);
+  document.getElementById('c-sl-nonlin').value = s.nonlin;
+  document.getElementById('c-lbl-nonlin').textContent = fmt(s.nonlin, 2);
+  document.getElementById('c-sl-recenter').value = s.recenter;
+  document.getElementById('c-lbl-recenter').textContent = s.recenter === 0 ? 'off' : fmt(s.recenter, 2);
+}
+
+function openCalibration() {
+  calSteer = 0;
+  syncCalSliders();
+  drawCalWheel();
+  state = 'calibrating';
+  document.getElementById('ov-start').classList.add('hidden');
+  document.getElementById('ov-calibrate').classList.remove('hidden');
+}
+
+function closeCalibration() {
+  state = 'start';
+  document.getElementById('ov-calibrate').classList.add('hidden');
+  document.getElementById('ov-start').classList.remove('hidden');
+}
+
+function updateHUD(dt) {
+  const secs = Math.ceil(timer);
+  const tel  = document.getElementById('hud-timer');
+  tel.textContent = secs + 's';
+  tel.className   = timer<5?'crit':timer<15?'warn':'';
+
+  const vel = copBody.velocity;
+  const mph = Math.round(Math.hypot(vel.x, vel.z)*2.23694);
+  document.getElementById('hud-speed').textContent = mph + ' mph';
+
+  const sv = suspBody.velocity;
+  const suspSpd = Math.round(Math.hypot(sv.x, sv.z)*2.23694);
+  const nr  = findNearRoad(suspBody.position.x, suspBody.position.z, suspRoadSeq);
+  const onRoad = nr.dist < ROAD_HALF + 2;
+  document.getElementById('hud-state').textContent = 'SUSPECT ' + suspSpd + ' MPH · ' + (onRoad?'ON ROAD':'OFF ROAD');
+
+  toastTimer -= dt;
+  if (toastTimer <= 0) document.getElementById('toast').style.opacity='0';
+
+  // Steering wheel
+  wCtx.clearRect(0,0,80,80);
+  wCtx.save(); wCtx.translate(40,40); wCtx.rotate(inp.steer * MAX_STEER * 2.2);
+  wCtx.strokeStyle='#5a4838'; wCtx.lineWidth=5;
+  wCtx.beginPath(); wCtx.arc(0,0,28,0,Math.PI*2); wCtx.stroke();
+  wCtx.lineWidth=3;
+  for (let i=0;i<3;i++) {
+    wCtx.save(); wCtx.rotate(i*Math.PI*2/3);
+    wCtx.beginPath(); wCtx.moveTo(0,0); wCtx.lineTo(0,-25); wCtx.stroke();
+    wCtx.restore();
+  }
+  wCtx.fillStyle='#5a4838'; wCtx.beginPath(); wCtx.arc(0,0,5,0,Math.PI*2); wCtx.fill();
+  wCtx.restore();
+
+  // Minimap — player-relative 400m window
+  const mmW=160, mmH=100;
+  mCtx.fillStyle='#080c10'; mCtx.fillRect(0,0,mmW,mmH);
+
+  const ms  = 0.12; // pixels per metre
+  const cop = copBody.position;
+  const ox  = mmW/2 + cop.x*ms;
+  const oy  = mmH/2 + cop.z*ms;
+
+  const WIN  = Math.ceil(400/ROAD_STEP);
+  const si   = Math.max(0, copRoadSeq - roadBaseSeq - WIN);
+  const ei   = Math.min(roadPts.length-1, copRoadSeq - roadBaseSeq + WIN);
+
+  mCtx.beginPath();
+  for (let i=si; i<=ei; i+=4) {
+    const p=roadPts[i];
+    const sx=-p.x*ms+ox, sy=-p.y*ms+oy;  // negate both to match camera orientation
+    i===si ? mCtx.moveTo(sx,sy) : mCtx.lineTo(sx,sy);
+  }
+  mCtx.strokeStyle='#3a3530';
+  mCtx.lineWidth = Math.max(4, Math.round(ROAD_HALF*2*ms));
+  mCtx.stroke();
+
+  function mmDot(body, col) {
+    const p = body.position;
+    mCtx.beginPath(); mCtx.arc(-p.x*ms+ox, -p.z*ms+oy, 3, 0, Math.PI*2);
+    mCtx.fillStyle=col; mCtx.fill();
+  }
+  mmDot(copBody,'#4488ff');
+  mmDot(suspBody,'#ff4422');
+  for (const t of trafficArr) mmDot(t.body,'#5a4838');
+}
+
+// ═══════════════════════════════════════════════════════
+//  CAMERA
+// ═══════════════════════════════════════════════════════
+function updateCamera(dt) {
+  // Use the interpolated (render-smooth) transform to match syncMesh, so the
+  // tracked cop doesn't appear to vibrate relative to the camera.
+  const pos = copBody.interpolatedPosition;
+  const a   = -getYAngle(copBody.interpolatedQuaternion);
+  const fwd = { x: -Math.sin(a), y: Math.cos(a) };
+
+  const tPos = new THREE.Vector3(pos.x - fwd.x*30, 38, pos.z - fwd.y*30);
+  const tLook= new THREE.Vector3(pos.x + fwd.x*15,  3, pos.z + fwd.y*15);
+
+  camPos.lerp(tPos,  7*dt);
+  camLook.lerp(tLook, 7*dt);
+  camera.position.copy(camPos);
+  camera.lookAt(camLook);
+}
+
+// Flashing yellow "Suspect Vehicle" target box, shown for a few seconds at the
+// start of the round so the player knows which car to chase.
+const _smVec = new THREE.Vector3();
+const suspectMarkerEl = document.getElementById('suspect-marker');
+function updateSuspectMarker(dt) {
+  if (suspMarkerT <= 0 || !suspBody) { suspectMarkerEl.style.display = 'none'; return; }
+  suspMarkerT -= dt;
+
+  const p = suspBody.interpolatedPosition;
+  _smVec.set(p.x, p.y + 0.4, p.z);
+  const dist = camera.position.distanceTo(_smVec);
+  _smVec.project(camera);
+  // Behind the camera or off-screen → hide this frame.
+  if (_smVec.z > 1 || Math.abs(_smVec.x) > 1.3 || Math.abs(_smVec.y) > 1.3) {
+    suspectMarkerEl.style.display = 'none'; return;
+  }
+  const size = clamp(3600 / dist, 54, 170);
+  const sx = ( _smVec.x * 0.5 + 0.5) * window.innerWidth;
+  const sy = (-_smVec.y * 0.5 + 0.5) * window.innerHeight;
+  // Blink on/off ~every 0.32 s for a "targeting" feel.
+  const blinkOn = Math.floor(suspMarkerT / 0.32) % 2 === 0;
+  suspectMarkerEl.style.display = blinkOn ? 'block' : 'none';
+  suspectMarkerEl.style.left   = Math.round(sx - size / 2) + 'px';
+  suspectMarkerEl.style.top    = Math.round(sy - size / 2) + 'px';
+  suspectMarkerEl.style.width  = Math.round(size) + 'px';
+  suspectMarkerEl.style.height = Math.round(size) + 'px';
+}
+
+// ═══════════════════════════════════════════════════════
+//  LIGHT BAR FLASH
+// ═══════════════════════════════════════════════════════
+let lbFlash=false, lbTimer=0;
+function updateLightBar(dt) {
+  if (!copMesh) return;
+  lbTimer+=dt;
+  if (lbTimer>0.25) { lbTimer=0; lbFlash=!lbFlash; }
+  const lb = copMesh.userData.lightBar;
+  if (!lb) return;
+  const cv = copBody.velocity;
+  const spd = Math.hypot(cv.x, cv.z);
+  if (spd<0.5) { lb[0].material.emissiveIntensity=0.1; lb[1].material.emissiveIntensity=0.1; return; }
+  lb[0].material.emissiveIntensity = lbFlash ? 1.2 : 0.05;
+  lb[1].material.emissiveIntensity = lbFlash ? 0.05: 1.2;
+}
+
+// yOff: vertical shift from physics body center to Three.js mesh group origin.
+// RaycastVehicle chassis center ≈ 1.16m → offset -1.0 puts mesh group near ground.
+// Traffic box center ≈ 0.65m (CAR_H/2) → offset -0.65 puts mesh group at ground.
+// Render from the cannon-es *interpolated* transform (smooth at the display rate)
+// rather than the raw 60 Hz step position — otherwise fast/tracked cars judder.
+function syncMesh(mesh, body, yOff = -1.0) {
+  mesh.position.copy(body.interpolatedPosition);
+  mesh.position.y += yOff;
+  mesh.quaternion.copy(body.interpolatedQuaternion);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAIN GAME LOOP
+// ═══════════════════════════════════════════════════════
+let lastT=0;
+
+function gameUpdate(dt) {
+  if (!locked) return;
+
+  // Road management — extend and cull buffer
+  const prevLen = roadPts.length;
+  manageRoadBuffer();
+  if (roadPts.length !== prevLen) updateRoadMesh();
+  streamTraffic();
+  streamScenery();
+
+  // Update cop road sequence
+  const copNr = findNearRoad(copBody.position.x, copBody.position.z, copRoadSeq);
+  copRoadSeq = copNr.seq;
+
+  // ── Combine input sources (mouse buttons + keyboard) ──
+  inp.throttle  = mouse.gas   || keys.gas;
+  inp.brake     = mouse.brake || keys.brake;
+  inp.handbrake = mouse.hand;
+
+  // Keyboard steering — held A/D (or ←/→) ramp the wheel; the mouse still steers
+  // too. Uses a fixed feel (KEY_SENS), independent of the mouse sensitivity slider.
+  const keySteer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  if (keySteer !== 0) {
+    kbSteering = true;
+    inp.steer = clamp(inp.steer + keySteer * KEY_SENS * KEY_STEER_RATE * dt, -1, 1);
+  }
+
+  // Auto-recenter: keyboard drivers get a stronger automatic recenter (easier to
+  // drive, harder to spin out); mouse drivers get the slider value. Skipped while
+  // a steer key is held so the keyboard can still hold a full turn.
+  const recRate = kbSteering ? KEY_RECENTER : steerCfg.recenter;
+  if (recRate > 0 && keySteer === 0) {
+    inp.steer *= Math.max(0, 1 - recRate * dt);
+    if (Math.abs(inp.steer) < 0.001) inp.steer = 0;
+  }
+
+  applyThrusters(copBody, inp, 1800, 250, copRoadSeq);
+  updateDebugArrows(copArrows, copBody, inp, 1800, 250);
+  suspectAI(dt);
+  updateDebugArrows(suspArrows, suspBody,
+    { throttle: !suspEngineDisabled, brake: false, handbrake: false, steer: 0 },
+    1200, 38 * DIFF_SETTINGS[diff].aiSpd * suspSpdMul * 3.6);
+  for (const t of trafficArr) trafficStep(t, dt);
+
+  cannonWorld.step(1/60, Math.min(dt, 1/30), 3);
+
+  syncMesh(copMesh,  copBody, -CAR_H / 2);
+  syncMesh(suspMesh, suspBody, -CAR_H / 2);
+  for (const t of trafficArr) syncMesh(t.mesh, t.body, -CAR_H / 2);
+
+  addSkids(copBody);
+  addSkids(suspBody);
+
+  updateLightBar(dt);
+  updateCamera(dt);
+  updateSuspectMarker(dt);
+  updateAudio(dt);
+  updateHUD(dt);
+  maybeChatUpdate(dt);
+  checkPIT(dt);
+
+  timer -= dt;
+  if (timer <= 0)      { endGame('time_up');   return; }
+  if (crashFlag)       { endGame('cop_crash'); return; }
+  if (suspHitCivilian) { endGame('susp_hit_civ'); return; }
+
+  const sv   = suspBody.velocity;
+  const sspd = Math.hypot(sv.x, sv.z);
+  // Win if suspect is nearly stopped for 4 s for ANY reason
+  // (successful PIT, crash into traffic, crash into scenery, etc.)
+  if ((suspEngineDisabled || pitDone) && sspd < 1.0) {
+    suspStopTimer += dt;
+    if (suspStopTimer >= 4.0) { endGame('cop_wins'); return; }
+  } else {
+    suspStopTimer = 0;
+  }
+}
+
+function countdownUpdate(dt) {
+  cdTimer-=dt;
+  if (cdTimer<=0 && cdCount>0) { cdCount--; cdTimer=0.5; }  // "GET READY" → "GO!"
+  if (cdCount<=0 && cdTimer<=0) {
+    state='playing';
+    canvas_requestLock();
+    const cdEl=document.getElementById('cd-overlay');
+    if (cdEl) cdEl.style.display='none';
+  }
+
+  // Rolling start: auto-drive both cars on the road during countdown
+  if (copBody && suspBody) {
+    copRoadFollowAI();   // cop follows road at up to 120 km/h; player takes over at GO!
+    suspectAI(dt);
+    for (const t of trafficArr) trafficStep(t, dt);
+    cannonWorld.step(1/60, Math.min(dt, 1/30), 3);
+    syncMesh(copMesh, copBody, -CAR_H/2); syncMesh(suspMesh, suspBody, -CAR_H/2);
+    for (const t of trafficArr) syncMesh(t.mesh, t.body, -CAR_H / 2);
+    updateLightBar(dt);
+    const prevLen = roadPts.length;
+    manageRoadBuffer();
+    if (roadPts.length !== prevLen) updateRoadMesh();
+    streamTraffic(); streamScenery();
+  }
+  if (copBody) { updateHUD(dt); updateCamera(dt); updateSuspectMarker(dt); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  WORLD CONSTRUCTION
+// ═══════════════════════════════════════════════════════
+function buildWorld() {
+  // Clear Three.js scene (lights + sky stay)
+  scene.children.filter(c=>c.type!=='DirectionalLight'&&c.type!=='AmbientLight'&&c!==sky)
+    .forEach(c=>{ releaseMesh(c); scene.remove(c); });
+  applyEnvironment(timeOfDay);
+  roadMeshDynamic = null;
+  roadMarkMesh    = null;
+  skidMesh        = null;
+  scenery    = [];
+  trafficArr = [];
+  skidCount  = 0;
+  if (copArrows.length)  { removeArrows(copArrows);  copArrows  = []; }
+  if (suspArrows.length) { removeArrows(suspArrows); suspArrows = []; }
+
+  buildGroundPlane();
+  initRoadMesh();
+  updateRoadMesh();
+  buildSkidSystem();
+
+  // Populate initial scenery
+  scenerySeedSeq = 0;
+  streamScenery();
+
+  // Player cars
+  copMesh  = buildCarMesh('cop');
+  suspMesh = buildCarMesh('suspect');
+  scene.add(copMesh, suspMesh);
+
+  const p0  = getRoadPt(roadBaseSeq) || roadPts[0];
+  const p35 = getRoadPt(roadBaseSeq + 35) || roadPts[Math.min(35, roadPts.length-1)];
+
+  copBody  = makeBoxCar(p0.x,  p0.y,  roadFwdAngle(p0,  1), 'cop');
+  suspBody = makeBoxCar(p35.x, p35.y, roadFwdAngle(p35, 1), 'suspect');
+  suspBody.angularDamping = DIFF_SETTINGS[diff].angDamp;  // spin resistance per difficulty
+  copRoadSeq  = roadBaseSeq;
+  suspRoadSeq = roadBaseSeq + 35;
+
+  // Debug arrows: green=front thrusters, orange=rear thrusters
+  copArrows  = makeDebugArrows(0x00ff88, 0xff8800);
+  suspArrows = makeDebugArrows(0x44aaff, 0xff4488);
+
+  setupCollisionListeners();
+
+  // Rolling start: both cars begin with forward velocity
+  const cfwd = bodyFwd(copBody);
+  copBody.velocity.set(cfwd.x * 14, 0, cfwd.y * 14);
+  const sfwd = bodyFwd(suspBody);
+  const sStart = 38 * DIFF_SETTINGS[diff].aiSpd * suspSpdMul * 0.6;
+  suspBody.velocity.set(sfwd.x * sStart, 0, sfwd.y * sStart);
+
+  // Start traffic well ahead so player doesn't immediately crash into a stopped car.
+  // 160 seqs = 320 m gives plenty of run-up space before first bystander.
+  trafficSpawnSeq = { fwd: roadBaseSeq + 160, onc: roadBaseSeq + 160 };
+  streamTraffic();
+}
+
+// ═══════════════════════════════════════════════════════
+//  GAME STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════
+function startGame() {
+  initAudio();
+  const rawSeed=document.getElementById('seed-input').value.trim();
+  seed=rawSeed ? (parseInt(rawSeed,10)||hashStr(rawSeed)) : (Math.random()*999999999|0);
+  document.getElementById('seed-input').value=seed;
+  rng=mkRNG(seed);
+  suspSpdMul = 1.0 + rng() * DIFF_SETTINGS[diff].spdMulMax;  // speed varies per seed+diff
+
+  buildPhysWorld();
+  initRoad();
+  buildWorld();
+
+  timer=DIFF_SETTINGS[diff].time;
+  cdCount=1; cdTimer=1.0;  // "GET READY" (1 s) → "GO!" (0.5 s)
+  pitDone=false; pitRating=''; endReason=''; pitCooldown=0; crashFlag=false;
+  inp.throttle=inp.brake=inp.handbrake=false; inp.steer=0;
+  mouse.gas=mouse.brake=mouse.hand=false;
+  keys.gas=keys.brake=keys.left=keys.right=false;
+  kbSteering=false;
+  suspectLatShift=0; suspStopTimer=0; suspOvertakeTimer=0; suspPanicTimer=0; suspUrgencyTimer=0; suspHitCivilian=false;
+  suspMarkerT=4.0;   // flash the "suspect vehicle" target box for the first few seconds
+  suspEngineDisabled=false; pitTrackActive=false; pitAccumRot=0; pitLastAngle=0; pitTrackTime=0;
+  locked=false; chatCooldown=8;
+  skidCount=0;
+
+  if (copBody) {
+    const p = copBody.position;
+    camPos.set(p.x-20, 38, p.z-20);
+    camLook.set(p.x+10, 3, p.z+10);
+  }
+
+  state='countdown';
+  document.getElementById('ov-start').classList.add('hidden');
+  document.getElementById('ov-end').classList.add('hidden');
+  document.getElementById('ov-pause').classList.add('hidden');
+}
+
+function endGame(reason) {
+  endReason=reason;
+  state='ended';
+  document.exitPointerLock&&document.exitPointerLock();
+  locked=false;
+
+  if (engGain)  engGain.gain.value=0;
+  if (sirenG)   sirenG.gain.value=0;
+  if (screechG) screechG.gain.value=0;
+
+  const elapsed=DIFF_SETTINGS[diff].time - timer;
+  let title, col, meta;
+
+  if (reason==='cop_wins') {
+    title='PIT SUCCESS'; col='#44dd88';
+    meta='Rating: '+pitRating+'\nTime: '+elapsed.toFixed(1)+'s';
+    playJingle(true);
+  } else if (reason==='cop_crash') {
+    title='MISSION FAILED'; col='#ff4422';
+    meta='Cop crashed\nTime: '+elapsed.toFixed(1)+'s';
+    playJingle(false);
+  } else if (reason==='susp_hit_civ') {
+    title='MISSION FAILED'; col='#ff4422';
+    meta='Suspect struck a civilian\nTime: '+elapsed.toFixed(1)+'s';
+    playJingle(false);
+  } else {
+    title="TIME'S UP"; col='#ff8820';
+    meta='Suspect escaped\nTime: '+elapsed.toFixed(1)+'s';
+    playJingle(false);
+  }
+
+  const rt=document.getElementById('result-title');
+  rt.textContent=title; rt.style.color=col;
+  document.getElementById('result-meta').textContent=meta+'\nSeed: '+seed;
+  document.getElementById('ov-end').classList.remove('hidden');
+
+  let secs = 3;
+  const cdEl2 = document.getElementById('return-countdown');
+  cdEl2.textContent = 'Returning to menu in ' + secs + 's…';
+  const retInterval = setInterval(() => {
+    secs--;
+    if (secs > 0) {
+      cdEl2.textContent = 'Returning to menu in ' + secs + 's…';
+    } else {
+      clearInterval(retInterval);
+      document.getElementById('ov-end').classList.add('hidden');
+      document.getElementById('ov-start').classList.remove('hidden');
+      state = 'start';
+    }
+  }, 1000);
+}
+
+function hashStr(s) {
+  let h=0; for (let i=0;i<s.length;i++) h=(Math.imul(31,h)+s.charCodeAt(i))|0;
+  return Math.abs(h);
+}
+
+// ═══════════════════════════════════════════════════════
+//  POINTER LOCK
+// ═══════════════════════════════════════════════════════
+function canvas_requestLock() {
+  renderer.domElement.requestPointerLock();
+}
+
+function syncPauseSliders() {
+  const s = steerCfg;
+  const fmt = (v, d) => v === 0 ? 'off' : (+v).toFixed(d).replace(/\.?0+$/, '');
+  document.getElementById('p-sl-sens').value    = s.sensitivity;
+  document.getElementById('p-lbl-sens').textContent  = fmt(s.sensitivity, 4);
+  document.getElementById('p-sl-nonlin').value   = s.nonlin;
+  document.getElementById('p-lbl-nonlin').textContent = fmt(s.nonlin, 2);
+  document.getElementById('p-sl-recenter').value = s.recenter;
+  document.getElementById('p-lbl-recenter').textContent = s.recenter === 0 ? 'off' : fmt(s.recenter, 2);
+  document.getElementById('p-sl-density').value  = trafficCfg.density;
+  document.getElementById('p-lbl-density').textContent = trafficCfg.density.toFixed(1);
+}
+
+document.addEventListener('pointerlockchange', () => {
+  locked = !!document.pointerLockElement;
+  if (!locked && state==='playing') {
+    syncPauseSliders();
+    document.getElementById('ov-pause').classList.remove('hidden');
+  } else if (locked) {
+    document.getElementById('ov-pause').classList.add('hidden');
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════════════════
+document.addEventListener('mousemove', e => {
+  const MAX_STEER_DELTA = 0.045;
+  if (state==='calibrating') {
+    const nlFactor = 1 + steerCfg.nonlin * calSteer * calSteer;
+    const delta = clamp(e.movementX * steerCfg.sensitivity * nlFactor, -MAX_STEER_DELTA, MAX_STEER_DELTA);
+    calSteer = clamp(calSteer + delta, -1, 1);
+    return;
+  }
+  if (!locked || state!=='playing') return;
+  if (e.movementX !== 0) kbSteering = false;   // active mouse steering → slider recenter
+  const nlFactor = 1 + steerCfg.nonlin * inp.steer * inp.steer;
+  const delta = clamp(e.movementX * steerCfg.sensitivity * nlFactor, -MAX_STEER_DELTA, MAX_STEER_DELTA);
+  inp.steer = clamp(inp.steer + delta, -1, 1);
+});
+document.addEventListener('mousedown', e => {
+  if (e.button===0) mouse.gas=true;
+  if (state!=='playing' || !locked) return;
+  if (e.button===2) mouse.brake=true;
+  if (e.button===1) { e.preventDefault(); mouse.hand=true; }
+});
+document.addEventListener('mouseup', e => {
+  if (e.button===0) mouse.gas=false;
+  if (e.button===2) mouse.brake=false;
+  if (e.button===1) mouse.hand=false;
+});
+renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape' && state==='calibrating') { closeCalibration(); return; }
+  if (e.key==='Escape' && state==='playing') {
+    if (locked) document.exitPointerLock();
+    else renderer.domElement.requestPointerLock();
+    return;
+  }
+  // Keyboard driving — gas/brake/steer (only while actively driving)
+  if (state!=='playing' || !locked) return;
+  switch (e.key) {
+    case 'w': case 'W': case 'ArrowUp':    keys.gas=true;   e.preventDefault(); break;
+    case 's': case 'S': case 'ArrowDown':  keys.brake=true; e.preventDefault(); break;
+    case 'a': case 'A': case 'ArrowLeft':  keys.left=true;  e.preventDefault(); break;
+    case 'd': case 'D': case 'ArrowRight': keys.right=true; e.preventDefault(); break;
+  }
+});
+document.addEventListener('keyup', e => {
+  switch (e.key) {
+    case 'w': case 'W': case 'ArrowUp':    keys.gas=false;   break;
+    case 's': case 'S': case 'ArrowDown':  keys.brake=false; break;
+    case 'a': case 'A': case 'ArrowLeft':  keys.left=false;  break;
+    case 'd': case 'D': case 'ArrowRight': keys.right=false; break;
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+//  COUNTDOWN OVERLAY
+// ═══════════════════════════════════════════════════════
+function drawCountdown(ts) {
+  if (state!=='countdown') return;
+  let cdEl = document.getElementById('cd-overlay');
+  if (!cdEl) {
+    cdEl=document.createElement('div');
+    cdEl.id='cd-overlay';
+    cdEl.style.cssText='position:fixed;inset:0;z-index:25;display:flex;align-items:center;justify-content:center;pointer-events:none;font-family:monospace;font-weight:900;text-shadow:0 0 40px currentColor;';
+    document.body.appendChild(cdEl);
+  }
+  cdEl.style.display='flex';
+  const label = cdCount>0 ? 'GET READY' : 'GO!';
+  const col   = cdCount>0 ? '#e8a020'   : '#44dd88';
+  const sz    = cdCount>0 ? '52px'      : '110px';
+  cdEl.innerHTML=`<span style="font-size:${sz};color:${col};letter-spacing:.18em">${label}</span>`;
+  if (state!=='countdown') cdEl.style.display='none';
+}
+
+function loopEx(ts) {
+  requestAnimationFrame(loopEx);
+  const dt = Math.min((ts-lastT)/1000, 0.05); lastT=ts;
+
+  if (state==='playing') gameUpdate(dt);
+  else if (state==='countdown') { countdownUpdate(dt); drawCountdown(ts); }
+  else if (state==='calibrating') calibrationUpdate(dt);
+
+  if (composer) composer.render(); else renderer.render(scene, camera);
+}
+
+// ═══════════════════════════════════════════════════════
+//  UI HANDLERS
+// ═══════════════════════════════════════════════════════
+document.getElementById('diff-group').addEventListener('click', e => {
+  const btn=e.target.closest('.diff-btn'); if (!btn) return;
+  diff=btn.dataset.diff;
+  e.currentTarget.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('active',b===btn));
+});
+// Day/Night toggle — updates the live start-screen preview immediately.
+document.getElementById('time-group').addEventListener('click', e => {
+  const btn=e.target.closest('.diff-btn'); if (!btn) return;
+  e.currentTarget.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('active',b===btn));
+  applyEnvironment(btn.dataset.time);
+});
+// Graphics quality toggle — rebuilds the post-processing chain and env lighting.
+document.getElementById('gfx-group').addEventListener('click', e => {
+  const btn=e.target.closest('.diff-btn'); if (!btn) return;
+  e.currentTarget.querySelectorAll('.diff-btn').forEach(b=>b.classList.toggle('active',b===btn));
+  gfxQuality = btn.dataset.gfx;
+  applyGfxQuality();
+  applyEnvironment(timeOfDay);
+});
+document.getElementById('btn-rng').addEventListener('click',
+  ()=>document.getElementById('seed-input').value=(Math.random()*999999999|0));
+document.getElementById('btn-start').addEventListener('click', startGame);
+document.getElementById('btn-calibrate').addEventListener('click', openCalibration);
+document.getElementById('btn-cal-done').addEventListener('click', closeCalibration);
+document.getElementById('c-sl-sens').addEventListener('input', function() {
+  steerCfg.sensitivity = parseFloat(this.value);
+  const t = (+this.value).toFixed(4).replace(/\.?0+$/, '');
+  document.getElementById('c-lbl-sens').textContent = t;
+  document.getElementById('sl-sens').value = this.value;
+  document.getElementById('lbl-sens').textContent = t;
+});
+document.getElementById('c-sl-nonlin').addEventListener('input', function() {
+  steerCfg.nonlin = parseFloat(this.value);
+  const t = (+this.value).toFixed(2).replace(/\.?0+$/, '');
+  document.getElementById('c-lbl-nonlin').textContent = t;
+  document.getElementById('sl-nonlin').value = this.value;
+  document.getElementById('lbl-nonlin').textContent = t;
+});
+document.getElementById('c-sl-recenter').addEventListener('input', function() {
+  steerCfg.recenter = parseFloat(this.value);
+  const t = steerCfg.recenter === 0 ? 'off' : (+this.value).toFixed(2).replace(/\.?0+$/, '');
+  document.getElementById('c-lbl-recenter').textContent = t;
+  document.getElementById('sl-recenter').value = this.value;
+  document.getElementById('lbl-recenter').textContent = t;
+});
+document.getElementById('sl-sens').addEventListener('input', function() {
+  steerCfg.sensitivity = parseFloat(this.value);
+  document.getElementById('lbl-sens').textContent = (+this.value).toFixed(4).replace(/0+$/,'');
+});
+document.getElementById('sl-nonlin').addEventListener('input', function() {
+  steerCfg.nonlin = parseFloat(this.value);
+  document.getElementById('lbl-nonlin').textContent = (+this.value).toFixed(2).replace(/\.?0+$/,'');
+});
+document.getElementById('sl-recenter').addEventListener('input', function() {
+  steerCfg.recenter = parseFloat(this.value);
+  document.getElementById('lbl-recenter').textContent = steerCfg.recenter === 0 ? 'off' : (+this.value).toFixed(2).replace(/\.?0+$/,'');
+});
+document.getElementById('sl-density').addEventListener('input', function() {
+  trafficCfg.density = parseFloat(this.value);
+  document.getElementById('lbl-density').textContent = (+this.value).toFixed(1);
+});
+document.getElementById('ov-pause').addEventListener('click', e => {
+  if (!e.target.closest('button, input[type=range]')) renderer.domElement.requestPointerLock();
+});
+document.getElementById('btn-pause-resume').addEventListener('click', () => {
+  renderer.domElement.requestPointerLock();
+});
+document.getElementById('btn-pause-restart').addEventListener('click', () => {
+  document.getElementById('ov-pause').classList.add('hidden');
+  startGame();
+});
+document.getElementById('btn-pause-newseed').addEventListener('click', () => {
+  document.getElementById('seed-input').value = (Math.random()*999999999|0);
+  document.getElementById('ov-pause').classList.add('hidden');
+  startGame();
+});
+document.getElementById('btn-pause-exit').addEventListener('click', () => {
+  state = 'start';
+  document.getElementById('ov-pause').classList.add('hidden');
+  document.getElementById('ov-start').classList.remove('hidden');
+});
+
+document.getElementById('p-sl-sens').addEventListener('input', function() {
+  steerCfg.sensitivity = parseFloat(this.value);
+  document.getElementById('p-lbl-sens').textContent = (+this.value).toFixed(4).replace(/\.?0+$/, '');
+  document.getElementById('sl-sens').value = this.value;
+  document.getElementById('lbl-sens').textContent = document.getElementById('p-lbl-sens').textContent;
+});
+document.getElementById('p-sl-nonlin').addEventListener('input', function() {
+  steerCfg.nonlin = parseFloat(this.value);
+  document.getElementById('p-lbl-nonlin').textContent = (+this.value).toFixed(2).replace(/\.?0+$/, '');
+  document.getElementById('sl-nonlin').value = this.value;
+  document.getElementById('lbl-nonlin').textContent = document.getElementById('p-lbl-nonlin').textContent;
+});
+document.getElementById('p-sl-recenter').addEventListener('input', function() {
+  steerCfg.recenter = parseFloat(this.value);
+  const txt = steerCfg.recenter === 0 ? 'off' : (+this.value).toFixed(2).replace(/\.?0+$/, '');
+  document.getElementById('p-lbl-recenter').textContent = txt;
+  document.getElementById('sl-recenter').value = this.value;
+  document.getElementById('lbl-recenter').textContent = txt;
+});
+document.getElementById('p-sl-density').addEventListener('input', function() {
+  trafficCfg.density = parseFloat(this.value);
+  const txt = (+this.value).toFixed(1);
+  document.getElementById('p-lbl-density').textContent = txt;
+  document.getElementById('sl-density').value = this.value;
+  document.getElementById('lbl-density').textContent = txt;
+});
+document.getElementById('btn-copy-seed').addEventListener('click',
+  ()=>navigator.clipboard.writeText(String(seed)).catch(()=>{}));
+
+(()=>{ const p=new URLSearchParams(location.search); if (p.has('seed')) document.getElementById('seed-input').value=p.get('seed'); })();
+
+// ═══════════════════════════════════════════════════════
+//  INIT — generate preview scene for start screen
+// ═══════════════════════════════════════════════════════
+function initPreview() {
+  rng = mkRNG(Math.random()*999999999|0);
+  buildPhysWorld();
+  initRoad();
+  buildWorld();
+
+  // Camera looks down along the road start
+  const p = roadPts[Math.min(60, roadPts.length-1)];
+  camera.position.set(p.x + 80, 55, p.y + 60);
+  camera.lookAt(p.x, 0, p.y);
+}
+// Apply the graphics-quality setting (pixel ratio, shadow res, post-processing chain).
+function applyGfxQuality() {
+  if (gfxQuality === 'low') {
+    renderer.setPixelRatio(1);
+    sun.shadow.mapSize.set(1024, 1024);
+  } else {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    sun.shadow.mapSize.set(2048, 2048);
+  }
+  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  setupComposer();
+}
+
+// Boot: load assets (gating the Start button), then build the start-screen preview.
+async function boot() {
+  const startBtn = document.getElementById('btn-start');
+  const origLabel = startBtn.textContent;
+  startBtn.disabled = true;
+  startBtn.textContent = 'LOADING ASSETS…';
+  applyGfxQuality();
+  try { await preloadAssets(); }
+  catch (e) { console.error('[pit-nextgen] asset preload failed:', e); }
+  initPreview();
+  startBtn.disabled = false;
+  startBtn.textContent = assetsReady ? origLabel : origLabel + ' (basic)';
+  requestAnimationFrame(loopEx);
+}
+boot();
+
+</script>
+</body>
+</html>

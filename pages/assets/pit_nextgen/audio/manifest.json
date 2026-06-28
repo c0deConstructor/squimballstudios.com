@@ -1,0 +1,8 @@
+{
+  "_comment": "Optional CC0/your-own sound samples. Leave a value empty to use the built-in synthesized sound. To enable a sample, drop the file in this folder and put its filename here, e.g. \"engine\": \"engine_loop.ogg\". Supported: .ogg .mp3 .wav",
+  "engine": "",
+  "siren": "",
+  "skid": "",
+  "crash1": "",
+  "crash2": ""
+}

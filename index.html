@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/site.webmanifest">
 <title>Squimball Studios</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
@@ -150,6 +154,11 @@
   }
   .kofi-btn:hover { opacity: .85; }
 
+  .qr-img {
+    display: block; width: 150px; height: 150px; margin: 10px auto 4px;
+    border-radius: 4px; background: #fff; padding: 6px;
+  }
+
   .gh-stats { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
   .gh-pill {
     background: var(--hover-bg); border: 1px solid var(--border);
@@ -214,7 +223,8 @@
   <button class="pg-btn" data-tip="PIT Game"            onclick="show(5)">5</button>
   <button class="pg-btn" data-tip="Wildlife Globe"      onclick="show(6)">6</button>
   <button class="pg-btn" data-tip="Orbit Simulator"     onclick="show(7)">7</button>
-  <button class="pg-btn" data-tip="Chroma Match"        onclick="show(8)">8</button>
+  <button class="pg-btn" data-tip="Chroma Match Game"   onclick="show(8)">8</button>
+  <button class="pg-btn" data-tip="PIT: Next-Gen (disregard the temporary ugliness!!! lol)"       onclick="show(9)">&#9733;</button>
   <div class="sep"></div>
   <button class="icon-btn" id="fs-btn" data-tip="Fullscreen" onclick="toggleFullscreen()">
     <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
@@ -304,6 +314,7 @@
   <div class="panel-inner">
     <h2>Bitcoin</h2>
     <p>Send BTC donations directly to this address.  Help me continue to grow and create cool things for all to enjoy!</p>
+    <img class="qr-img" src="images/btc-address.png" alt="Bitcoin donation address QR code">
     <div class="addr-row">
       <code id="btc-addr">1MKmJGv8M4suSFSyJiVrQjFhatP6gfdr1F</code>
       <button class="copy-btn" onclick="copyAddr('btc-addr', this)">COPY</button>
@@ -317,6 +328,7 @@
   <div class="panel-inner">
     <h2>Ethereum</h2>
     <p>Send ETH or any ERC-20 token to this address.  Help me continue to grow and create cool things for all to enjoy!</p>
+    <img class="qr-img" src="images/eth-address.png" alt="Ethereum donation address QR code">
     <div class="addr-row">
       <code id="eth-addr">0xd32b4c53329a45ed2d24E21C830779877F5E6eD1</code>
       <button class="copy-btn" onclick="copyAddr('eth-addr', this)">COPY</button>
@@ -338,7 +350,8 @@
   <iframe class="page-frame"        id="frame-5" data-src="pages/pit_game.html"              src=""          title="PIT Game"></iframe>
   <iframe class="page-frame"        id="frame-6" data-src="pages/wildlife_globe.html"         src=""          title="Wildlife Globe"></iframe>
   <iframe class="page-frame"        id="frame-7" data-src="pages/orbit_simulator.html"        src=""          title="Orbit Simulator"></iframe>
-  <iframe class="page-frame"        id="frame-8" data-src="pages/chroma_match.html"          src=""          title="Chroma Match"></iframe>
+  <iframe class="page-frame"        id="frame-8" data-src="pages/moved_chroma.html"          src=""          title="Chroma Match"></iframe>
+  <iframe class="page-frame"        id="frame-9" data-src="pages/pit_game_nextgen.html"     src=""          title="PIT: Next-Gen"></iframe>
 </main>
 
 <script>
