@@ -268,22 +268,24 @@ const TIER_NAME = POOL_MAX >= 500000 ? 'ULTRA' : POOL_MAX >= 300000 ? 'HIGH' : P
 const CFG_DEFAULTS = {
   /* particles: sparks per firework (per) + total live pool (overall, ring-buffer wrap) */
   density: 1, maxParticles: 10000, maxOverall: Math.min(250000, POOL_MAX),
-  sizeMul: 0.7, brightMul: 2.5, lifeMul: 1,
+  sizeMul: 0.5, brightMul: 2.5, lifeMul: 1,
   /* physics / shape */
   speedMul: 1, gravityMul: 1, dragMul: 1, windMul: 1, calMin: 0, calMax: 1, maxStages: 5,
   /* how strongly a click's pointer motion leans the burst (shell momentum at break) */
   launchSens: 1,
   /* graphics / post */
-  bloom: 0.4, bloomRadius: 0.4, bloomThresh: 0.9, exposure: 1, trailFloor: 0.82,
+  bloom: 0.4, bloomRadius: 0.4, bloomThresh: 0.9, exposure: 1, trailFloor: 0.25,
   hdrCeil: 8, vignette: 0.22, flashMul: 2, pointSize: 1,
   /* smoke + sky */
   smokeDensity: 1, smokeOpacity: 1, starBright: 1.5, skyGlow: 0.15,
+  /* glowing balls / flares (live uniforms) */
+  flareBright: 2, flareSize: 0.75, flareSpikes: 1,
   /* sound */
   volume: 0.85, boomMul: 1.5, crackleMul: 1, hissMul: 1, soundDelay: 1,
   /* sparkler cursor */
   cursorRate: 120, cursorSize: 0.5, cursorTrail: 1, cursorSpread: 15, cursorBright: 2, cursorCenter: 1,
   /* toggles (1/0) */
-  bloomOn: 1, trailsOn: 1, smokeOn: 1, cursorOn: 1,
+  bloomOn: 1, trailsOn: 1, smokeOn: 1, flaresOn: 1, cursorOn: 1,
 };
 const cfg = Object.assign({}, CFG_DEFAULTS);
 
@@ -557,7 +559,73 @@ function generate(seedUint) {
   A.crackleAmt = Math.min(430, A.crackleAmt * rr(.7, 1.2));
   A.hiss = rr(.1, .5) * c;
 
+  /* --- glowing balls / flares (INDEPENDENT rng stream) -----------------------------
+     Decided from a stream forked off the seed (seed ^ const), so this never consumes a
+     draw from the main generator above. Result: every pre-existing seed keeps its exact
+     base look and simply gains flare heads on top. See assignFlares(). */
+  assignFlares(P, mulberry32(seedUint ^ 0x7f4a7c15));
+
   return P;
+}
+
+/* Bright "burning star" heads that ride the leading edge of some spark trails. Not every
+   shell has them; per stage they may be solid / strobing / fast-fading / twinkling, and
+   some carry a faint diffraction-spike (starburst) shape like the eye sees on a bright point. */
+function assignFlares(P, rng) {
+  const H = helpers(rng);
+  const { rr, chance, pickW } = H;
+  const c = P.shell.caliber;
+  P.shell.hasFlares = chance(0.34 + 0.42 * c);      // bigger shells carry flares more often
+  for (const st of P.stages) {
+    st.flare = null;
+
+    /* does THIS stage carry burning-star heads? (some star types much more than others) */
+    let hasFl = false;
+    if (P.shell.hasFlares) {
+      const typeP = { PEONY: .8, CHRYSANTHEMUM: .9, WILLOW: .95, KAMURO: 1, PALM: .95, RING: .7,
+        CROSSETTE: .55, HORSETAIL: .8, PISTIL: .5, STROBE: .7, GLITTER: .7, CRACKLE: .12 }[st.type] || .5;
+      hasFl = chance(typeP * 0.9);
+    }
+
+    /* --- spark-trail brightness variety -----------------------------------------------
+       Drawn from THIS independent stream (never touches the main generator), applied later
+       as a pure per-stage multiplier on the spark brightness -> the geometry every saved
+       seed renders is byte-identical, only the trail's luminance changes. A flare-bearing
+       stage may run "balls-dominant": its streak drops to barely-there so the shell reads as
+       a cloud of glowing balls (like one stage of the reference 2-stage mortar). Flareless
+       stages always keep a clearly readable streak so nothing ever vanishes. */
+    let flareDom = false, trailBright;
+    if (hasFl) {
+      flareDom = chance(0.4);
+      trailBright = flareDom ? rr(0.05, 0.28) : rr(0.55, 1.5);
+    } else {
+      trailBright = rr(0.8, 1.4);
+    }
+    st.trailBright = trailBright;
+
+    if (!hasFl) continue;
+
+    /* behaviour: solid / gradual fade / instant pop-and-fade / strobe / pulsate */
+    const mode = st.type === 'STROBE' ? 'strobe'
+      : pickW([['solid', 1.8], ['fade', 1.6], ['fadefast', 1.3], ['strobe', 1.1], ['twinkle', 1.4]]);
+    /* diffraction spikes read best on the hot metallic heads */
+    const spikeLikely = (st.type === 'KAMURO' || st.type === 'WILLOW' || st.type === 'CHRYSANTHEMUM' || st.type === 'PALM');
+    st.flare = {
+      frac: (flareDom ? rr(.5, .95) : rr(.12, .5)) * (st.filled ? .6 : 1),  // share of parents that get a head
+      bright: rr(1.4, 3.2) * (mode === 'fadefast' ? 1.3 : mode === 'strobe' ? 1.2 : 1) * (flareDom ? 1.15 : 1),
+      size: rr(1.3, 2.7) * (flareDom ? 1.12 : 1),    // small bright heads (white core + colored glow)
+      white: rr(0.7, 1.25),                          // how hard the center blows to white
+      haloScale: rr(0.22, 0.5),                      // strength of the colored outer glow
+      mode,
+      freq: mode === 'strobe' ? rr(2.5, 8) : rr(2.5, 10),
+      fadeHold: rr(.04, .22), fadeTau: rr(.1, .45),  // fadefast: bright hold, then snap dim
+      spike: chance(spikeLikely ? .8 : .35) ? 1 : 0,
+      spikeStrength: rr(.3, .9),
+      spikeArms: chance(.4) ? 3 : 2,                 // 2 -> 4-point starburst, 3 -> 6-point
+      warm: rr(0, 1),                                // glow tint: pure stage hue .. warm gold
+      life: rr(.72, 1.12),                           // relative to the stage life
+    };
+  }
 }
 
 function countParams(o) {
@@ -770,6 +838,101 @@ const sparkMat = new THREE.ShaderMaterial({
 const sparks = new THREE.Points(sparkGeo, sparkMat);
 sparks.frustumCulled = false;
 fxScene.add(sparks);
+
+/* ---------- flare pool (glowing balls / burning-star heads) ----------
+   Same analytic drag+gravity motion as sparks, but bigger + brighter + few, with a
+   diffraction-spike ("starburst") fragment shape on some. A separate pool so it can own
+   its own draw range, shader and HDR budget. Rendered in `scene` (NOT fxScene) so it draws
+   fresh every frame and leaves NO comet tail of its own -- the sparks carry the trail; each
+   flare just rides the leading edge. Still passes through bloom via the composite.
+   HDR hierarchy (per the VFX contract): flare head > ordinary spark > surfaces. */
+const FLARE_MAX = IS_MOBILE ? 3000 : 16000;
+const flareArrays = {
+  pos: new Float32Array(FLARE_MAX * 3), vel: new Float32Array(FLARE_MAX * 3),
+  d0: new Float32Array(FLARE_MAX * 4), col: new Float32Array(FLARE_MAX * 3),
+  d1: new Float32Array(FLARE_MAX * 4), d2: new Float32Array(FLARE_MAX * 4),
+  d3: new Float32Array(FLARE_MAX * 2), wind: new Float32Array(FLARE_MAX * 2),
+};
+const flareGeo = new THREE.BufferGeometry();
+flareGeo.setAttribute('position', new THREE.BufferAttribute(flareArrays.pos, 3).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setAttribute('aVel', new THREE.BufferAttribute(flareArrays.vel, 3).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setAttribute('aData0', new THREE.BufferAttribute(flareArrays.d0, 4).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setAttribute('aCol', new THREE.BufferAttribute(flareArrays.col, 3).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setAttribute('aData1', new THREE.BufferAttribute(flareArrays.d1, 4).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setAttribute('aData2', new THREE.BufferAttribute(flareArrays.d2, 4).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setAttribute('aData3', new THREE.BufferAttribute(flareArrays.d3, 2).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setAttribute('aWind', new THREE.BufferAttribute(flareArrays.wind, 2).setUsage(THREE.DynamicDrawUsage));
+flareGeo.setDrawRange(0, 0);
+
+const flareUni = {
+  uTime: { value: -1 }, uGravity: { value: 9.8 },
+  uPointScale: { value: 600 }, uMaxPoint: { value: 240 },
+  uBright: { value: 1 }, uSpike: { value: 1 },
+};
+const flareMat = new THREE.ShaderMaterial({
+  blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false,
+  uniforms: flareUni,
+  vertexShader: [
+    'attribute vec3 aVel;',
+    'attribute vec4 aData0;', // birth, life, dragK, size
+    'attribute vec3 aCol;',   // halo hue (chroma); the white-hot center is synthesised in-shader
+    'attribute vec4 aData1;', // bright, mode(0solid/1strobe/2fadefast/3twinkle/4fade), freq, gravMul
+    'attribute vec4 aData2;', // fadeHold, fadeTau, spikeStrength, spikeArms
+    'attribute vec2 aData3;', // whiteAmt (center blow-out), haloScale (colored glow strength)
+    'attribute vec2 aWind;',
+    'uniform float uTime; uniform float uGravity; uniform float uPointScale; uniform float uMaxPoint;',
+    'uniform float uBright; uniform float uSpike;',
+    'varying vec3 vColor; varying float vSpike; varying float vArms; varying float vWhite; varying float vHalo;',
+    'void main(){',
+    '  float birth=aData0.x, life=max(aData0.y,0.001), k=max(aData0.z,0.0001);',
+    '  float t=uTime-birth;',
+    '  if(t<0.0||t>life){ gl_Position=vec4(0.0,0.0,-2.0,1.0); gl_PointSize=0.0; vColor=vec3(0.0); vSpike=0.0; vWhite=0.0; return; }',
+    '  float u=t/life;',
+    '  vec3 vT=vec3(aWind.x, -uGravity*aData1.w/k, aWind.y);',
+    '  float e=exp(-k*t);',
+    '  vec3 p=position + vT*t + (aVel-vT)*(1.0-e)/k;',
+    '  vec4 mv=modelViewMatrix*vec4(p,1.0);',
+    '  gl_Position=projectionMatrix*mv;',
+    '  float ig=smoothstep(0.0,0.03,u);',           // normalized-lifetime envelopes (no scattered constants)
+    '  float mode=aData1.y, freq=aData1.z, env;',
+    '  if(mode<0.5){ env=pow(max(1.0-u,0.0),0.9); }',                                   // solid: steady, gentle fade
+    '  else if(mode<1.5){ env=step(0.5,fract(t*freq))*(0.14+0.86*pow(max(1.0-u,0.0),0.6)); }', // strobe: hard on/off
+    '  else if(mode<2.5){ float hold=aData2.x, tau=max(aData2.y,0.02);',                // fadefast: bright pop then snap-dim
+    '    env=(t<hold?1.0:exp(-(t-hold)/tau))*pow(max(1.0-u,0.0),0.25); }',
+    '  else if(mode<3.5){ env=(0.34+0.66*(0.5+0.5*sin(t*freq*6.28318)))*pow(max(1.0-u,0.0),0.7); }', // twinkle/pulsate
+    '  else { env=exp(-u*2.3)*(1.0-u); }',                                              // fade: smooth decay over the life
+    '  float amp=aData1.x*env*ig*uBright;',
+    '  vColor=aCol*amp;',                            // colored glow energy
+    '  vWhite=amp*aData3.x;',                        // white-hot center magnitude
+    '  vHalo=aData3.y;',
+    '  vSpike=aData2.z*uSpike*(0.35+0.65*env);',     // spikes track head brightness
+    '  vArms=aData2.w;',
+    '  float sz=aData0.w*mix(1.0,0.45,u);',
+    '  float px=sz*uPointScale/max(-mv.z,1.0);',
+    '  if(px<1.0){ vColor*=px*px; vWhite*=px*px; px=1.0; }', // sub-pixel energy conservation
+    '  gl_PointSize=min(px,uMaxPoint);',
+    '}'].join('\n'),
+  fragmentShader: [
+    'varying vec3 vColor; varying float vSpike; varying float vArms; varying float vWhite; varying float vHalo;',
+    'void main(){',
+    '  vec2 q=gl_PointCoord*2.0-1.0; float r2=dot(q,q);',
+    '  if(r2>1.0) discard;',
+    '  float r=sqrt(r2);',
+    '  float coreHot=exp(-r2*24.0);',                               // small, tight white-hot center
+    '  float glow=0.30*smoothstep(1.0,0.05,r2)+0.70*exp(-r2*4.5);', // soft colored outer glow
+    '  float sp=exp(-q.y*q.y*90.0)+exp(-q.x*q.x*90.0);',            // 4-point starburst
+    '  if(vArms>2.5){ float s=0.70710678; float d1=(q.x+q.y)*s, d2=(q.x-q.y)*s;',
+    '    sp+=exp(-d1*d1*90.0)+exp(-d2*d2*90.0); }',                 // + diagonals -> 6-point
+    '  sp*=(1.0-smoothstep(0.0,1.0,r));',                           // short, eye-like spikes
+    '  vec3 core=vec3(vWhite)*coreHot;',                            // white center (color-independent)
+    '  vec3 halo=vColor*(glow*vHalo + sp*vSpike*0.5);',             // flare-hued glow + spikes
+    '  gl_FragColor=vec4(core+halo,1.0);',
+    '}'].join('\n'),
+});
+const flares = new THREE.Points(flareGeo, flareMat);
+flares.frustumCulled = false;
+flares.renderOrder = 10;   // draw last -> additive heads sit on top of the (normal-blended) smoke
+scene.add(flares);   // in `scene`, not fxScene: rendered fresh each frame -> the flare has no trail of its own
 
 /* ---------- smoke pool ---------- */
 const smokeArrays = {
@@ -1059,7 +1222,8 @@ const state = {
   sparkCursor: 0, sparkHigh: 0, sparkWrapped: false,
   smokeCursor: 0, smokeHigh: 0, smokeWrapped: false,
   sparkCount: 0, smokeCount: 0, lastDetonate: 0, paramCount: 0,
-  bloomOn: true, trailsOn: true, smokeOn: true, debugOn: false,
+  flareCursor: 0, flareHigh: 0, flareWrapped: false, flareCount: 0,
+  bloomOn: true, trailsOn: true, smokeOn: true, flaresOn: true, debugOn: false,
   baseExposure: 1, basePS: 600,
   autoPlay: false, autoNext: 0, autoStart: 0, autoQueue: [],
 };
@@ -1101,7 +1265,7 @@ function analyticVel(out, v0, k, gMul, t, S) {
   return out;
 }
 
-function buildBuffers(P, rng, t0) {
+function buildBuffers(P, rng, t0, flareRng) {
   const H = helpers(rng);
   const { rr, ri, chance, sphere } = H;
   const S = P.shell;
@@ -1109,7 +1273,7 @@ function buildBuffers(P, rng, t0) {
   const A = sparkArrays;
   /* two caps: cap = live pool wrap (overall ceiling), perCap = this firework's ceiling (per) */
   const cap = Math.min(POOL_MAX, Math.max(2000, cfg.maxOverall | 0 || POOL_MAX));
-  const perCap = Math.min(cap, Math.max(500, cfg.maxParticles | 0 || cap));
+  const perCap = Math.min(cap, Math.max(100, cfg.maxParticles | 0 || cap));
   if (state.sparkCursor >= cap) { state.sparkCursor = 0; state.sparkWrapped = true; } // pool shrank
   const start = state.sparkCursor;      // ring buffer: new shots overwrite the oldest slots
   const gRatio = S.gravity / 9.8;       // shot gravity baked per particle (uGravity stays 9.8)
@@ -1221,7 +1385,8 @@ function buildBuffers(P, rng, t0) {
       else { br2 = cr * .35; bg2 = cg * .35; bb2 = cb * .35; }
 
       const twinkle = st.strobe ? -st.strobeFreq : (H.r() < st.twinkleFrac ? st.twinkleFreq * rr(.6, 1.4) : 0);
-      const bright = st.brightness * bScale * rr(.6, 1.45);
+      /* trailBright (independent flare stream) scales luminance only -- draw order unchanged */
+      const bright = st.brightness * bScale * rr(.6, 1.45) * (st.trailBright || 1);
 
       if (!push(px, py, pz, vx, vy, vz, birth, life, k, size, ar, ag, ab, br2, bg2, bb2,
         twinkle, H.r(), bright, st.flutter * rr(.5, 1.5), st.fadePow, st.sizeDecay, st.mixPow, st.gravMul)) break;
@@ -1263,7 +1428,7 @@ function buildBuffers(P, rng, t0) {
             vTmp[0] * .8 + H.gauss() * 3, vTmp[1] * .8 + H.gauss() * 3, vTmp[2] * .8 + H.gauss() * 3,
             birth + tc, rr(.04, .17), rr(.8, 1.4), size * rr(.5, .9),
             1, .92, .75, .5, .2, .05,
-            0, H.r(), st.brightness * bScale * rr(1.8, 3.2), rr(.3, 1),
+            0, H.r(), st.brightness * bScale * rr(1.8, 3.2) * (st.trailBright || 1), rr(.3, 1),
             rr(.4, .8), .5, 1, st.gravMul);
         }
       }
@@ -1308,6 +1473,75 @@ function buildBuffers(P, rng, t0) {
   smokeGeo.setDrawRange(0, state.smokeOn ? state.smokeHigh : 0);
   touchSpan(smokeGeo, ['position', 'aVel', 'aData0', 'aData1', 'aData2', 'aWind', 'aAlbedo'],
     sStart, Math.min(sw, MAXSMOKE), MAXSMOKE);
+
+  /* ---- flares: bright burning-star heads on some stages (INDEPENDENT flare stream,
+         run AFTER the spark/smoke passes so it can never shift their draw order). They
+         reuse the same burst-front motion so a head rides the leading edge of its trail. */
+  if (flareRng && S.hasFlares) {
+    const FH = helpers(flareRng);
+    const FA = flareArrays;
+    const fStart = state.flareCursor;
+    let fw = 0;
+    const fdir = [0, 0, 0];
+    for (const st of P.stages) {
+      const fl = st.flare;
+      if (!fl) continue;
+      const parentsApprox = Math.max(6, Math.round(budget * st.countFrac));
+      let nf = Math.max(3, Math.min(500, Math.round(parentsApprox * fl.frac * 0.12)));
+      const ox = S.origin[0] + st.originOff[0], oy = S.origin[1] + st.originOff[1], oz = S.origin[2] + st.originOff[2];
+      const v0base = S.burstSpeed * st.speedMul;
+      const bc = st.col.rgb, warm = fl.warm;
+      /* HALO hue = the stage's own colour at full value (so even a deep colour glows brightly);
+         warm/"burning-metal" heads lean toward gold. The white-hot CENTER is added in the shader. */
+      const mx = Math.max(bc[0], bc[1], bc[2], 0.001), gw = warm * 0.7, gwi = 1 - gw;
+      const cr = Math.min(1.0, (bc[0] / mx) * gwi + 1.00 * gw);
+      const cg = Math.min(1.0, (bc[1] / mx) * gwi + 0.72 * gw);
+      const cb = Math.min(1.0, (bc[2] / mx) * gwi + 0.34 * gw);
+      const modeCode = fl.mode === 'solid' ? 0 : fl.mode === 'strobe' ? 1
+        : fl.mode === 'fadefast' ? 2 : fl.mode === 'twinkle' ? 3 : 4;   // 4 = fade
+      const fsizeBase = (0.45 + 1.8 * S.caliber) * fl.size;   // small heads; caliber-scaled, independent of spark-size slider
+      for (let p = 0; p < nf; p++) {
+        FH.sphere(fdir);
+        let spd = v0base * (1 + S.speedJitter * FH.gauss());
+        if (st.filled) spd *= Math.cbrt(Math.max(.02, FH.r()));
+        spd *= 1 + S.asymmetry * (fdir[0] * S.asymAxis[0] + fdir[1] * S.asymAxis[1] + fdir[2] * S.asymAxis[2]);
+        let vx = fdir[0] * spd, vy = fdir[1] * spd * (1 + S.oblate), vz = fdir[2] * spd;
+        if (S.swirl > .01) {
+          vx += (S.swirlAxis[1] * fdir[2] - S.swirlAxis[2] * fdir[1]) * S.swirl;
+          vy += (S.swirlAxis[2] * fdir[0] - S.swirlAxis[0] * fdir[2]) * S.swirl;
+          vz += (S.swirlAxis[0] * fdir[1] - S.swirlAxis[1] * fdir[0]) * S.swirl;
+        }
+        vy += S.upDrift;
+        vx += LV[0]; vy += LV[1]; vz += LV[2];
+        const rp = Math.cbrt(FH.r()) * S.breakRadius;
+        const birth = st.delay + FH.r() * st.birthSpread;
+        const life = st.life * fl.life * (1 + st.lifeSpread * FH.gauss() * .5);
+        const k = Math.max(.05, st.drag * (1 + st.dragSpread * FH.gauss()));
+        const size = fsizeBase * (0.8 + 0.5 * FH.r());
+        const bright = fl.bright * 5.5 * (0.7 + 0.5 * FH.r());   // flare head > spark (HDR hierarchy)
+        const slot = (fStart + fw) % FLARE_MAX;
+        const i3 = slot * 3, i4 = slot * 4, i2 = slot * 2;
+        FA.pos[i3] = ox + fdir[0] * rp; FA.pos[i3 + 1] = oy + fdir[1] * rp; FA.pos[i3 + 2] = oz + fdir[2] * rp;
+        FA.vel[i3] = vx; FA.vel[i3 + 1] = vy; FA.vel[i3 + 2] = vz;
+        FA.d0[i4] = t0 + birth; FA.d0[i4 + 1] = life; FA.d0[i4 + 2] = k; FA.d0[i4 + 3] = size;
+        FA.col[i3] = cr; FA.col[i3 + 1] = cg; FA.col[i3 + 2] = cb;
+        FA.d1[i4] = bright; FA.d1[i4 + 1] = modeCode; FA.d1[i4 + 2] = fl.freq; FA.d1[i4 + 3] = st.gravMul * gRatio;
+        FA.d2[i4] = fl.fadeHold; FA.d2[i4 + 1] = fl.fadeTau; FA.d2[i4 + 2] = fl.spike ? fl.spikeStrength : 0; FA.d2[i4 + 3] = fl.spikeArms;
+        FA.d3[i2] = fl.white; FA.d3[i2 + 1] = fl.haloScale;
+        FA.wind[i2] = S.wind[0]; FA.wind[i2 + 1] = S.wind[1];
+        fw++;
+        if (fw >= FLARE_MAX) break;
+      }
+      if (fw >= FLARE_MAX) break;
+    }
+    state.flareCount = fw;
+    if (!state.flareWrapped && fStart + fw >= FLARE_MAX) state.flareWrapped = true;
+    state.flareCursor = (fStart + fw) % FLARE_MAX;
+    state.flareHigh = state.flareWrapped ? FLARE_MAX : fStart + fw;
+    flareGeo.setDrawRange(0, state.flaresOn ? state.flareHigh : 0);
+    touchSpan(flareGeo, ['position', 'aVel', 'aData0', 'aCol', 'aData1', 'aData2', 'aData3', 'aWind'],
+      fStart, Math.min(fw, FLARE_MAX), FLARE_MAX);
+  }
   return relEnd;
 }
 
@@ -1323,7 +1557,13 @@ function ensureAudio() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
     masterGain.gain.value = muted ? 0 : cfg.volume;
-    masterGain.connect(audioCtx.destination);
+    /* soft brickwall limiter so many overlapping shots can sum without clipping
+       (barely touches a single shot; only bites when bursts pile up) */
+    const limiter = audioCtx.createDynamicsCompressor();
+    limiter.threshold.value = -3; limiter.knee.value = 6;
+    limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.25;
+    masterGain.connect(limiter);
+    limiter.connect(audioCtx.destination);
     return true;
   } catch (e) { return false; }
 }
@@ -1397,11 +1637,24 @@ function synthAndPlay(P, seedUint, relEnd) {
 
   const src = audioCtx.createBufferSource();
   src.buffer = buf;
-  src.connect(masterGain);
+  const sg = audioCtx.createGain();           // per-source gain so we can fade a reclaimed shot out
+  src.connect(sg); sg.connect(masterGain);
   src.start();
-  liveSources.push(src);
-  src.onended = () => { liveSources = liveSources.filter(x => x !== src); };
-  if (liveSources.length > 4) { try { liveSources.shift().stop(); } catch (e) { } }
+  const entry = { src, sg };
+  liveSources.push(entry);
+  src.onended = () => { liveSources = liveSources.filter(x => x !== entry); };
+  /* allow many overlapping shots (finales); the limiter keeps the sum clean. Only when we
+     truly run out of slots do we reclaim the oldest -- with a short fade so there is no
+     abrupt "stop/start" silence like the old hard cap of 4 caused. */
+  if (liveSources.length > 18) {
+    const o = liveSources.shift();
+    try {
+      const now = audioCtx.currentTime;
+      o.sg.gain.setValueAtTime(o.sg.gain.value, now);
+      o.sg.gain.linearRampToValueAtTime(0, now + 0.12);
+      o.src.stop(now + 0.13);
+    } catch (e) { }
+  }
 }
 
 /* =====================================================================
@@ -1478,7 +1731,8 @@ function detonate(seedText, opts) {
   P.shell.launchVel = (opts && opts.launchVel) ? opts.launchVel : [0, 0, 0]; // pointer-flick momentum (click only)
   const t0 = state.simT;                // fires alongside whatever is already in the sky
   const bufRng = mulberry32(seedUint ^ 0x1b873593);
-  const relEnd = buildBuffers(P, bufRng, t0);
+  const flareRng = mulberry32(seedUint ^ 0x2b1e5a3f);   // independent stream: flares never perturb spark/smoke draws
+  const relEnd = buildBuffers(P, bufRng, t0, flareRng);
   state.shots.push({ t0, P, end: t0 + relEnd });
   if (state.shots.length > 8) state.shots.shift();
 
@@ -1564,7 +1818,7 @@ function renderDebug() {
   const P = state.P;
   let t = '<b>FIREWORK DEBUG</b>  [D] close\n';
   t += 'seed: ' + esc(state.seedText) + '\ntier: ' + TIER_NAME + '  pool ' + POOL_MAX.toLocaleString() + '\n';
-  t += 'sparks: ' + state.sparkCount.toLocaleString() + '  smoke: ' + state.smokeCount + '\n';
+  t += 'sparks: ' + state.sparkCount.toLocaleString() + '  smoke: ' + state.smokeCount + '  flares: ' + state.flareCount + (state.P && state.P.shell.hasFlares ? '' : ' (none)') + '\n';
   t += 'active shots: ' + state.shots.length + '  pool used: ' + state.sparkHigh.toLocaleString() + '/' + (cfg.maxOverall | 0).toLocaleString() + '\n';
   t += 'hidden params: ' + state.paramCount + '\n';
   t += 'fps: ' + fpsEMA.toFixed(0) + '  pixelRatio: ' + renderer.getPixelRatio().toFixed(2) + '\n';
@@ -1611,8 +1865,10 @@ function resize() {
   sparkUni.uPointScale.value = ps * cfg.pointSize;
   smokeUni.uPointScale.value = ps;
   cursorMat.uniforms.uPointScale.value = ps;
+  flareUni.uPointScale.value = ps * cfg.flareSize;
   sparkUni.uMaxPoint.value = Math.min(90 * targetPR, 160);
   cursorMat.uniforms.uMaxPoint.value = Math.min(120 * targetPR, 200);
+  flareUni.uMaxPoint.value = Math.min(180 * targetPR, 300);
   scene.userData.starMat.uniforms.uPr.value = targetPR;
 }
 window.addEventListener('resize', resize);
@@ -1663,6 +1919,7 @@ function frame() {
   const t = state.simT;
   sparkUni.uTime.value = t;
   smokeUni.uTime.value = t;
+  flareUni.uTime.value = t;
   for (const m of flashPool) m.material.uniforms.uTime.value = t;
   for (const m of shockPool) m.material.uniforms.uTime.value = t;
   scene.userData.starMat.uniforms.uT.value = wall;
@@ -1672,6 +1929,9 @@ function frame() {
   /* live settings applied every frame (cheap, no re-detonate needed) */
   renderer.toneMappingExposure = state.baseExposure * cfg.exposure;
   sparkUni.uPointScale.value = state.basePS * cfg.pointSize;
+  flareUni.uPointScale.value = state.basePS * cfg.flareSize;
+  flareUni.uBright.value = cfg.flareBright;
+  flareUni.uSpike.value = cfg.flareSpikes;
   compositePass.material.uniforms.uTrailsOn.value = state.trailsOn ? 1 : 0;
   emitCursor(dt, wall);
   if (state.autoPlay) autoTick(wall);
@@ -1851,8 +2111,8 @@ autoBtn.addEventListener('click', () => {
 const PANEL_SECTIONS = [
   ['Particles', [
     ['density', 'Particle Density', 0.1, 2, 0.05, 'x'],
-    ['maxParticles', 'Max Particles (per)', 5000, 100000, 5000, ''],
-    ['maxOverall', 'Max Particles (overall)', 100000, POOL_MAX, 10000, ''],
+    ['maxParticles', 'Max Particles (per)', 100, 100000, 100, ''],
+    ['maxOverall', 'Max Particles (overall)', 10000, POOL_MAX, 10000, ''],
     ['sizeMul', 'Spark Size', 0.3, 3, 0.05, 'x'],
     ['brightMul', 'Spark Brightness', 0.3, 3, 0.05, 'x'],
     ['lifeMul', 'Spark Lifetime', 0.4, 2.5, 0.05, 'x'],
@@ -1884,6 +2144,11 @@ const PANEL_SECTIONS = [
     ['starBright', 'Star Brightness', 0, 2.5, 0.05, 'x'],
     ['skyGlow', 'Sky Glow', 0, 3, 0.05, 'x'],
   ]],
+  ['Glowing Flares', [
+    ['flareBright', 'Flare Glow', 0, 3, 0.05, 'x'],
+    ['flareSize', 'Flare Size', 0.3, 3, 0.05, 'x'],
+    ['flareSpikes', 'Spike Intensity', 0, 2, 0.05, 'x'],
+  ]],
   ['Sound', [
     ['volume', 'Master Volume', 0, 1, 0.02, ''],
     ['boomMul', 'Boom', 0, 2.5, 0.05, 'x'],
@@ -1901,7 +2166,7 @@ const PANEL_SECTIONS = [
 ];
 const PANEL_TOGGLES = [
   ['bloomOn', 'Bloom'], ['trailsOn', 'Trails'], ['smokeOn', 'Smoke'],
-  ['cursorOn', 'Sparkler Cursor'], ['soundDelay', 'Realistic Sound Delay'],
+  ['flaresOn', 'Glowing Flares'], ['cursorOn', 'Sparkler Cursor'], ['soundDelay', 'Realistic Sound Delay'],
 ];
 const ALLSLIDERS = {};
 PANEL_SECTIONS.forEach(([, items]) => items.forEach(it => { ALLSLIDERS[it[0]] = it; }));
@@ -1989,6 +2254,7 @@ function setToggle(key, val) {
   if (key === 'bloomOn') { state.bloomOn = !!val; applyBloom(); }
   else if (key === 'trailsOn') { state.trailsOn = !!val; }
   else if (key === 'smokeOn') { state.smokeOn = !!val; smokeGeo.setDrawRange(0, state.smokeOn ? state.smokeHigh : 0); }
+  else if (key === 'flaresOn') { state.flaresOn = !!val; flareGeo.setDrawRange(0, state.flaresOn ? state.flareHigh : 0); }
   else if (key === 'cursorOn') { document.body.classList.toggle('no-cursor', !!val); if (!val) cursorPts.visible = false; }
   const ck = document.getElementById('ck-' + key); if (ck) ck.checked = !!val;
 }
@@ -2004,6 +2270,8 @@ function applyAll() {
   state.trailsOn = !!cfg.trailsOn;
   state.smokeOn = !!cfg.smokeOn;
   smokeGeo.setDrawRange(0, state.smokeOn ? state.smokeHigh : 0);
+  state.flaresOn = !!cfg.flaresOn;
+  flareGeo.setDrawRange(0, state.flaresOn ? state.flareHigh : 0);
   document.body.classList.toggle('no-cursor', !!cfg.cursorOn);
 }
 function applyDefaults() {
@@ -2057,6 +2325,7 @@ setTimeout(() => { if (!state.P) detonate(makeRandomSeed(), { audio: false }); }
 /* hidden debug handle: sim time is analytic, so jumping state.simT is exact */
 window.__fw = {
   state, detonate, cfg,
+  fx: { sparks, flares, smoke },   // debug: toggle .visible to isolate a layer
   cursor: { get high() { return cursorHigh; }, get active() { return pointer.active; }, get visible() { return cursorPts.visible; } },
 };
 
