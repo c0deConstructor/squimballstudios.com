@@ -104,6 +104,14 @@ body.panel-open #topbtns{right:312px}
   letter-spacing:.02em}
 #debug.show{display:block}
 #debug b{color:var(--accent);font-weight:700}
+/* editable debug leaves: drag numerics left/right, click booleans, middle-click resets */
+.dbgn,.dbgb{color:#b6c0ff;user-select:none;border-bottom:1px dotted #3a3a55;
+  touch-action:none;transition:color .12s}
+.dbgn{cursor:ew-resize}
+.dbgb{cursor:pointer}
+.dbgn:hover,.dbgb:hover{color:#fff;border-bottom-color:var(--accent)}
+.dbgn.ovr,.dbgb.ovr{color:var(--accent);border-bottom-color:var(--accent)}
+.dbgn.dragging{color:var(--accent);border-bottom-style:solid}
 
 /* ---- cinema (fullscreen) mode: hide all UI, keep the scene at full brightness ---- */
 #dim{display:none}
@@ -200,7 +208,7 @@ body.no-cursor #gl{cursor:none}
     <div class="empty" id="histempty">detonate to begin</div>
   </div>
   <div id="seedrow">
-    <input id="seedbox" type="text" inputmode="numeric" maxlength="24" autocomplete="off"
+    <input id="seedbox" type="text" inputmode="numeric" maxlength="240" autocomplete="off"
       spellcheck="false" placeholder="SEED (OPTIONAL)">
     <button id="seedclear" type="button" title="clear seed" aria-label="clear seed">&times;</button>
   </div>
@@ -1225,6 +1233,8 @@ const state = {
   flareCursor: 0, flareHigh: 0, flareWrapped: false, flareCount: 0,
   bloomOn: true, trailsOn: true, smokeOn: true, flaresOn: true, debugOn: false,
   baseExposure: 1, basePS: 600,
+  overrides: {}, baseSeedText: null, genValues: {}, // debug-panel drag edits carried on the seed
+
   autoPlay: false, autoNext: 0, autoStart: 0, autoQueue: [],
 };
 
@@ -1714,6 +1724,74 @@ function caption(P) {
   captionTimer = setTimeout(() => capEl.classList.remove('show'), 4200);
 }
 
+/* ---------- seed override suffix (debug-panel drag edits) ----------
+   Seed text may carry edits as `<base> # path=val; path=val`. The base seed still
+   generates P; the overrides are re-applied on top so the string round-trips. */
+function parseSeed(seedText) {
+  const s = String(seedText == null ? '' : seedText);
+  const h = s.indexOf('#');
+  if (h < 0) return { base: s.trim(), overrides: {} };
+  const overrides = {};
+  for (const chunk of s.slice(h + 1).split(';')) {
+    const eq = chunk.indexOf('=');
+    if (eq < 0) continue;
+    const key = chunk.slice(0, eq).trim();
+    const val = parseFloat(chunk.slice(eq + 1));
+    if (key && isFinite(val)) overrides[key] = val;
+  }
+  return { base: s.slice(0, h).trim(), overrides };
+}
+function composeSeed(baseText, overrides) {
+  const keys = Object.keys(overrides || {});
+  if (!keys.length) return baseText;
+  return baseText + ' # ' + keys.map(k => k + '=' + (+overrides[k])).join('; ');
+}
+/* resolve the first path segment to its P sub-object (matches the debug groups) */
+function rootOf(P, seg) {
+  if (seg === 'shell') return P.shell;
+  if (seg === 'smoke') return P.smoke;
+  if (seg === 'audio') return P.audio;
+  if (seg === 'post') return P.post;
+  const m = /^s(\d+)$/.exec(seg);
+  if (m) return P.stages[+m[1] - 1];
+  return undefined;
+}
+function pathSet(P, path, val) {
+  const parts = path.split('.');
+  let o = rootOf(P, parts[0]);
+  for (let i = 1; i < parts.length - 1 && o != null; i++) o = o[parts[i]];
+  if (o == null) return false;
+  const last = parts[parts.length - 1];
+  if (typeof o[last] === 'number') { o[last] = val; return true; }
+  if (typeof o[last] === 'boolean') { o[last] = !!val; return true; } // booleans serialize as 1/0
+  return false;
+}
+function applyOverrides(P, overrides) {
+  for (const path in overrides) pathSet(P, path, overrides[path]);
+}
+/* snapshot every numeric leaf of the freshly generated P (pre-override), so a drag
+   back to the original value can drop its override key instead of pinning it. */
+function snapshotValues(P) {
+  const out = {};
+  const walk = (obj, prefix) => {
+    for (const k in obj) {
+      const v = obj[k];
+      if (v == null) continue;
+      const path = prefix + '.' + k;
+      if (typeof v === 'number' || typeof v === 'boolean') out[path] = v;
+      else if (Array.isArray(v)) v.forEach((x, i) => { if (typeof x === 'number') out[path + '.' + i] = x; });
+      else if (typeof v === 'object') for (const q in v) {
+        const vv = v[q], p2 = path + '.' + q;
+        if (typeof vv === 'number' || typeof vv === 'boolean') out[p2] = vv;
+        else if (Array.isArray(vv)) vv.forEach((x, i) => { if (typeof x === 'number') out[p2 + '.' + i] = x; });
+      }
+    }
+  };
+  walk(P.shell, 'shell'); walk(P.smoke, 'smoke'); walk(P.audio, 'audio'); walk(P.post, 'post');
+  P.stages.forEach((s, i) => walk(s, 's' + (i + 1)));
+  return out;
+}
+
 function detonate(seedText, opts) {
   const now = performance.now();
   if (now - state.lastDetonate < 180) return;
@@ -1721,10 +1799,15 @@ function detonate(seedText, opts) {
   const addToHist = !opts || opts.addHistory !== false;
   const withAudio = !opts || opts.audio !== false;
 
-  const seedUint = seedToUint(seedText);
+  const parsed = parseSeed(seedText);
+  const seedUint = seedToUint(parsed.base);
   const P = generate(seedUint);
+  state.genValues = snapshotValues(P);   // pristine values for override drop-to-base
+  applyOverrides(P, parsed.overrides);   // re-apply debug-panel drag edits on top
   state.P = P;
   state.seedText = seedText;
+  state.baseSeedText = parsed.base;
+  state.overrides = parsed.overrides;
   /* location override: click detonates at the cursor, button/space at a random visible spot */
   if (opts && opts.at) { const w = screenToWorld(opts.at.x, opts.at.y, new THREE.Vector3()); P.shell.origin = [w.x, w.y, w.z]; }
   else if (opts && opts.randomLoc) { P.shell.origin = randomOrigin(); }
@@ -1801,13 +1884,52 @@ function fmt(v) {
   if (Array.isArray(v)) return v.map(x => typeof x === 'number' ? +x.toFixed(2) : x).join(', ');
   return v;
 }
-function dumpGroup(title, obj) {
-  let out = '<b>' + title + '</b>\n';
+/* numeric leaves that must never go negative when dragged (rgb clamps to [0,1];
+   axis/wind components stay signed; a small explicit set below is signed too). */
+const SIGNED_LEAF = new Set(['oblate', 'upDrift']);
+function isDraggablePath(path) {
+  if (/(^|\.)origin(\.|$)/.test(path)) return false;    // reassigned per shot (location)
+  if (/(^|\.)launchVel(\.|$)/.test(path)) return false; // pointer-flick momentum, per shot
+  if (/col2?\.[hsl]$/.test(path)) return false;         // shader reads col.rgb, not h/s/l
+  return true;
+}
+function clampOverride(path, v) {
+  if (/col2?\.rgb\.\d+$/.test(path)) return Math.min(1, Math.max(0, v)); // shader reads rgb
+  if (/(Axis)\.\d+$/.test(path) || /wind\.\d+$/.test(path)) return v;    // signed vectors
+  if (SIGNED_LEAF.has(path.split('.').pop())) return v;
+  return Math.max(0, v);
+}
+function leafHTML(path, v) {
+  if (typeof v === 'boolean') {
+    if (!isDraggablePath(path)) return String(v);
+    const ovr = (path in state.overrides) ? ' ovr' : '';
+    return '<span class="dbgb' + ovr + '" data-path="' + path + '" data-base="' + v + '">' + v + '</span>';
+  }
+  if (typeof v !== 'number') return esc(String(v));
+  if (!isDraggablePath(path)) return String(fmt(v));
+  const ovr = (path in state.overrides) ? ' ovr' : '';
+  return '<span class="dbgn' + ovr + '" data-path="' + path + '" data-base="' + v + '">' + fmt(v) + '</span>';
+}
+function arrHTML(path, arr) {
+  return '[' + arr.map((x, i) => typeof x === 'number' ? leafHTML(path + '.' + i, x) : esc(String(x))).join(', ') + ']';
+}
+function dumpGroup(title, obj, prefix) {
+  let out = '<b>' + esc(title) + '</b>\n';
   for (const k in obj) {
     const v = obj[k];
     if (v === null || v === undefined) continue;
-    if (typeof v === 'object' && !Array.isArray(v)) { out += '  ' + k + ': {' + Object.keys(v).map(q => q + ':' + fmt(v[q])).join(' ') + '}\n'; }
-    else out += '  ' + k.padEnd(14) + ' ' + fmt(v) + '\n';
+    const path = prefix + '.' + k;
+    if (Array.isArray(v)) out += '  ' + k.padEnd(14) + ' ' + arrHTML(path, v) + '\n';
+    else if (typeof v === 'object') {
+      const inner = Object.keys(v).map(q => {
+        const vv = v[q], p2 = path + '.' + q;
+        if (vv === null || vv === undefined) return q + ':' + vv;
+        if (Array.isArray(vv)) return q + ':' + arrHTML(p2, vv);
+        return q + ':' + leafHTML(p2, vv);
+      }).join(' ');
+      out += '  ' + k.padEnd(14) + ' {' + inner + '}\n';
+    }
+    else out += '  ' + k.padEnd(14) + ' ' + leafHTML(path, v) + '\n';
   }
   return out;
 }
@@ -1822,11 +1944,96 @@ function renderDebug() {
   t += 'active shots: ' + state.shots.length + '  pool used: ' + state.sparkHigh.toLocaleString() + '/' + (cfg.maxOverall | 0).toLocaleString() + '\n';
   t += 'hidden params: ' + state.paramCount + '\n';
   t += 'fps: ' + fpsEMA.toFixed(0) + '  pixelRatio: ' + renderer.getPixelRatio().toFixed(2) + '\n';
-  t += 'keys: B bloom  T trails  S smoke  G slow-mo  R replay\n\n';
-  t += dumpGroup('SHELL', P.shell) + '\n';
-  P.stages.forEach((s, i) => { t += dumpGroup('STAGE ' + (i + 1) + ' - ' + s.type, s) + '\n'; });
-  t += dumpGroup('SMOKE', P.smoke) + '\n' + dumpGroup('AUDIO', P.audio) + '\n' + dumpGroup('POST', P.post);
+  t += 'keys: B bloom  T trails  S smoke  G slow-mo  R replay\n';
+  t += 'drag numbers L/R · click true/false · middle-click resets · edits write the seed\n\n';
+  t += dumpGroup('SHELL', P.shell, 'shell') + '\n';
+  P.stages.forEach((s, i) => { t += dumpGroup('STAGE ' + (i + 1) + ' - ' + s.type, s, 's' + (i + 1)) + '\n'; });
+  t += dumpGroup('SMOKE', P.smoke, 'smoke') + '\n' + dumpGroup('AUDIO', P.audio, 'audio') + '\n' + dumpGroup('POST', P.post, 'post');
   debugEl.innerHTML = t;
+}
+/* ---- debug edits: drag numbers, click booleans, middle-click resets ----
+   Numeric drag move/up bind to window (setPointerCapture drops on re-render in
+   real browsers). Every edit rewrites the seed and re-detonates on release/click. */
+function commitOverrides() {
+  const composed = composeSeed(state.baseSeedText, state.overrides);
+  seedbox.value = composed;
+  if (typeof updateSeedClear === 'function') updateSeedClear();
+  detonate(composed, { addHistory: true });
+}
+/* set/clear one override, dropping it when the value returns to the generated original */
+function setOverride(path, val) {
+  const gen = state.genValues[path];
+  const genNum = (typeof gen === 'boolean') ? (gen ? 1 : 0) : gen;
+  if (gen !== undefined && Math.abs(val - genNum) <= Math.max(1e-4, Math.abs(genNum) * 1e-4)) delete state.overrides[path];
+  else state.overrides[path] = val;
+  commitOverrides();
+}
+let dbgDrag = null;
+/* stop the middle-button autoscroll ring over an editable leaf */
+debugEl.addEventListener('mousedown', e => {
+  if (e.button === 1 && e.target && e.target.closest && e.target.closest('.dbgn,.dbgb')) e.preventDefault();
+});
+debugEl.addEventListener('pointerdown', e => {
+  const el = e.target && e.target.closest ? e.target.closest('.dbgn,.dbgb') : null;
+  if (!el) return;
+  const path = el.getAttribute('data-path');
+  if (e.button === 1) {                                   // middle: reset to original
+    e.preventDefault();
+    if (path in state.overrides) { delete state.overrides[path]; commitOverrides(); }
+    return;
+  }
+  if (e.button !== 0) return;
+  if (el.classList.contains('dbgb')) {                    // boolean: click toggles
+    e.preventDefault();
+    setOverride(path, el.textContent.trim() === 'true' ? 0 : 1);
+    return;
+  }
+  e.preventDefault();                                     // numeric: begin rate-drag
+  const base = parseFloat(el.getAttribute('data-base'));
+  const gen = state.genValues[path];
+  const ref = typeof gen === 'number' ? gen : base;   // stable reference (current value may sit at 0)
+  const mag = Math.max(Math.abs(ref), 0.5);           // ramp speed scaled to the value's range
+  const isInt = Number.isInteger(ref);                // integer-ness is the param's nature, not its current value
+  dbgDrag = { el, path, base, val: base, mag, startX: e.clientX, curX: e.clientX,
+    shift: e.shiftKey, moved: false, isInt, last: performance.now(), raf: 0 };
+  el.classList.add('dragging');
+  window.addEventListener('pointermove', dbgMove);
+  window.addEventListener('pointerup', dbgUp);
+  dbgDrag.raf = requestAnimationFrame(dbgTick);
+});
+/* pointermove only records where the cursor is; the tick loop integrates the value */
+function dbgMove(e) {
+  if (!dbgDrag) return;
+  dbgDrag.curX = e.clientX;
+  dbgDrag.shift = e.shiftKey;
+}
+/* while held, offset from the click point is a *rate*: further out = faster ramp,
+   sign = direction, small dead zone in the middle holds the value still. */
+const DBG_DEAD = 6, DBG_RATE = 0.0016, DBG_EXP = 1.4;
+function dbgTick() {
+  const d = dbgDrag;
+  if (!d) return;
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - d.last) / 1000);   // clamp dt across tab-switch stalls
+  d.last = now;
+  const dx = d.curX - d.startX, adx = Math.abs(dx);
+  if (adx > DBG_DEAD) {
+    d.moved = true;
+    const rate = Math.sign(dx) * Math.pow(adx - DBG_DEAD, DBG_EXP) * d.mag * DBG_RATE * (d.shift ? 0.2 : 1);
+    d.val = clampOverride(d.path, d.val + rate * dt);
+    d.el.textContent = fmt(d.isInt ? Math.round(d.val) : d.val);   // live preview only
+  }
+  d.raf = requestAnimationFrame(dbgTick);
+}
+function dbgUp() {
+  window.removeEventListener('pointermove', dbgMove);
+  window.removeEventListener('pointerup', dbgUp);
+  const d = dbgDrag; dbgDrag = null;
+  if (!d) return;
+  if (d.raf) cancelAnimationFrame(d.raf);
+  d.el.classList.remove('dragging');
+  if (!d.moved) { d.el.textContent = fmt(d.base); return; }   // a click, not a drag
+  setOverride(d.path, d.isInt ? Math.round(d.val) : +d.val.toFixed(3));
 }
 window.addEventListener('keydown', e => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
