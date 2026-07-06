@@ -208,7 +208,7 @@ body.no-cursor #gl{cursor:none}
     <div class="empty" id="histempty">detonate to begin</div>
   </div>
   <div id="seedrow">
-    <input id="seedbox" type="text" inputmode="numeric" maxlength="240" autocomplete="off"
+    <input id="seedbox" type="text" inputmode="numeric" autocomplete="off"
       spellcheck="false" placeholder="SEED (OPTIONAL)">
     <button id="seedclear" type="button" title="clear seed" aria-label="clear seed">&times;</button>
   </div>
@@ -1899,16 +1899,21 @@ function clampOverride(path, v) {
   if (SIGNED_LEAF.has(path.split('.').pop())) return v;
   return Math.max(0, v);
 }
+/* v is P's own (generated) value; a pending, not-yet-detonated override on this path
+   must still take display precedence, or reopening the panel would look reverted.
+   data-base carries this *effective current* value, so a fresh drag continues from
+   the last edit rather than snapping back to the generated original. */
 function leafHTML(path, v) {
+  const hasOvr = path in state.overrides;
   if (typeof v === 'boolean') {
     if (!isDraggablePath(path)) return String(v);
-    const ovr = (path in state.overrides) ? ' ovr' : '';
-    return '<span class="dbgb' + ovr + '" data-path="' + path + '" data-base="' + v + '">' + v + '</span>';
+    const shown = hasOvr ? !!state.overrides[path] : v;
+    return '<span class="dbgb' + (hasOvr ? ' ovr' : '') + '" data-path="' + path + '" data-base="' + shown + '">' + shown + '</span>';
   }
   if (typeof v !== 'number') return esc(String(v));
   if (!isDraggablePath(path)) return String(fmt(v));
-  const ovr = (path in state.overrides) ? ' ovr' : '';
-  return '<span class="dbgn' + ovr + '" data-path="' + path + '" data-base="' + v + '">' + fmt(v) + '</span>';
+  const shown = hasOvr ? state.overrides[path] : v;
+  return '<span class="dbgn' + (hasOvr ? ' ovr' : '') + '" data-path="' + path + '" data-base="' + shown + '">' + fmt(shown) + '</span>';
 }
 function arrHTML(path, arr) {
   return '[' + arr.map((x, i) => typeof x === 'number' ? leafHTML(path + '.' + i, x) : esc(String(x))).join(', ') + ']';
@@ -1953,19 +1958,26 @@ function renderDebug() {
 }
 /* ---- debug edits: drag numbers, click booleans, middle-click resets ----
    Numeric drag move/up bind to window (setPointerCapture drops on re-render in
-   real browsers). Every edit rewrites the seed and re-detonates on release/click. */
+   real browsers). Edits only rewrite the seed box -- they deliberately do NOT
+   re-detonate (that got old fast on every release); click the scene (or press
+   R) to fire the edited seed and actually see/hear the change. */
 function commitOverrides() {
   const composed = composeSeed(state.baseSeedText, state.overrides);
   seedbox.value = composed;
+  state.seedText = composed;   // so R / auto-play pick up the pending edit without a click
   if (typeof updateSeedClear === 'function') updateSeedClear();
-  detonate(composed, { addHistory: true });
 }
-/* set/clear one override, dropping it when the value returns to the generated original */
-function setOverride(path, val) {
+/* set/clear one override, dropping it when the value returns to the generated original.
+   el (optional) is kept in sync directly instead of doing a full renderDebug(). */
+function setOverride(path, val, el) {
   const gen = state.genValues[path];
   const genNum = (typeof gen === 'boolean') ? (gen ? 1 : 0) : gen;
-  if (gen !== undefined && Math.abs(val - genNum) <= Math.max(1e-4, Math.abs(genNum) * 1e-4)) delete state.overrides[path];
-  else state.overrides[path] = val;
+  const isBase = gen !== undefined && Math.abs(val - genNum) <= Math.max(1e-4, Math.abs(genNum) * 1e-4);
+  if (isBase) delete state.overrides[path]; else state.overrides[path] = val;
+  if (el) {
+    el.classList.toggle('ovr', !isBase);
+    if (!el.classList.contains('dbgb')) el.textContent = fmt(isBase ? genNum : val);
+  }
   commitOverrides();
 }
 let dbgDrag = null;
@@ -1979,13 +1991,21 @@ debugEl.addEventListener('pointerdown', e => {
   const path = el.getAttribute('data-path');
   if (e.button === 1) {                                   // middle: reset to original
     e.preventDefault();
-    if (path in state.overrides) { delete state.overrides[path]; commitOverrides(); }
+    if (path in state.overrides) {
+      delete state.overrides[path];
+      const gen = state.genValues[path];
+      el.textContent = typeof gen === 'boolean' ? String(gen) : fmt(gen);
+      el.classList.remove('ovr');
+      commitOverrides();
+    }
     return;
   }
   if (e.button !== 0) return;
   if (el.classList.contains('dbgb')) {                    // boolean: click toggles
     e.preventDefault();
-    setOverride(path, el.textContent.trim() === 'true' ? 0 : 1);
+    const newBool = el.textContent.trim() !== 'true';
+    el.textContent = String(newBool);
+    setOverride(path, newBool ? 1 : 0, el);
     return;
   }
   e.preventDefault();                                     // numeric: begin rate-drag
@@ -2033,7 +2053,7 @@ function dbgUp() {
   if (d.raf) cancelAnimationFrame(d.raf);
   d.el.classList.remove('dragging');
   if (!d.moved) { d.el.textContent = fmt(d.base); return; }   // a click, not a drag
-  setOverride(d.path, d.isInt ? Math.round(d.val) : +d.val.toFixed(3));
+  setOverride(d.path, d.isInt ? Math.round(d.val) : +d.val.toFixed(3), d.el);
 }
 window.addEventListener('keydown', e => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
