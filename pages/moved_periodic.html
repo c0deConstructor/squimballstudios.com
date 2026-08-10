@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Periodic Table of Elements &mdash; New Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #04060f;
+    --panel-bg: rgba(6, 9, 18, 0.90);
+    --border: rgba(79, 214, 255, 0.16);
+    --accent: #4fd6ff;
+    --accent2: #ff5ac8;
+    --accent3: #b487ff;
+    --text: #c6d2e4;
+    --text-dim: #5a6579;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 44%, rgba(79,214,255,0.045) 0%, var(--bg) 62%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #atom { position: fixed; inset: 0; z-index: 0; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(79,214,255,0.028) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(79,214,255,0.028) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(660px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(79,214,255,0.13); backdrop-filter: blur(9px) saturate(1.1);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+
+  /* three real element cells -- an instant "periodic table" read */
+  .cells { display: flex; gap: 10px; justify-content: center; margin-bottom: 22px; }
+  .cell {
+    position: relative; width: 58px; height: 66px; flex-shrink: 0;
+    border: 1px solid rgba(79,214,255,0.18); background: rgba(79,214,255,0.03);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    animation: cellPulse 5.4s ease-in-out infinite;
+  }
+  .cell:nth-child(2) { animation-delay: 1.8s; }
+  .cell:nth-child(3) { animation-delay: 3.6s; }
+  .cell .n { position: absolute; top: 4px; left: 5px; font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: .04em; }
+  .cell .s { font-family: var(--sans); font-weight: 700; font-size: 25px; line-height: 1; color: #e9f6ff; }
+  .cell .m { font-family: var(--mono); font-size: 8px; color: var(--text-dim); letter-spacing: .04em; margin-top: 4px; }
+  @keyframes cellPulse {
+    0%, 100% { border-color: rgba(79,214,255,0.18); box-shadow: none; }
+    12%      { border-color: var(--accent); box-shadow: 0 0 18px rgba(79,214,255,0.30), inset 0 0 14px rgba(79,214,255,0.10); }
+    36%      { border-color: rgba(79,214,255,0.18); box-shadow: none; }
+  }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(28px, 5.6vw, 52px); color: #e9f6ff; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(79,214,255,0.22);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 32em; margin: 0 auto 30px; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(79,214,255,0.05);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(79,214,255,0.4); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(15px, 2.8vw, 22px); letter-spacing: .01em; color: #e9f6ff; font-weight: 700; }
+  .cta-arrow { font-size: clamp(17px, 3vw, 22px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #043a48; }
+  .cta:hover .cta-url   { color: #02131a; }
+  .cta:hover .cta-arrow { color: #02131a; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); }
+  .foot span { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+    .cell { width: 50px; height: 58px; }
+    .cell .s { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="atom"></canvas>
+<div id="grid"></div>
+
+<main class="card">
+  <div class="tag">// ELEMENTS &nbsp;&middot;&nbsp; <b>Relocated</b></div>
+  <div class="cells">
+    <div class="cell"><span class="n">1</span><span class="s">H</span><span class="m">1.008</span></div>
+    <div class="cell"><span class="n">79</span><span class="s">Au</span><span class="m">196.97</span></div>
+    <div class="cell"><span class="n">118</span><span class="s">Og</span><span class="m">[294]</span></div>
+  </div>
+  <h1>The Periodic Table<br>has a <span class="hl">new home</span>.</h1>
+  <p class="lead">Every element on the table &mdash; a deep well of data, interactive tools, alternate table layouts and isotopes, all rendered in glorious 3D WebGPU/WebGL &mdash; now lives on its own dedicated site.</p>
+  <a class="cta" href="https://theperiodictableofelements.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">theperiodictableofelements.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Bookmark the new address &nearr;<br>The rest of <span>squimballstudios.com</span> is unchanged.</div>
+</main>
+
+<script>
+'use strict';
+/* A tumbling 3D atom: a jittering nucleus wrapped in precessing electron orbits.
+   Everything is projected by hand and depth-sorted, so rings genuinely pass
+   behind and in front of the nucleus. Faint element cells drift in the far back. */
+(function () {
+  const cvs = document.getElementById('atom');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const MONO = "'Share Tech Mono', monospace";
+  const SANS = "'Rajdhani', sans-serif";
+
+  let W = 0, H = 0, S = 0, cx = 0, cy = 0;
+  let PERSP = 1, kMin = 0.8, kSpan = 0.5;   // perspective + depth-shading range
+
+  /* -- glow sprites (one per colour, drawn additively) -- */
+  const COLORS = ['#4fd6ff', '#ff5ac8', '#b487ff', '#ffd166', '#7dffc4'];
+  const PROTON = '#ff5ac8', NEUTRON = '#78b8ff', HOT = '#ffffff';
+  const SPRITE = {};
+
+  function rgba(hex, a) {
+    const v = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((v >> 16) & 255) + ',' + ((v >> 8) & 255) + ',' + (v & 255) + ',' + a + ')';
+  }
+  function sprite(color) {
+    if (SPRITE[color]) return SPRITE[color];
+    const n = 64, c = document.createElement('canvas');
+    c.width = c.height = n;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    grd.addColorStop(0.00, color);
+    grd.addColorStop(0.18, rgba(color, 0.60));
+    grd.addColorStop(0.45, rgba(color, 0.16));
+    grd.addColorStop(1.00, rgba(color, 0));
+    g.fillStyle = grd;
+    g.fillRect(0, 0, n, n);
+    return (SPRITE[color] = c);
+  }
+  [].concat(COLORS, [PROTON, NEUTRON, HOT]).forEach(sprite);
+
+  /* -- orbital rings: radius fraction, tilt, precession, colour, electrons -- */
+  const SAMPLES = 96;                 // points traced per ring
+  const CHUNK = 6;                    // samples per depth-sorted segment
+  const NUC_F = 0.068;                // nucleus radius, as a fraction of S
+  const RINGS = [
+    { rf: 0.30, ax: 1.34, az: 0.00, prec: 0.085, wob: 0.20, spd: 0.86, col: 0, e: 2 },
+    { rf: 0.40, ax: 1.02, az: 1.10, prec: -0.062, wob: 0.16, spd: -0.68, col: 1, e: 2 },
+    { rf: 0.50, ax: 0.58, az: 2.24, prec: 0.048, wob: 0.22, spd: 0.55, col: 2, e: 3 },
+    { rf: 0.61, ax: 1.49, az: 0.62, prec: -0.037, wob: 0.13, spd: -0.44, col: 3, e: 2 },
+    { rf: 0.73, ax: 0.24, az: 1.72, prec: 0.029, wob: 0.18, spd: 0.36, col: 4, e: 3 }
+  ];
+  for (const R of RINGS) {
+    R.px = new Float32Array(SAMPLES + 1);
+    R.py = new Float32Array(SAMPLES + 1);
+    R.pz = new Float32Array(SAMPLES + 1);
+    R.phase = Array.from({ length: R.e }, (_, i) => (i / R.e) * Math.PI * 2 + Math.random());
+    R.u = { x: 0, y: 0, z: 0 };
+    R.v = { x: 0, y: 0, z: 0 };
+  }
+
+  /* -- nucleus: nucleons packed in a small sphere, each breathing on its own phase -- */
+  const NUCLEONS = [];
+  const NCOUNT = 26;
+  for (let i = 0; i < NCOUNT; i++) {
+    // even-ish spread via the golden-angle spiral, pulled inward at random depths
+    const a = i * 2.39996, y = 1 - (i + 0.5) / NCOUNT * 2, rr = Math.sqrt(Math.max(0, 1 - y * y));
+    // bias inward: a plain spherical shell projects to a hollow-looking ring
+    const shrink = 0.16 + 0.84 * Math.pow(Math.random(), 1.7);
+    NUCLEONS.push({
+      x: Math.cos(a) * rr * shrink, y: y * shrink, z: Math.sin(a) * rr * shrink,
+      color: i % 2 ? NEUTRON : PROTON,
+      ph: Math.random() * 6.283, sp: 1.2 + Math.random() * 1.1
+    });
+  }
+
+  /* -- drifting element cells, far behind everything -- */
+  const ELEMENTS = [
+    ['H', 1], ['He', 2], ['Li', 3], ['C', 6], ['N', 7], ['O', 8], ['Ne', 10], ['Na', 11],
+    ['Si', 14], ['Ca', 20], ['Ti', 22], ['Fe', 26], ['Cu', 29], ['Zn', 30], ['Kr', 36],
+    ['Ag', 47], ['Xe', 54], ['Pt', 78], ['Au', 79], ['U', 92]
+  ];
+  let tiles = [];
+  function makeTiles() {
+    const n = Math.min(14, Math.max(5, Math.round((innerWidth * innerHeight) / 118000)));
+    tiles = Array.from({ length: n }, () => {
+      const el = ELEMENTS[(Math.random() * ELEMENTS.length) | 0];
+      return {
+        x: Math.random() * W, y: Math.random() * H,
+        s: (46 + Math.random() * 44) * dpr,
+        vx: (Math.random() - 0.5) * 0.16 * dpr,
+        vy: (Math.random() - 0.5) * 0.16 * dpr,
+        sym: el[0], num: String(el[1]),
+        color: COLORS[(Math.random() * COLORS.length) | 0],
+        a: 0.045 + Math.random() * 0.075
+      };
+    });
+  }
+
+  function resize() {
+    W = cvs.width = Math.floor(innerWidth * dpr);
+    H = cvs.height = Math.floor(innerHeight * dpr);
+    cvs.style.width = innerWidth + 'px';
+    cvs.style.height = innerHeight + 'px';
+    S = Math.min(W, H);
+    // Park the nucleus in the gutter beside the card when there is room for it --
+    // dead centre would bury the core behind an opaque panel. Otherwise recentre
+    // and let the orbits alone carry the frame.
+    const box = document.querySelector('.card').getBoundingClientRect();
+    const gutter = box.left * dpr;
+    if (gutter > S * 0.26) { cx = gutter * 0.52; cy = H * 0.44; }
+    else                   { cx = W / 2;         cy = H * 0.48; }
+    PERSP = S * 2.2;
+    const rMax = S * RINGS[RINGS.length - 1].rf;
+    kMin = PERSP / (PERSP + rMax);
+    kSpan = PERSP / (PERSP - rMax) - kMin;
+    makeTiles();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* -- projection: global yaw, then pitch, then perspective divide -- */
+  let cosY = 1, sinY = 0, cosP = 1, sinP = 0;
+  let _px = 0, _py = 0, _pz = 0, _pk = 1;
+  function proj(x, y, z) {
+    const x1 = x * cosY + z * sinY;
+    const z1 = -x * sinY + z * cosY;
+    const y2 = y * cosP - z1 * sinP;
+    const z2 = y * sinP + z1 * cosP;
+    const k = PERSP / (PERSP + z2);
+    _px = cx + x1 * k;
+    _py = cy + y2 * k;
+    _pz = z2;
+    _pk = k;
+  }
+  // 0 (far) .. 1 (near), used for alpha + size falloff
+  function depth(z) {
+    const d = (PERSP / (PERSP + z) - kMin) / kSpan;
+    return d < 0 ? 0 : d > 1 ? 1 : d;
+  }
+
+  /* -- depth-sorted draw list, allocated once and refilled every frame -- */
+  const items = [];
+  let fill = 0;
+  function push(kind, z, a, b) {
+    let it = items[fill];
+    if (!it) it = items[fill] = { kind: 0, z: 0, a: 0, b: 0 };
+    it.kind = kind; it.z = z; it.a = a; it.b = b;
+    fill++;
+  }
+
+  function drawTiles(dt) {
+    ctx.globalCompositeOperation = 'source-over';
+    for (const q of tiles) {
+      q.x += q.vx * dt; q.y += q.vy * dt;
+      const h = q.s * 1.15;
+      if (q.x < -q.s) q.x = W + q.s; else if (q.x > W + q.s) q.x = -q.s;
+      if (q.y < -h) q.y = H + h; else if (q.y > H + h) q.y = -h;
+      const left = q.x - q.s / 2, top = q.y - h / 2;
+      ctx.globalAlpha = q.a;
+      ctx.strokeStyle = q.color;
+      ctx.lineWidth = dpr;
+      ctx.strokeRect(left, top, q.s, h);
+      ctx.fillStyle = q.color;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.font = (q.s * 0.19) + 'px ' + MONO;
+      ctx.fillText(q.num, left + q.s * 0.11, top + h * 0.24);
+      ctx.textAlign = 'center';
+      ctx.font = '700 ' + (q.s * 0.46) + 'px ' + SANS;
+      ctx.fillText(q.sym, q.x, top + h * 0.72);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  let nowT = 0, last = performance.now();
+
+  function frame(now) {
+    const dt = Math.min(3, (now - last) / 16.67); last = now;
+    const t = nowT = now * 0.001;
+
+    ctx.clearRect(0, 0, W, H);
+    drawTiles(dt);
+    ctx.globalCompositeOperation = 'lighter';
+
+    // slow tumble of the whole atom
+    const yaw = t * 0.13, pitch = 0.34 + 0.13 * Math.sin(t * 0.21);
+    cosY = Math.cos(yaw); sinY = Math.sin(yaw);
+    cosP = Math.cos(pitch); sinP = Math.sin(pitch);
+
+    // nucleus halo
+    const pulse = 0.5 + 0.5 * Math.sin(t * 1.3);
+    const hr = S * 0.24;
+    const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, hr);
+    halo.addColorStop(0, rgba('#4fd6ff', 0.20 + 0.07 * pulse));
+    halo.addColorStop(0.30, rgba('#b487ff', 0.06));
+    halo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(cx - hr, cy - hr, hr * 2, hr * 2);
+
+    fill = 0;
+
+    // ---- rings: trace, project, then hand each segment to the sort ----
+    for (let i = 0; i < RINGS.length; i++) {
+      const R = RINGS[i], r = R.rf * S;
+      const ax = R.ax + R.wob * Math.sin(t * 0.17 + i);
+      const az = R.az + t * R.prec;
+      const ca = Math.cos(ax), sa = Math.sin(ax), cz = Math.cos(az), sz = Math.sin(az);
+      // u,v: the ring's plane basis (X then Z rotation applied to the unit axes)
+      R.u.x = cz;       R.u.y = sz;       R.u.z = 0;
+      R.v.x = -ca * sz; R.v.y = ca * cz;  R.v.z = sa;
+
+      for (let s = 0; s <= SAMPLES; s++) {
+        const th = (s / SAMPLES) * Math.PI * 2, c = Math.cos(th) * r, si = Math.sin(th) * r;
+        proj(R.u.x * c + R.v.x * si, R.u.y * c + R.v.y * si, R.u.z * c + R.v.z * si);
+        R.px[s] = _px; R.py[s] = _py; R.pz[s] = _pz;
+      }
+      for (let s = 0; s < SAMPLES; s += CHUNK) {
+        push(0, (R.pz[s] + R.pz[Math.min(SAMPLES, s + CHUNK)]) * 0.5, i, s);
+      }
+      for (let e = 0; e < R.e; e++) {
+        const th = R.phase[e] + t * R.spd;
+        const c = Math.cos(th) * r, si = Math.sin(th) * r;
+        proj(R.u.x * c + R.v.x * si, R.u.y * c + R.v.y * si, R.u.z * c + R.v.z * si);
+        push(2, _pz, i, e);
+      }
+    }
+
+    // ---- nucleons ----
+    const NR = S * NUC_F;
+    for (let i = 0; i < NUCLEONS.length; i++) {
+      const n = NUCLEONS[i], b = 1 + 0.09 * Math.sin(t * n.sp + n.ph);
+      proj(n.x * NR * b, n.y * NR * b, n.z * NR * b);
+      push(1, _pz, i, 0);
+    }
+
+    items.length = fill;
+    items.sort(byDepth);
+
+    for (let i = 0; i < fill; i++) {
+      const it = items[i];
+      if (it.kind === 0) drawSegment(it);
+      else if (it.kind === 1) drawNucleon(it);
+      else drawElectron(it, t);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    raf = requestAnimationFrame(frame);
+  }
+
+  function byDepth(a, b) { return b.z - a.z; }   // far first
+
+  function drawSegment(it) {
+    const R = RINGS[it.a], d = depth(it.z), end = Math.min(SAMPLES, it.b + CHUNK);
+    ctx.globalAlpha = 0.12 + 0.68 * d;
+    ctx.strokeStyle = COLORS[R.col];
+    ctx.lineWidth = (0.7 + 1.8 * d) * dpr;
+    ctx.beginPath();
+    ctx.moveTo(R.px[it.b], R.py[it.b]);
+    for (let s = it.b + 1; s <= end; s++) ctx.lineTo(R.px[s], R.py[s]);
+    ctx.stroke();
+  }
+
+  function blit(color, x, y, size, alpha) {
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(sprite(color), x - size, y - size, size * 2, size * 2);
+  }
+
+  function drawNucleon(it) {
+    // re-project on the way out: the sort shuffled the list, so nothing is cached
+    const n = NUCLEONS[it.a], d = depth(it.z);
+    const NR = S * NUC_F, b = 1 + 0.09 * Math.sin(nowT * n.sp + n.ph);
+    proj(n.x * NR * b, n.y * NR * b, n.z * NR * b);
+    blit(n.color, _px, _py, S * 0.026 * _pk, 0.30 + 0.55 * d);
+    blit(HOT, _px, _py, S * 0.008 * _pk, 0.25 + 0.45 * d);
+  }
+
+  function drawElectron(it, t) {
+    const R = RINGS[it.a], r = R.rf * S, col = COLORS[R.col];
+    const th = R.phase[it.b] + t * R.spd;
+    const dir = R.spd > 0 ? -1 : 1;
+    // tail: a few samples trailing behind the direction of travel
+    for (let s = 7; s >= 1; s--) {
+      const a = th + dir * s * 0.055;
+      const c = Math.cos(a) * r, si = Math.sin(a) * r;
+      proj(R.u.x * c + R.v.x * si, R.u.y * c + R.v.y * si, R.u.z * c + R.v.z * si);
+      const f = 1 - s / 8;
+      blit(col, _px, _py, S * 0.016 * _pk * f, 0.05 + 0.22 * f * depth(_pz));
+    }
+    const c = Math.cos(th) * r, si = Math.sin(th) * r;
+    proj(R.u.x * c + R.v.x * si, R.u.y * c + R.v.y * si, R.u.z * c + R.v.z * si);
+    const d = depth(_pz);
+    blit(col, _px, _py, S * 0.045 * _pk, 0.35 + 0.55 * d);
+    blit(HOT, _px, _py, S * 0.012 * _pk, 0.40 + 0.55 * d);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>
