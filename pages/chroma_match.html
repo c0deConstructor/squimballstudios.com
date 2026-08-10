@@ -2,6 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <title>Bundled Page</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -121,6 +125,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).split('</' + 'script>').join('<\\/' + 'script>') +
       ';</' + 'script>';
+    // The shell's <head> - favicon links included - is discarded by the
+    // documentElement swap below, so carry the icons into the template too.
+    const iconLinks =
+      '<link rel="icon" href="/favicon.ico" sizes="any">' +
+      '<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">' +
+      '<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">' +
+      '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">';
     // Inject after <head> so the DOCTYPE stays first; prepending the script
     // would push the parser into quirks mode. DOMParser always emits a <head>
     // (synthesizing one if the source HTML omitted it) but may carry
@@ -129,7 +140,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const headOpen = template.match(/<head[^>]*>/i);
     if (headOpen) {
       const i = headOpen.index + headOpen[0].length;
-      template = template.slice(0, i) + resourceScript + template.slice(i);
+      template = template.slice(0, i) + iconLinks + resourceScript + template.slice(i);
     }
 
     // Parse the template and swap the root element. Scripts inserted via
