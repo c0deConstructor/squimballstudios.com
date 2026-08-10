@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Firework Randomizer &mdash; New Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05060f;
+    --panel-bg: rgba(8, 9, 20, 0.94);
+    --border: rgba(255, 209, 102, 0.16);
+    --accent: #ffd166;
+    --accent2: #ff5a7a;
+    --accent3: #5ad1ff;
+    --text: #cfd2e4;
+    --text-dim: #625d74;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 38%, rgba(255,209,102,0.06) 0%, var(--bg) 66%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #fw { position: fixed; inset: 0; z-index: 0; opacity: 0.92; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,209,102,0.028) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,209,102,0.028) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+  /* sequenced shell detonations behind the card */
+  .shell { position: fixed; top: 44%; left: 50%; transform: translate(-50%,-50%); z-index: 1; pointer-events: none; }
+  .shell span {
+    position: absolute; top: 50%; left: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px;
+    border: 1.5px solid var(--accent); border-radius: 50%; opacity: 0;
+    animation: detonate 4.2s ease-out infinite;
+  }
+  .shell span:nth-child(2) { border-color: var(--accent2); animation-delay: 1.4s; }
+  .shell span:nth-child(3) { border-color: var(--accent3); animation-delay: 2.8s; }
+  @keyframes detonate {
+    0%   { transform: scale(0.05); opacity: 0; }
+    8%   { opacity: 0.9; }
+    18%  { opacity: 0.45; }
+    100% { transform: scale(4.7); opacity: 0; }
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(255,209,102,0.13); backdrop-filter: blur(3px);
+    padding: clamp(28px, 5vw, 52px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 20px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #fbf4e6; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(255,209,102,0.22);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 31em; margin: 0 auto 30px; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(255,209,102,0.05);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(255,209,102,0.4); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(17px, 3.2vw, 25px); letter-spacing: .02em; color: #fbf4e6; font-weight: 700; }
+  .cta-arrow { font-size: clamp(18px, 3.4vw, 24px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #3a2a00; }
+  .cta:hover .cta-url   { color: #140f02; }
+  .cta:hover .cta-arrow { color: #140f02; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); }
+  .foot span { color: var(--accent); }
+
+  @media (max-width: 480px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+    .shell span { width: 150px; height: 150px; margin: -75px 0 0 -75px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="fw"></canvas>
+<div id="grid"></div>
+<div class="shell"><span></span><span></span><span></span></div>
+
+<main class="card">
+  <div class="tag">// PYRO &nbsp;&middot;&nbsp; <b>Relocated</b></div>
+  <h1>The Firework Randomizer<br>has a <span class="hl">new home</span>.</h1>
+  <p class="lead">Seeded pyrotechnics where every burst is unique &mdash; endless randomized shows, share-a-seed displays, glowing shells, flares and long spark trails &mdash; now lights up its own dedicated site.</p>
+  <a class="cta" href="https://fireworkrandomizer.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">fireworkrandomizer.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Bookmark the new address &nearr;<br>The rest of <span>squimballstudios.com</span> is unchanged.</div>
+</main>
+
+<script>
+'use strict';
+/* A quiet night-sky of rockets that arc up and burst into fading spark trails --
+   a nod to the randomizer's seeded, persistence-trailed pyrotechnics. */
+(function () {
+  const cvs = document.getElementById('fw');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;
+  const rockets = [], sparks = [];
+  const PALETTE = ['#ffd166', '#ff5a7a', '#5ad1ff', '#8affc1', '#c77dff', '#ff9f45', '#ffffff'];
+
+  function resize() {
+    W = cvs.width = Math.floor(innerWidth * dpr);
+    H = cvs.height = Math.floor(innerHeight * dpr);
+    cvs.style.width = innerWidth + 'px';
+    cvs.style.height = innerHeight + 'px';
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const G = 0.05 * dpr;   // gravity per frame
+
+  function launch() {
+    rockets.push({
+      x: (0.14 + Math.random() * 0.72) * W,
+      y: H + 6 * dpr,
+      vx: (Math.random() - 0.5) * 1.4 * dpr,
+      vy: -(6.4 + Math.random() * 3.0) * dpr,
+      color: PALETTE[(Math.random() * PALETTE.length) | 0],
+      apex: (0.14 + Math.random() * 0.34) * H   // y at which the shell bursts
+    });
+  }
+
+  function explode(x, y, color) {
+    const ring = Math.random() < 0.30;
+    const n = ring ? 44 + ((Math.random() * 18) | 0) : 58 + ((Math.random() * 46) | 0);
+    const base = 2.2 + Math.random() * 3.4;
+    const multi = Math.random() < 0.35;
+    for (let i = 0; i < n; i++) {
+      const a = ring ? (i / n) * Math.PI * 2 : Math.random() * Math.PI * 2;
+      const sp = (ring ? base : base * (0.35 + Math.random() * 0.9)) * dpr;
+      sparks.push({
+        x: x, y: y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        color: multi ? PALETTE[(Math.random() * PALETTE.length) | 0] : color,
+        life: 1, decay: 0.008 + Math.random() * 0.012,
+        r: (1.1 + Math.random() * 1.3) * dpr
+      });
+    }
+  }
+
+  let last = performance.now();
+  let nextLaunch = 0;
+
+  function frame(now) {
+    const dt = Math.min(2.4, (now - last) / 16.67); last = now;
+
+    // fade the previous frame -> soft persistence trails, canvas stays transparent
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+
+    if (now >= nextLaunch) {
+      launch();
+      nextLaunch = now + 460 + Math.random() * 720;
+    }
+
+    // rockets
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i];
+      r.vy += G * dt; r.x += r.vx * dt; r.y += r.vy * dt;
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = r.color;
+      ctx.beginPath(); ctx.arc(r.x, r.y, 1.6 * dpr, 0, 7); ctx.fill();
+      if (r.vy >= -0.6 * dpr || r.y <= r.apex) {
+        explode(r.x, r.y, r.color);
+        rockets.splice(i, 1);
+      }
+    }
+
+    // sparks
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i];
+      s.vx *= 0.986; s.vy = s.vy * 0.986 + G * dt;
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      s.life -= s.decay * dt;
+      if (s.life <= 0) { sparks.splice(i, 1); continue; }
+      const tw = s.life < 0.35 ? (0.5 + Math.random() * 0.5) : 1;   // twinkle as it dies
+      ctx.globalAlpha = Math.max(0, s.life) * tw;
+      ctx.fillStyle = s.color;
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    raf = requestAnimationFrame(frame);
+  }
+
+  // a couple of bursts so the sky is already alive on arrival
+  for (let k = 0; k < 3; k++) {
+    explode((0.2 + Math.random() * 0.6) * W, (0.18 + Math.random() * 0.34) * H,
+            PALETTE[(Math.random() * PALETTE.length) | 0]);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>
