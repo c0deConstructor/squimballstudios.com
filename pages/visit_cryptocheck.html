@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crypto Checker &mdash; Coinbase Dip Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0b0e;
+    --panel-bg: rgba(14, 15, 19, 0.93);
+    --border: rgba(76, 149, 234, 0.18);
+    --accent: #4c95ea;
+    --accent2: #e66767;
+    --accent3: #fab219;
+    --text: #cfd0d4;
+    --text-dim: #6c6d72;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    background: radial-gradient(ellipse at 50% 42%, rgba(57,135,229,0.06) 0%, var(--bg) 66%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #tape { position: fixed; inset: 0; z-index: 0; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(76,149,234,0.028) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(76,149,234,0.028) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(57,135,229,0.13); backdrop-filter: blur(4px);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 16px; }
+  .tag b { color: var(--accent3); font-weight: 400; }
+
+  /* one dip-and-recovery, drawn once on arrival */
+  .spark { display: block; width: 236px; max-width: 70%; height: 54px; margin: 0 auto 18px; overflow: visible; }
+  .spark .high { stroke: var(--accent3); stroke-width: 1; stroke-dasharray: 3 4; opacity: .55; }
+  .spark .line { fill: none; stroke: url(#sparkInk); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+                 stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 2.4s .35s cubic-bezier(.4,0,.2,1) forwards; }
+  .spark .low  { fill: var(--accent3); opacity: 0; animation: lowIn .4s 1.5s forwards, lowPulse 2.6s 1.9s ease-in-out infinite; transform-origin: 124px 46px; }
+  @keyframes draw     { to { stroke-dashoffset: 0; } }
+  @keyframes lowIn    { to { opacity: 1; } }
+  @keyframes lowPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.7); } }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #f3f4f7; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(57,135,229,0.24);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 31em; margin: 0 auto 30px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(57,135,229,0.06);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(57,135,229,0.45); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(12.5px, 2.35vw, 18.5px); letter-spacing: 0; color: #f3f4f7; font-weight: 700; }
+  .cta-arrow { font-size: clamp(17px, 3vw, 22px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #0a2748; }
+  .cta:hover .cta-url   { color: #04101f; }
+  .cta:hover .cta-arrow { color: #04101f; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot span { color: var(--accent); }
+  .foot b { color: var(--accent3); font-weight: 400; }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; padding: 14px 16px; }
+    .tag { letter-spacing: .22em; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="tape"></canvas>
+<div id="grid"></div>
+
+<main class="card">
+  <div class="tag">// MARKETS &nbsp;&middot;&nbsp; <b>Info only</b></div>
+  <svg class="spark" viewBox="0 0 236 54" aria-hidden="true">
+    <defs>
+      <linearGradient id="sparkInk" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="236" y2="0">
+        <stop offset="0" stop-color="#e66767"/><stop offset=".5" stop-color="#e66767"/>
+        <stop offset=".6" stop-color="#4c95ea"/><stop offset="1" stop-color="#4c95ea"/>
+      </linearGradient>
+    </defs>
+    <line class="high" x1="0" y1="6" x2="236" y2="6"/>
+    <polyline class="line" pathLength="1" points="2,10 14,7 26,13 38,11 50,19 62,17 74,27 86,24 98,36 110,34 124,46 136,40 148,42 160,31 172,33 184,22 196,25 208,15 220,17 234,9"/>
+    <circle class="low" cx="124" cy="46" r="3"/>
+  </svg>
+  <h1>Crypto Checker<br><span class="hl">spot the dip.</span></h1>
+  <p class="lead">A simple Coinbase market scanner. One click checks every liquid USD pair, finds the coins trading well below their <b>1-year high</b>, and asks each coin's own history what happened the last times it was this far down. Free, and it runs entirely in your browser.</p>
+  <a class="cta" href="https://cryptocheck.squimballstudios.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">cryptocheck.squimballstudios.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">For informational purposes only &middot; <b>not financial advice</b><br>Opens in a new tab &nearr; &middot; a <span>Squimball Studios</span> project</div>
+</main>
+
+<script>
+'use strict';
+/* Lanes of simulated candles scrolling right-to-left. Each lane is a random walk
+   that now and then sells off hard and then claws its way back -- the pattern the
+   checker looks for. Red candles closed down, blue closed up; the amber dashes
+   are the lane's visible high and the tag marks how far the latest low sits below it.
+   Nothing here is real market data. */
+(function () {
+  const cvs = document.getElementById('tape');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const MONO = "'Share Tech Mono', monospace";
+  let W = 0, H = 0, lanes = [];
+  const STEP = 15, BODY = 9;               // CSS px per candle / body width
+
+  function randn() {                       // Box-Muller
+    return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(6.2832 * Math.random());
+  }
+
+  function nextCandle(L) {
+    // regime machine: drift -> dip -> rebound -> drift
+    if (L.left-- <= 0) {
+      if (L.mode === 'drift')      { L.mode = 'dip';     L.left = 5 + ((Math.random() * 6) | 0); }
+      else if (L.mode === 'dip')   { L.mode = 'rebound'; L.left = 8 + ((Math.random() * 8) | 0); }
+      else                         { L.mode = 'drift';   L.left = 14 + ((Math.random() * 26) | 0); }
+    }
+    const mu = L.mode === 'dip' ? -0.034 : L.mode === 'rebound' ? 0.021 : 0.0012;
+    const sd = L.mode === 'drift' ? 0.015 : 0.019;
+    const o = L.price, c = o * Math.exp(mu + sd * randn());
+    L.price = c;
+    return { o: o, c: c,
+             h: Math.max(o, c) * (1 + Math.abs(randn()) * sd * 0.55),
+             l: Math.min(o, c) * (1 - Math.abs(randn()) * sd * 0.55) };
+  }
+
+  function makeLane(i, n) {
+    const L = { price: 100, mode: 'drift', left: (Math.random() * 20) | 0, candles: [], off: 0,
+                speed: 13 + Math.random() * 11, lo: 0, hi: 0, alpha: i % 2 ? 0.38 : 0.56 };
+    for (let k = 0; k < n; k++) L.candles.push(nextCandle(L));
+    range(L, 1);
+    return L;
+  }
+
+  // ease the lane's vertical scale toward its visible extremes
+  function range(L, ease) {
+    let lo = Infinity, hi = -Infinity;
+    for (const c of L.candles) { if (c.l < lo) lo = c.l; if (c.h > hi) hi = c.h; }
+    L.lo += (lo - L.lo) * ease; L.hi += (hi - L.hi) * ease;
+  }
+
+  function resize() {
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    const count = Math.max(3, Math.min(6, Math.round(H / 185)));
+    const n = Math.ceil(W / STEP) + 3;
+    lanes = Array.from({ length: count }, (_, i) => makeLane(i, n));
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const laneH = H / lanes.length;
+
+    for (let li = 0; li < lanes.length; li++) {
+      const L = lanes[li];
+      L.off += L.speed * dt;
+      while (L.off >= STEP) { L.off -= STEP; L.candles.shift(); L.candles.push(nextCandle(L)); }
+      range(L, 0.04);
+
+      const top = li * laneH + laneH * 0.14, span = laneH * 0.72;
+      const y = p => top + (1 - (p - L.lo) / (L.hi - L.lo || 1)) * span;
+
+      // the lane's high-water mark
+      ctx.globalAlpha = L.alpha * 0.55;
+      ctx.strokeStyle = '#fab219'; ctx.lineWidth = 1; ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.moveTo(0, Math.round(top) + 0.5); ctx.lineTo(W, Math.round(top) + 0.5); ctx.stroke();
+      ctx.setLineDash([]);
+
+      let lowI = 0;
+      for (let i = 0; i < L.candles.length; i++) {
+        const c = L.candles[i], x = i * STEP - L.off, up = c.c >= c.o;
+        if (c.l < L.candles[lowI].l) lowI = i;
+        ctx.strokeStyle = ctx.fillStyle = up ? '#4c95ea' : '#e66767';
+        ctx.globalAlpha = L.alpha * 0.7;
+        ctx.beginPath(); ctx.moveTo(x + BODY / 2, y(c.h)); ctx.lineTo(x + BODY / 2, y(c.l)); ctx.stroke();
+        ctx.globalAlpha = L.alpha;
+        const y0 = y(Math.max(c.o, c.c)), y1 = y(Math.min(c.o, c.c));
+        ctx.fillRect(x, y0, BODY, Math.max(1, y1 - y0));
+      }
+
+      // tag the deepest visible low with its drawdown from the visible high
+      const low = L.candles[lowI], lx = lowI * STEP - L.off + BODY / 2, ly = y(low.l);
+      const dd = Math.round((1 - low.l / L.hi) * 100);
+      if (dd >= 12 && lx > 30 && lx < W - 30) {
+        ctx.globalAlpha = Math.min(1, L.alpha * 1.9);
+        ctx.strokeStyle = ctx.fillStyle = '#fab219';
+        ctx.beginPath(); ctx.arc(lx, ly + 7, 3, 0, 6.2832); ctx.stroke();
+        ctx.font = '11px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText('-' + dd + '%', lx, ly + 14);
+      }
+    }
+    ctx.globalAlpha = 1;
+    raf = requestAnimationFrame(frame);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

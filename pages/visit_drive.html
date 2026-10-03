@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drive &mdash; Sports Car Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05070c;
+    --panel-bg: rgba(8, 11, 18, 0.92);
+    --border: rgba(255, 180, 84, 0.16);
+    --accent: #ffb454;
+    --accent2: #ff5c5c;
+    --accent3: #6fb8ff;
+    --ok: #6fdc8c;
+    --text: #cdd3dd;
+    --text-dim: #636b7a;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    background: radial-gradient(ellipse at 50% 42%, rgba(255,180,84,0.05) 0%, var(--bg) 66%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #track { position: fixed; inset: 0; z-index: 0; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,180,84,0.024) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,180,84,0.024) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(255,180,84,0.11); backdrop-filter: blur(4px);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+
+  /* dash strip: shift lights + gear + speed, read off the car lapping the backdrop */
+  .dash { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 20px; font-family: var(--mono); }
+  .gear {
+    width: 38px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,180,84,0.28); background: rgba(255,180,84,0.04);
+    font-size: 26px; color: #fff3df; line-height: 1;
+  }
+  .shift { display: flex; gap: 4px; }
+  .shift i { display: block; width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.08); transition: background-color .06s, box-shadow .06s; }
+  .shift i.g.on { background: var(--ok);      box-shadow: 0 0 8px var(--ok); }
+  .shift i.a.on { background: var(--accent);  box-shadow: 0 0 8px var(--accent); }
+  .shift i.r.on { background: var(--accent2); box-shadow: 0 0 9px var(--accent2); }
+  .speed { min-width: 92px; text-align: left; font-size: 22px; color: #fff3df; letter-spacing: .02em; }
+  .speed small { font-size: 9.5px; letter-spacing: .18em; color: var(--text-dim); margin-left: 5px; }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #fbf3e6; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(255,180,84,0.2);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 31em; margin: 0 auto 30px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(255,180,84,0.05);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(255,180,84,0.4); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(14px, 2.7vw, 21px); letter-spacing: .01em; color: #fbf3e6; font-weight: 700; }
+  .cta-arrow { font-size: clamp(17px, 3vw, 22px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #4a3208; }
+  .cta:hover .cta-url   { color: #160e02; }
+  .cta:hover .cta-arrow { color: #160e02; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot span { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+    .dash { gap: 10px; }
+    .shift { gap: 3px; }
+    .shift i { width: 7px; height: 7px; }
+    .speed { font-size: 18px; min-width: 76px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="track"></canvas>
+<div id="grid"></div>
+
+<main class="card">
+  <div class="tag">// DRIVING &nbsp;&middot;&nbsp; <b>Work in progress</b></div>
+  <div class="dash" aria-hidden="true">
+    <div class="gear" id="gear">3</div>
+    <div class="shift" id="shift"></div>
+    <div class="speed"><span id="kmh">0</span><small>KM/H</small></div>
+  </div>
+  <h1>Drive<br><span class="hl">feel the grip.</span></h1>
+  <p class="lead">A sports car that handles like the real thing. Every tire has <b>one budget of grip</b> to spend on braking and steering &mdash; plus cold tires, brake fade, wet asphalt, and ABS, traction and stability control you can switch off. Slide the dirt yard, run the drag strip, put it on the dyno.</p>
+  <a class="cta" href="https://drive.squimballstudios.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">drive.squimballstudios.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Early build &middot; way more to come<br>Opens in a new tab &nearr; &middot; a <span>Squimball Studios</span> project</div>
+</main>
+
+<script>
+'use strict';
+/* A circuit laid out around the card, lapped by a car that is driven by a small
+   point-mass lap simulation: corner speed is capped by lateral grip, then a
+   forward pass (traction) and a backward pass (braking) turn that into a speed
+   profile -- so it brakes in a straight line, carries speed through the apex and
+   powers out. The dash in the card reads off the same car. */
+(function () {
+  const cvs = document.getElementById('track');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;                        // CSS px; the context is scaled by dpr
+
+  const N = 720;                           // samples around the lap
+  const px = new Float32Array(N), py = new Float32Array(N);     // centre line
+  const tx = new Float32Array(N), ty = new Float32Array(N);     // unit tangent
+  const rad = new Float32Array(N);         // polar radius of the centre line
+  const kap = new Float32Array(N);         // signed curvature (1/px)
+  const vel = new Float32Array(N);         // target speed (px/s)
+  const cum = new Float32Array(N + 1);     // arc length up to sample i
+  let LAP = 1, ROAD = 30, VTOP = 500;
+  const layer = document.createElement('canvas');   // the static circuit, painted once per resize
+  const SEED = [Math.random() * 6.283, Math.random() * 6.283, Math.random() * 6.283];
+
+  function build() {
+    // a rounded-rectangle loop hugging the viewport, bent by a few low harmonics
+    // into esses and a couple of proper corners
+    const cx = W / 2, cy = H / 2, S = Math.min(W, H);
+    ROAD = Math.max(20, Math.min(34, S * 0.036));
+    const ax = Math.max(60, W * 0.5 - Math.max(34, W * 0.055));
+    const ay = Math.max(60, H * 0.5 - Math.max(34, H * 0.075));
+    const P = 3.4;
+    // the road stays clear of the card wherever the viewport leaves room for it
+    // (offsetWidth/Height: the layout box, unaffected by the card's entry animation)
+    const box = document.querySelector('.card');
+    const hw = box.offsetWidth / 2 + ROAD / 2 + 14, hh = box.offsetHeight / 2 + ROAD / 2 + 14;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a));
+      const outer = Math.pow(Math.pow(c / ax, P) + Math.pow(s / ay, P), -1 / P);
+      const wob = 1 - 0.050 * (1 + Math.sin(3 * a + SEED[0])) - 0.034 * (1 + Math.sin(5 * a + SEED[1]))
+                    - 0.020 * (1 + Math.sin(8 * a + SEED[2]));
+      const keep = Math.min(hw / Math.max(1e-6, c), hh / Math.max(1e-6, s));
+      rad[i] = Math.max(outer * wob, Math.min(keep, outer));
+    }
+    for (let pass = 0; pass < 14; pass++) {            // round off the kinks that clamp leaves
+      let prev = rad[N - 1];
+      const first = rad[0];
+      for (let i = 0; i < N; i++) {
+        const cur = rad[i], next = i + 1 < N ? rad[i + 1] : first;
+        rad[i] = (prev + 2 * cur + next) / 4;
+        prev = cur;
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      px[i] = cx + Math.cos(a) * rad[i];
+      py[i] = cy + Math.sin(a) * rad[i];
+    }
+    cum[0] = 0;
+    for (let i = 0; i < N; i++) {
+      const j = (i + 1) % N;
+      cum[i + 1] = cum[i] + Math.hypot(px[j] - px[i], py[j] - py[i]);
+    }
+    LAP = cum[N];
+    for (let i = 0; i < N; i++) {
+      const a = (i + N - 1) % N, b = (i + 1) % N;
+      const dx = px[b] - px[a], dy = py[b] - py[a], d = Math.hypot(dx, dy) || 1;
+      tx[i] = dx / d; ty[i] = dy / d;
+    }
+    for (let i = 0; i < N; i++) {
+      const a = (i + N - 1) % N, b = (i + 1) % N;
+      const cross = tx[a] * ty[b] - ty[a] * tx[b];
+      kap[i] = Math.asin(Math.max(-1, Math.min(1, cross))) / (cum[i + 1] - cum[i] + (cum[a + 1] - cum[a]) || 1);
+    }
+
+    // ---- lap simulation ----
+    VTOP = Math.max(300, S * 0.62);
+    const A_LAT = VTOP * 0.95, A_ACC = VTOP * 0.50, A_BRK = VTOP * 1.15;
+    for (let i = 0; i < N; i++) vel[i] = Math.min(VTOP, Math.sqrt(A_LAT / Math.max(1e-5, Math.abs(kap[i]))));
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < N; i++) {                                    // traction out of corners
+        const j = (i + 1) % N, ds = cum[i + 1] - cum[i];
+        vel[j] = Math.min(vel[j], Math.sqrt(vel[i] * vel[i] + 2 * A_ACC * ds));
+      }
+      for (let i = N - 1; i >= 0; i--) {                               // braking into them
+        const j = (i + 1) % N, ds = cum[i + 1] - cum[i];
+        vel[i] = Math.min(vel[i], Math.sqrt(vel[j] * vel[j] + 2 * A_BRK * ds));
+      }
+    }
+    paint();
+  }
+
+  function trace(g, off) {                 // the centre line, shifted sideways by `off`
+    g.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const k = i % N, x = px[k] - ty[k] * off, y = py[k] + tx[k] * off;
+      if (i) g.lineTo(x, y); else g.moveTo(x, y);
+    }
+    g.closePath();
+  }
+
+  function paint() {
+    layer.width = cvs.width; layer.height = cvs.height;
+    const g = layer.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.lineJoin = 'round';
+    // asphalt
+    trace(g, 0); g.strokeStyle = 'rgba(160,175,200,0.055)'; g.lineWidth = ROAD; g.stroke();
+    // edge lines
+    g.strokeStyle = 'rgba(232,236,242,0.20)'; g.lineWidth = 1;
+    trace(g, ROAD / 2); g.stroke();
+    trace(g, -ROAD / 2); g.stroke();
+    // centre dashes
+    trace(g, 0); g.setLineDash([10, 16]); g.strokeStyle = 'rgba(232,236,242,0.10)'; g.stroke(); g.setLineDash([]);
+    // kerbs on the inside of every real corner
+    const TH = 1 / Math.max(120, Math.min(W, H) * 0.30);
+    g.lineWidth = 3.2; g.lineCap = 'butt';
+    for (let i = 0; i < N; i++) {
+      if (Math.abs(kap[i]) < TH) continue;
+      const j = (i + 1) % N, side = (kap[i] > 0 ? 1 : -1) * (ROAD / 2 + 2.4);
+      g.strokeStyle = (i >> 2) & 1 ? 'rgba(255,92,92,0.55)' : 'rgba(240,240,240,0.42)';
+      g.beginPath();
+      g.moveTo(px[i] - ty[i] * side, py[i] + tx[i] * side);
+      g.lineTo(px[j] - ty[j] * side, py[j] + tx[j] * side);
+      g.stroke();
+    }
+    // start / finish: a little chequered strip across the road at the fastest point
+    let f = 0;
+    for (let i = 1; i < N; i++) if (vel[i] > vel[f]) f = i;
+    START = f;
+    const q = ROAD / 6;
+    for (let row = 0; row < 2; row++) {
+      for (let c = 0; c < 6; c++) {
+        const lat = -ROAD / 2 + c * q, lon = row * q;
+        g.fillStyle = (row + c) & 1 ? 'rgba(240,240,240,0.50)' : 'rgba(240,240,240,0.08)';
+        g.beginPath();
+        corner(g, f, lat, lon, true); corner(g, f, lat + q, lon, false);
+        corner(g, f, lat + q, lon + q, false); corner(g, f, lat, lon + q, false);
+        g.closePath(); g.fill();
+      }
+    }
+  }
+  function corner(g, i, lat, lon, first) {
+    const x = px[i] - ty[i] * lat + tx[i] * lon, y = py[i] + tx[i] * lat + ty[i] * lon;
+    if (first) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  let START = 0;
+
+  /* -- cars -- */
+  const TRAIL = 46;
+  function makeCar(color, pace, ghost) {
+    return { s: 0, v: 0, a: 0, color: color, pace: pace, ghost: ghost,
+             hx: new Float32Array(TRAIL), hy: new Float32Array(TRAIL), hb: new Float32Array(TRAIL), n: 0, head: 0 };
+  }
+  const cars = [makeCar('#ffb454', 1, false), makeCar('#6fb8ff', 0.93, true)];
+
+  function sample(s) {                      // -> index + fraction for arc length s
+    s = ((s % LAP) + LAP) % LAP;
+    let lo = 0, hi = N;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cum[mid] <= s) lo = mid; else hi = mid; }
+    return lo + (s - cum[lo]) / (cum[lo + 1] - cum[lo] || 1);
+  }
+  const lerpAt = (arr, u) => { const i = Math.floor(u) % N, j = (i + 1) % N, f = u - Math.floor(u); return arr[i] + (arr[j] - arr[i]) * f; };
+
+  function resize() {
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    build();
+    cars[0].s = cum[START]; cars[1].s = cum[START] + LAP * 0.5;
+    for (const c of cars) { c.n = 0; c.v = lerpAt(vel, sample(c.s)) * c.pace; }
+  }
+  window.addEventListener('resize', resize);
+
+  /* -- dash -- */
+  const elGear = document.getElementById('gear'), elKmh = document.getElementById('kmh'), elShift = document.getElementById('shift');
+  const LEDS = [];
+  for (let i = 0; i < 12; i++) {
+    const led = document.createElement('i');
+    led.className = i < 5 ? 'g' : i < 9 ? 'a' : 'r';
+    LEDS.push(elShift.appendChild(led));
+  }
+  const GEARS = [0, 0.20, 0.36, 0.54, 0.74, 1.001];      // upper speed fraction of gears 1..5
+  let lit = -1, shownGear = 0, shownKmh = -1;
+  function dash(car) {
+    const f = Math.min(1, car.v / VTOP);
+    let g = 1;
+    while (g < 5 && f > GEARS[g]) g++;
+    const lo = g === 1 ? 0 : GEARS[g - 1] * 0.62, rev = Math.min(1, (f - lo) / (GEARS[g] - lo));
+    const n = Math.round(rev * 12);
+    if (n !== lit) { lit = n; for (let i = 0; i < 12; i++) LEDS[i].classList.toggle('on', i < n); }
+    if (g !== shownGear) { shownGear = g; elGear.textContent = g; }
+    const kmh = Math.round(f * 262);
+    if (kmh !== shownKmh) { shownKmh = kmh; elKmh.textContent = kmh; }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.drawImage(layer, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    for (const c of cars) {
+      // chase the profile; the gap to it is the throttle / brake request
+      const u = sample(c.s), want = lerpAt(vel, u) * c.pace;
+      const acc = (want - c.v) / Math.max(dt, 1e-3);
+      c.a = Math.max(-VTOP * 1.15, Math.min(VTOP * 0.5, acc));
+      c.v = Math.max(20, c.v + c.a * dt);
+      c.s = (c.s + c.v * dt) % LAP;
+
+      const u2 = sample(c.s);
+      const x = lerpAt(px, u2), y = lerpAt(py, u2);
+      let dx = lerpAt(tx, u2), dy = lerpAt(ty, u2);
+      const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+      const braking = c.a < -VTOP * 0.12 ? Math.min(1, -c.a / (VTOP * 0.8)) : 0;
+
+      c.head = (c.head + 1) % TRAIL;
+      c.hx[c.head] = x; c.hy[c.head] = y; c.hb[c.head] = braking;
+      if (c.n < TRAIL) c.n++;
+
+      // tail-light trail: red and bright under braking, a faint body colour otherwise
+      ctx.lineCap = 'round';
+      const al = c.ghost ? 0.5 : 1;
+      for (let k = 0; k < c.n - 1; k++) {
+        const i0 = (c.head - k + TRAIL) % TRAIL, i1 = (c.head - k - 1 + TRAIL) % TRAIL;
+        const f = 1 - k / TRAIL, b = c.hb[i0];
+        ctx.strokeStyle = b > 0 ? 'rgba(255,72,72,' + (al * f * (0.25 + 0.65 * b)).toFixed(3) + ')'
+                                : (c.ghost ? 'rgba(111,184,255,' : 'rgba(255,180,84,') + (al * f * 0.26).toFixed(3) + ')';
+        ctx.lineWidth = (b > 0 ? 3.4 : 2.2) * f + 0.4;
+        ctx.beginPath(); ctx.moveTo(c.hx[i0], c.hy[i0]); ctx.lineTo(c.hx[i1], c.hy[i1]); ctx.stroke();
+      }
+
+      // headlight cone
+      const ang = Math.atan2(dy, dx), reach = ROAD * 4.2;
+      const cone = ctx.createRadialGradient(x, y, 2, x, y, reach);
+      cone.addColorStop(0, 'rgba(255,240,205,' + (0.34 * al) + ')');
+      cone.addColorStop(1, 'rgba(255,240,205,0)');
+      ctx.fillStyle = cone;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, reach, ang - 0.30, ang + 0.30); ctx.closePath(); ctx.fill();
+
+      // body
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(ang);
+      const L = ROAD * 0.62, Wd = ROAD * 0.30;
+      ctx.globalAlpha = al;
+      ctx.shadowColor = c.color; ctx.shadowBlur = 12;
+      ctx.fillStyle = c.color;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-L / 2, -Wd / 2, L, Wd, Wd * 0.34); else ctx.rect(-L / 2, -Wd / 2, L, Wd);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(5,7,12,0.72)';                 // cabin glass
+      ctx.fillRect(-L * 0.16, -Wd * 0.34, L * 0.34, Wd * 0.68);
+      ctx.fillStyle = braking > 0 ? '#ff3b3b' : 'rgba(255,60,60,0.45)';
+      ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = braking > 0 ? 12 : 0;
+      ctx.fillRect(-L / 2 - 0.6, -Wd / 2, 1.8, Wd * 0.30);
+      ctx.fillRect(-L / 2 - 0.6, Wd / 2 - Wd * 0.30, 1.8, Wd * 0.30);
+      ctx.restore();
+    }
+    dash(cars[0]);
+    raf = requestAnimationFrame(frame);
+  }
+
+  resize();
+  // the web fonts change the card's height once they arrive; lay the circuit out again
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(resize);
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

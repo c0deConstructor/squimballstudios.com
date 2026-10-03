@@ -186,6 +186,61 @@
   .badge-live  { color: var(--accent); border-color: rgba(232,255,71,.3); background: rgba(232,255,71,.07); }
   .badge-soon  { color: var(--muted);  border-color: var(--border);       background: transparent; }
   .badge-moved { color: #00c8b4;       border-color: rgba(0,200,180,.4);  background: rgba(0,200,180,.08); }
+  .badge-site  { color: #7fb4ff;       border-color: rgba(127,180,255,.4); background: rgba(127,180,255,.08); }
+
+  /* ── Coming-soon teasers: redacted, with a scanner passing over ── */
+  .card.secret   { --sc: 255,68,56; border-color: rgba(var(--sc), .22); }
+  .card.secret.b { --sc: 61,255,176; }
+  .card.secret.c { --sc: 179,136,255; }
+  .card.secret::before { background: rgb(var(--sc)); }
+  .card.secret::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 46%;
+    background: linear-gradient(rgba(var(--sc), 0), rgba(var(--sc), .06) 85%, rgba(var(--sc), .2));
+    transform: translateY(-105%);
+    animation: scan 4.6s linear infinite;
+    pointer-events: none;
+  }
+  .card.secret.b::after { animation-delay: -2.3s; }
+  .card.secret.c::after { animation-delay: -1.15s; }
+  .card.secret:hover {
+    border-color: rgba(var(--sc), .5);
+    box-shadow: 0 0 32px rgba(var(--sc), .1);
+  }
+  .card.secret .launch { color: rgb(var(--sc)); }
+  .badge-secret { color: rgb(var(--sc)); border-color: rgba(var(--sc), .45); background: rgba(var(--sc), .08); }
+  .badge-secret::before {
+    content: '';
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    margin-right: 6px;
+    vertical-align: 1px;
+    animation: blink .9s step-end infinite;
+  }
+  /* redaction bar, with a glint that almost shows what is under it */
+  .rd {
+    display: inline-block;
+    height: .95em;
+    vertical-align: -.14em;
+    background: #2c2c34;
+    position: relative;
+    overflow: hidden;
+  }
+  .rd::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(var(--sc), .5) 50%, transparent 70%);
+    transform: translateX(-100%);
+    animation: glint 3.8s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card.secret::after, .rd::after, .badge-secret::before { animation: none; }
+  }
 
   .launch {
     font-family: var(--font);
@@ -237,6 +292,14 @@
     0%, 100% { opacity: .7; }
     50%       { opacity: 0;  }
   }
+  /* translateY is relative to the scanner's own height (46% of the card) */
+  @keyframes scan {
+    to { transform: translateY(225%); }
+  }
+  @keyframes glint {
+    0%, 55%   { transform: translateX(-100%); }
+    85%, 100% { transform: translateX(100%); }
+  }
 </style>
 </head>
 <body>
@@ -276,11 +339,11 @@
 
     <div class="card" style="animation-delay:.19s" onclick="launch(3)">
       <div class="card-id">SIM · 003</div>
-      <div class="card-title">Solar Pulse</div>
-      <div class="card-desc">NASA DONKI solar flare catalog on a WebGL 3D sun. Orbit the rotating disk, watch C, M, and X class eruptions pulse through time.</div>
+      <div class="card-title">π Rider</div>
+      <div class="card-desc">Ride the digits of π. Thread a ring for every digit, see how far you can remember the road, then experiment on the digits themselves in the π Lab.</div>
       <div class="card-foot">
-        <span class="badge badge-live">Live</span>
-        <button class="launch">Launch →</button>
+        <span class="badge badge-site">Live site ↗</span>
+        <button class="launch">Visit →</button>
       </div>
     </div>
 
@@ -331,6 +394,86 @@
       <div class="card-foot">
         <span class="badge badge-moved">Moved ↗</span>
         <button class="launch">Visit →</button>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:.61s" onclick="launch(9)">
+      <div class="card-id">SIM · 009</div>
+      <div class="card-title">Earshot</div>
+      <div class="card-desc">Live visual sound monitor. Point a microphone outdoors and watch birdsong, wind and traffic rise out of a 3D spectral terrain, with experimental sound recognition and more.</div>
+      <div class="card-foot">
+        <span class="badge badge-site">Live site ↗</span>
+        <button class="launch">Visit →</button>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:.68s" onclick="launch(10)">
+      <div class="card-id">SIM · 010</div>
+      <div class="card-title">Drive</div>
+      <div class="card-desc">Drive a super-realistically-handling sports car: real tire grip, brake fade, ABS and traction control you can switch off. Work in progress, with way more to come.</div>
+      <div class="card-foot">
+        <span class="badge badge-site">Live site ↗</span>
+        <button class="launch">Visit →</button>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:.75s" onclick="launch(11)">
+      <div class="card-id">SIM · 011</div>
+      <div class="card-title">Crypto Checker</div>
+      <div class="card-desc">Simple Coinbase crypto checker. Scans for coins trading well below their 1-year high that have bounced back from similar dips before. For informational purposes only.</div>
+      <div class="card-foot">
+        <span class="badge badge-site">Live site ↗</span>
+        <button class="launch">Visit →</button>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:.82s" onclick="launch(12)">
+      <div class="card-id">SIM · 012</div>
+      <div class="card-title">SmartLight Control</div>
+      <div class="card-desc">Control your Bluetooth lights from your browser. Color, brightness and effects for the common LED strips and bulbs — no app required.</div>
+      <div class="card-foot">
+        <span class="badge badge-site">Live site ↗</span>
+        <button class="launch">Visit →</button>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:.89s" onclick="launch(13)">
+      <div class="card-id">SIM · 013</div>
+      <div class="card-title">MyColorTools</div>
+      <div class="card-desc">Point your camera at things (or load images) to see the color names, extract palettes, play color games and more. Sister site of Chroma Match Game.</div>
+      <div class="card-foot">
+        <span class="badge badge-site">Live site ↗</span>
+        <button class="launch">Visit →</button>
+      </div>
+    </div>
+
+    <div class="card secret c" style="animation-delay:.96s" onclick="launch(14)">
+      <div class="card-id">SIM · 014</div>
+      <div class="card-title">Intercepted</div>
+      <div class="card-desc">Unannounced, but already on the air. The carrier is strong, the payload is scrambled — and the decrypt has been stuck at 99% for a while now.</div>
+      <div class="card-foot">
+        <span class="badge badge-secret">Encrypted</span>
+        <button class="launch">Tune in →</button>
+      </div>
+    </div>
+
+    <div class="card secret" style="animation-delay:1.03s" onclick="launch(15)">
+      <div class="card-id">SIM · 015</div>
+      <div class="card-title" aria-label="Classified project"><span class="rd" style="width:5.2em"></span> <span class="rd" style="width:3.4em"></span></div>
+      <div class="card-desc">Top secret. What it is: <span class="rd" style="width:7em"></span>. When it lands: <span class="rd" style="width:4.5em"></span>. Clearance required.</div>
+      <div class="card-foot">
+        <span class="badge badge-secret">Classified</span>
+        <button class="launch">Peek →</button>
+      </div>
+    </div>
+
+    <div class="card secret b" style="animation-delay:1.10s" onclick="launch(16)">
+      <div class="card-id">SIM · 016</div>
+      <div class="card-title">Unidentified</div>
+      <div class="card-desc">Unannounced. No name, no screenshots, no hints — just a contact on the scope, a little closer with every sweep.</div>
+      <div class="card-foot">
+        <span class="badge badge-secret">Inbound</span>
+        <button class="launch">Track →</button>
       </div>
     </div>
 

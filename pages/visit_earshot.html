@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Earshot &mdash; Live Sound Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #04070b;
+    --panel-bg: rgba(6, 11, 17, 0.92);
+    --border: rgba(92, 200, 236, 0.16);
+    --accent: #5cc8ec;
+    --accent2: #f0a92a;
+    --accent3: #2596be;
+    --text: #c3d3de;
+    --text-dim: #5b6f7f;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    background: radial-gradient(ellipse at 50% 40%, rgba(37,150,190,0.07) 0%, var(--bg) 66%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #terrain { position: fixed; inset: 0; z-index: 0; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(92,200,236,0.026) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(92,200,236,0.026) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(92,200,236,0.12); backdrop-filter: blur(4px);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+
+  /* a live level meter, fed by the same signal that drives the terrain */
+  .meter { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 46px; margin-bottom: 20px; }
+  .meter i {
+    display: block; width: 5px; height: 100%; background: var(--accent); opacity: .85;
+    transform: scaleY(.06); transform-origin: bottom; transition: transform .09s linear, background-color .2s;
+  }
+  .meter i.hit { background: var(--accent2); }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #e9f2f8; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(92,200,236,0.22);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 31em; margin: 0 auto 30px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(92,200,236,0.05);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(92,200,236,0.4); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(18px, 3.4vw, 26px); letter-spacing: .02em; color: #e9f2f8; font-weight: 700; }
+  .cta-arrow { font-size: clamp(18px, 3.4vw, 24px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #0b3a4a; }
+  .cta:hover .cta-url   { color: #02131a; }
+  .cta:hover .cta-arrow { color: #02131a; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot span { color: var(--accent); }
+
+  @media (max-width: 480px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+    .meter { height: 36px; gap: 2px; }
+    .meter i { width: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="terrain"></canvas>
+<div id="grid"></div>
+
+<main class="card">
+  <div class="tag">// AUDIO &nbsp;&middot;&nbsp; <b>Live site</b></div>
+  <div class="meter" id="meter" aria-hidden="true"></div>
+  <h1>Earshot<br><span class="hl">see every sound.</span></h1>
+  <p class="lead">Point a microphone outdoors and watch birdsong, wind, traffic and insects rise out of a live <b>3D spectral terrain</b> &mdash; with a waveform, levels, a history timeline that marks when each sound happened, and experimental sound recognition you can teach.</p>
+  <a class="cta" href="https://earshot-app.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">earshot-app.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Needs a microphone &middot; listens only, never records<br>Opens in a new tab &nearr; &middot; a <span>Squimball Studios</span> project</div>
+</main>
+
+<script>
+'use strict';
+/* A scrolling spectral terrain: each row is one synthetic spectrum (low pitch left,
+   high pitch right), newest at the front, older rows receding toward the horizon.
+   Rows are painted far-to-near with an opaque skirt so nearer ridges hide farther
+   ones. Bins where a sound stands out of the background are overdrawn in amber,
+   the way Earshot marks a detected sound. */
+(function () {
+  const cvs = document.getElementById('terrain');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;
+
+  const ROWS = 58, BINS = 120, ROW_MS = 62;
+  const rows = Array.from({ length: ROWS }, () => ({ v: new Float32Array(BINS), m: new Uint8Array(BINS) }));
+  const KFAR = 1 / (1 + 2.4);            // perspective scale of the farthest row
+
+  function resize() {
+    W = cvs.width = Math.floor(innerWidth * dpr);
+    H = cvs.height = Math.floor(innerHeight * dpr);
+    cvs.style.width = innerWidth + 'px';
+    cvs.style.height = innerHeight + 'px';
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* -- the soundscape -- */
+  const notes = [];                      // active bird notes
+  let nextSong = 0, nextPass = 4000, pass = null;
+
+  // three loose "species": a mid trill, a falling whistle, a high tsip
+  const SPECIES = [
+    { f: [0.60, 0.67], sweep: 0.000, dur: [70, 110],  gap: 95,  n: [5, 9], amp: 0.62 },
+    { f: [0.71, 0.80], sweep: -0.070, dur: [170, 260], gap: 150, n: [2, 4], amp: 0.80 },
+    { f: [0.84, 0.91], sweep: 0.030, dur: [50, 80],   gap: 210, n: [3, 5], amp: 0.55 }
+  ];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function sing(now) {
+    const sp = SPECIES[(Math.random() * SPECIES.length) | 0];
+    const f0 = rnd(sp.f[0], sp.f[1]), count = Math.round(rnd(sp.n[0], sp.n[1]));
+    let t = now;
+    for (let i = 0; i < count; i++) {
+      const dur = rnd(sp.dur[0], sp.dur[1]);
+      notes.push({ t0: t, t1: t + dur, f0: f0, f1: f0 + sp.sweep, amp: sp.amp * rnd(0.75, 1) });
+      t += dur + sp.gap * rnd(0.8, 1.25);
+    }
+  }
+
+  function spectrum(row, now) {
+    const v = row.v, m = row.m, t = now * 0.001;
+    const gust = 0.16 + 0.12 * Math.sin(t * 0.31) * Math.sin(t * 0.17 + 1.3) + 0.05 * Math.sin(t * 1.9);
+
+    if (now >= nextSong) { sing(now); nextSong = now + rnd(500, 2100); }
+    if (!pass && now >= nextPass) pass = { t0: now, dur: rnd(3200, 4600), f: rnd(0.18, 0.30) };
+    let passAmp = 0;
+    if (pass) {
+      const p = (now - pass.t0) / pass.dur;
+      if (p >= 1) { pass = null; nextPass = now + rnd(8000, 15000); }
+      else passAmp = 0.52 * Math.pow(Math.sin(p * Math.PI), 2);
+    }
+    for (let i = notes.length - 1; i >= 0; i--) if (now > notes[i].t1) notes.splice(i, 1);
+
+    for (let i = 0; i < BINS; i++) {
+      const f = i / (BINS - 1);
+      let a = 0.03 + 0.03 * Math.random();                                    // noise floor
+      a += gust * Math.exp(-Math.pow(f / 0.17, 2)) * (0.72 + 0.28 * Math.random());   // wind rumble
+      a += 0.10 * Math.exp(-Math.pow((f - 0.955) / 0.012, 2)) * (0.6 + 0.4 * Math.sin(t * 57));   // insect drone
+      let loud = 0;
+      if (passAmp > 0) loud += passAmp * Math.exp(-Math.pow((f - pass.f) / 0.15, 2)) * (0.8 + 0.2 * Math.random());
+      for (let n = 0; n < notes.length; n++) {
+        const nt = notes[n];
+        if (now < nt.t0) continue;
+        const p = (now - nt.t0) / (nt.t1 - nt.t0);
+        const d = (f - (nt.f0 + (nt.f1 - nt.f0) * p)) / 0.011;
+        if (d > -4 && d < 4) loud += nt.amp * Math.sin(p * Math.PI) * Math.exp(-d * d);
+      }
+      v[i] = Math.min(1, a + loud);
+      m[i] = loud > 0.16 ? 1 : 0;
+    }
+  }
+
+  /* -- level meter in the card -- */
+  const meter = document.getElementById('meter');
+  const BARS = 30, bars = [];
+  for (let i = 0; i < BARS; i++) bars.push(meter.appendChild(document.createElement('i')));
+  function drawMeter(row) {
+    const per = BINS / BARS;
+    for (let b = 0; b < BARS; b++) {
+      let peak = 0, hit = 0;
+      for (let i = Math.floor(b * per), e = Math.floor((b + 1) * per); i < e; i++) {
+        if (row.v[i] > peak) peak = row.v[i];
+        hit |= row.m[i];
+      }
+      bars[b].style.transform = 'scaleY(' + Math.max(0.06, Math.min(1, peak * 1.25)).toFixed(3) + ')';
+      bars[b].className = hit ? 'hit' : '';
+    }
+  }
+
+  // a row's colour, feathered to nothing at both ends so ridges have no hard edge
+  function ends(x0, half, rgb, a) {
+    const g = ctx.createLinearGradient(x0, 0, x0 + half * 2, 0), c = 'rgba(' + rgb + ',' + a.toFixed(3) + ')';
+    g.addColorStop(0, 'rgba(' + rgb + ',0)'); g.addColorStop(0.09, c);
+    g.addColorStop(0.91, c); g.addColorStop(1, 'rgba(' + rgb + ',0)');
+    return g;
+  }
+
+  // pre-roll so the terrain is already full on arrival
+  let lastRow = performance.now();
+  for (let i = ROWS - 1; i >= 0; i--) spectrum(rows[i], lastRow - i * ROW_MS);
+
+  function frame(now) {
+    // feed new rows (catch up after a stall, but never more than a screenful)
+    let due = Math.min(ROWS, Math.floor((now - lastRow) / ROW_MS));
+    if (due > 0) {
+      lastRow = due === ROWS ? now : lastRow + due * ROW_MS;
+      while (due-- > 0) {
+        const row = rows.pop();
+        spectrum(row, lastRow - due * ROW_MS);
+        rows.unshift(row);
+      }
+      drawMeter(rows[0]);
+    }
+    const phase = (now - lastRow) / ROW_MS;       // 0..1 slide between row steps
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineJoin = 'round';
+    const hy = H * 0.33, fy = H * 1.03, cx = W / 2;
+
+    for (let r = ROWS - 1; r >= 0; r--) {
+      const row = rows[r], v = row.v, m = row.m;
+      const z = (r + phase) / (ROWS - 1);
+      if (z > 1) continue;
+      const k = 1 / (1 + z * 2.4);
+      const kn = (k - KFAR) / (1 - KFAR);          // 1 at the front .. 0 at the horizon
+      const y0 = hy + (fy - hy) * kn;
+      // the ground narrows less than true perspective would, so the far ridges
+      // still reach out past the card instead of bunching up behind it
+      const half = W * (0.43 + 0.23 * kn), amp = H * 0.26 * k;
+      const x0 = cx - half, dx = (half * 2) / (BINS - 1);
+      const fade = Math.min(1, (r + phase) / 2) * Math.min(1, (1 - z) * 5);
+
+      ctx.beginPath();
+      ctx.moveTo(x0, y0 - v[0] * amp);
+      for (let i = 1; i < BINS; i++) ctx.lineTo(x0 + i * dx, y0 - v[i] * amp);
+      // skirt: hides the rows behind this ridge
+      ctx.lineTo(x0 + half * 2, y0 + 3 * dpr); ctx.lineTo(x0, y0 + 3 * dpr); ctx.closePath();
+      ctx.fillStyle = ends(x0, half, '4,7,11', 0.88);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(x0, y0 - v[0] * amp);
+      for (let i = 1; i < BINS; i++) ctx.lineTo(x0 + i * dx, y0 - v[i] * amp);
+      ctx.strokeStyle = ends(x0, half, '92,200,236', (0.08 + 0.62 * kn) * fade);
+      ctx.lineWidth = (0.6 + 1.1 * kn) * dpr;
+      ctx.stroke();
+
+      // detected sound -> amber
+      let open = false;
+      ctx.beginPath();
+      for (let i = 0; i < BINS; i++) {
+        if (m[i]) {
+          const x = x0 + i * dx, y = y0 - v[i] * amp;
+          if (open) ctx.lineTo(x, y);
+          else { ctx.moveTo(x0 + Math.max(0, i - 1) * dx, y0 - v[Math.max(0, i - 1)] * amp); ctx.lineTo(x, y); open = true; }
+        } else if (open) { ctx.lineTo(x0 + i * dx, y0 - v[i] * amp); open = false; }
+      }
+      ctx.strokeStyle = ends(x0, half, '240,169,42', (0.30 + 0.65 * kn) * fade);
+      ctx.lineWidth = (0.9 + 1.5 * kn) * dpr;
+      ctx.stroke();
+    }
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else raf = requestAnimationFrame(frame);
+  });
+})();
+</script>
+</body>
+</html>

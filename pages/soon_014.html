@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intercepted &mdash; Coming Soon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06040c;
+    --panel-bg: rgba(10, 8, 20, 0.93);
+    --border: rgba(179, 136, 255, 0.18);
+    --accent: #b388ff;
+    --accent2: #5ef2ff;
+    --accent3: #ff5c8a;
+    --text: #d3cde6;
+    --text-dim: #6a6189;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop -- */
+  #band { position: fixed; inset: 0; z-index: 0; }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(179,136,255,0.13); backdrop-filter: blur(4px);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+
+  /* receiver readout: the frequency under the tracking cursor on the waterfall */
+  .rx { display: flex; justify-content: center; align-items: baseline; gap: 12px; font-family: var(--mono); margin-bottom: 12px; }
+  .rx b { font-weight: 400; font-size: clamp(24px, 5vw, 34px); letter-spacing: .06em; color: #f1ecff; text-shadow: 0 0 18px rgba(179,136,255,0.5); }
+  .rx span, .rx i { font-style: normal; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+
+  /* a decrypt that never lands: it stalls at 99%, then the key rotates */
+  .dec { max-width: 300px; margin: 0 auto 20px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); }
+  .dec-row { display: flex; justify-content: space-between; margin-bottom: 7px; }
+  .dec-row b { color: var(--accent2); font-weight: 400; }
+  .dec-bar { height: 3px; background: rgba(179,136,255,0.16); overflow: hidden; }
+  .dec-bar i { display: block; height: 100%; background: var(--accent2); box-shadow: 0 0 10px var(--accent2); transform: scaleX(0); transform-origin: left; }
+  .dec.hold .dec-row b { animation: blink .34s steps(2, jump-none) infinite; }
+  .dec.bad .dec-row, .dec.bad .dec-row b { color: var(--accent3); }
+  .dec.bad .dec-bar i { background: var(--accent3); box-shadow: 0 0 10px var(--accent3); }
+  @keyframes blink { from { opacity: 1; } to { opacity: .25; } }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #f1ecff; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(179,136,255,0.28);
+  }
+  h1 .hl { color: var(--accent2); text-shadow: 0 0 30px rgba(94,242,255,0.3); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 30em; margin: 0 auto 28px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; font: inherit; cursor: pointer;
+    border: 1px solid var(--accent); background: rgba(179,136,255,0.06);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(179,136,255,0.45); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(15px, 2.9vw, 22px); letter-spacing: .06em; color: #f1ecff; font-weight: 700; text-transform: uppercase; }
+  .cta:hover .cta-label { color: #3a2470; }
+  .cta:hover .cta-url   { color: #140a2e; }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted rgba(179,136,255,0.5); }
+  .foot a:hover { border-bottom-style: solid; }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+  }
+  @media (prefers-reduced-motion: reduce) { .dec.hold .dec-row b { animation: none; } }
+</style>
+</head>
+<body>
+
+<canvas id="band"></canvas>
+
+<main class="card" id="card">
+  <div class="tag">// SIM &middot; 014 &nbsp;&middot;&nbsp; <b>Encrypted</b></div>
+  <div class="rx" aria-hidden="true"><span>RX</span><b id="freq">1420.0000</b><i>MHz</i></div>
+  <div class="dec" id="dec" aria-hidden="true">
+    <div class="dec-row"><span id="state">Decrypting</span><b id="pct">0%</b></div>
+    <div class="dec-bar"><i id="bar"></i></div>
+  </div>
+  <h1>Signal<br><span class="hl">intercepted.</span></h1>
+  <p class="lead">Another unannounced project is already on the air. The carrier is strong, the payload is scrambled &mdash; and <b>every time we get close, the key rotates</b>.</p>
+  <button class="cta" id="tune" type="button">
+    <span class="cta-label">Receiver</span>
+    <span class="cta-url" id="answer" aria-live="polite">Tune in</span>
+  </button>
+  <div class="foot">Coming soon &middot; stay tuned<br><a href="../index.html" id="home">&larr; back to the open projects</a></div>
+</main>
+
+<script>
+'use strict';
+/* A receiver's waterfall the size of the page: each new line of spectrum is
+   drawn under the trace at the top and everything older scrolls down, so time
+   runs down the screen. Most of the band is ordinary traffic -- carriers,
+   keying, chirps, bursts. One channel is not: a block of data between two pilot
+   tones, which the cursor tracks. The card's decrypt creeps up to 99%, the key
+   rotates, and the channel hops to the other side of the card to start again.
+   "Tune in" does no better: a crash of static, and it has moved. */
+(function () {
+  const cvs = document.getElementById('band');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const MONO = "'Share Tech Mono', monospace";
+  const card = document.getElementById('card');
+  const CELL = 4, RATE = 26;                 // css px per waterfall cell, lines per second
+  const F0 = 1420.0, SPAN = 0.8;             // the slice of band across the page, MHz
+  const rnd = n => (Math.random() * n) | 0;
+
+  // waterfall colours, noise floor to strong carrier
+  const LUT = new Uint8Array(768);
+  for (let i = 0; i < 256; i++) {
+    const k = i / 255;
+    LUT[i * 3] = 7 + 190 * Math.pow(k, 1.8); LUT[i * 3 + 1] = 5 + 140 * Math.pow(k, 2.4); LUT[i * 3 + 2] = 14 + 241 * Math.pow(k, 1.1);
+  }
+
+  let W = 0, H = 0, TOP = 72, cols = 0, rowsN = 0, head = 0, frac = 0, n = 0;
+  const wf = document.createElement('canvas'), wg = wf.getContext('2d');   // one pixel per cell, written as a ring of lines
+  let img = null, amp = null, sig = null, trace = null, strace = null, fade = null;
+  let stations = [];
+  const S = { nc: 8, w: 35, side: 1, home: 0, x: 0, a: 1, bits: 0, pre: 0, mute: 0 };   // the channel that matters
+  let cur = 0, crash = 0;                    // tracking cursor (css px); static, 0..1
+
+  function place() {                         // park the channel beside the card, where the card cannot hide it
+    const gut = W / 2 - card.offsetWidth / 2, bw = S.w * CELL;
+    const px = gut > bw + 40 ? bw / 2 + 16 + Math.random() * (gut - bw - 36)
+                             : W * (0.16 + Math.random() * 0.2);       // no gutter: it still shows above and below
+    S.home = (S.side < 0 ? px : W - px) / CELL;
+  }
+  function hop(quiet) { S.side = -S.side; place(); S.a = 0; S.mute = quiet; S.pre = 10; }
+
+  function layout() {
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    TOP = H < 560 ? 52 : 72;
+    cols = Math.ceil(W / CELL); rowsN = Math.ceil((H - TOP) / CELL) + 2;
+    wf.width = cols; wf.height = rowsN;
+    img = wg.createImageData(cols, 1);
+    for (let p = 3; p < img.data.length; p += 4) img.data[p] = 255;
+    amp = new Float32Array(cols); sig = new Float32Array(cols);
+    trace = new Float32Array(cols); strace = new Float32Array(cols);
+
+    const KINDS = ['cw', 'cw', 'key', 'key', 'fsk', 'saw', 'burst'];
+    const count = Math.max(4, Math.min(22, Math.round(cols / 26)));
+    stations = Array.from({ length: count }, (_, i) => ({
+      kind: KINDS[rnd(KINDS.length)], x: (i + 0.15 + 0.7 * Math.random()) * cols / count,
+      a: 0.3 + Math.random() * 0.5, fr: 0.004 + Math.random() * 0.02, ph: Math.random() * 6.28,
+      on: Math.random() < 0.5, left: rnd(60), off: 0,
+      w: 8 + rnd(18), span: 14 + rnd(30), slope: 0.35 + Math.random() * 0.9
+    }));
+
+    S.nc = W / 2 - card.offsetWidth / 2 > 200 ? 8 : 5; S.w = S.nc * 4 + 3;
+    place(); S.a = 1; S.mute = 0; S.pre = 0; cur = S.home * CELL; crash = 0;
+    head = 0; for (let i = 0; i < rowsN; i++) line();       // start with a screenful of history
+
+    fade = ctx.createLinearGradient(0, H * 0.45, 0, H);
+    fade.addColorStop(0, 'rgba(6,4,12,0)'); fade.addColorStop(1, 'rgba(6,4,12,0.88)');
+  }
+
+  function put(x, a) {                       // a one-cell-wide tone at a fractional position
+    const i = Math.floor(x), f = x - i;
+    if (i >= 0 && i < cols) amp[i] += a * (1 - f);
+    if (i >= -1 && i + 1 < cols) amp[i + 1] += a * f;
+  }
+  function set(i, v) { if (i >= 0 && i < cols) sig[i] = v * S.a; }
+
+  function line() {                          // work out the next line of spectrum and write it into the ring
+    n++;
+    amp.fill(0); sig.fill(0);
+
+    for (const st of stations) {
+      const a = st.a * (0.62 + 0.38 * Math.sin(n * st.fr + st.ph));         // slow fading
+      if (st.kind !== 'cw' && --st.left <= 0) {
+        if (st.kind === 'fsk') { st.off = Math.random() < 0.5 ? 0 : 3; st.left = 2 + rnd(4); }
+        else {
+          st.on = !st.on;
+          st.left = st.kind === 'key' ? (Math.random() < 0.35 ? 9 : 3)
+                  : st.kind === 'saw' ? (st.on ? 50 + rnd(120) : 60 + rnd(240))
+                  : (st.on ? 5 + rnd(16) : 40 + rnd(200));
+        }
+      }
+      if (st.kind === 'cw') put(st.x + 0.7 * Math.sin(n * st.fr * 3 + st.ph), a);
+      else if (st.kind === 'fsk') put(st.x + st.off, a);
+      else if (!st.on) continue;
+      else if (st.kind === 'key') put(st.x, a);
+      else if (st.kind === 'saw') put(st.x + (n * st.slope) % st.span, a);
+      else for (let k = 0; k < st.w; k++) put((st.x | 0) + k, a * (0.3 + 0.7 * Math.random()));
+    }
+
+    // the channel: two pilot tones with S.nc data carriers between them
+    if (S.mute > 0) S.mute--; else S.a += (1 - S.a) * 0.5;
+    S.x = S.home + 1.5 * Math.sin(n * 0.035);
+    const L = Math.round(S.x - S.w / 2);
+    for (let i = Math.max(0, L - 2); i < Math.min(cols, L + S.w + 2); i++) amp[i] *= 1 - 0.85 * S.a;   // it owns its slice of band
+    if (S.a > 0.02) {
+      let all = n % 40 === 0, none = n % 40 === 1;                           // frame sync
+      if (S.pre > 0) { S.pre--; all = S.pre !== 4 && S.pre !== 5; none = !all; }   // preamble after a hop
+      if (n % 2 === 0) S.bits = rnd(1 << S.nc);
+      set(L, 0.9); set(L + S.w - 1, 0.9);
+      for (let c = 0; c < S.nc; c++) {
+        if (none || !(all || (S.bits >> c) & 1)) continue;
+        const v = 0.7 + 0.3 * Math.random();
+        for (let k = 0; k < 3; k++) set(L + 2 + c * 4 + k, v);
+      }
+    }
+
+    crash = crash > 0.01 ? crash * 0.87 : 0;
+    const d = img.data;
+    for (let x = 0, p = 0; x < cols; x++, p += 4) {
+      const s = sig[x];
+      const v = Math.min(1, amp[x] + 0.03 + 0.12 * Math.random() * Math.random()
+                          + 0.03 * (1 + Math.sin(x * 0.045 + n * 0.011))
+                          + crash * (0.08 + 0.6 * Math.random()));
+      const q = ((v * 255) | 0) * 3;
+      d[p] = LUT[q] + 94 * s; d[p + 1] = LUT[q + 1] + 242 * s; d[p + 2] = LUT[q + 2] + 255 * s;
+      trace[x] += (v - trace[x]) * 0.4; strace[x] += (s - strace[x]) * 0.4;
+    }
+    head = (head + rowsN - 1) % rowsN;
+    wg.putImageData(img, 0, head);
+  }
+
+  window.addEventListener('resize', layout);
+  layout();
+
+  /* -- the decrypt in the card -- */
+  const elFreq = document.getElementById('freq'), elPct = document.getElementById('pct'), elBar = document.getElementById('bar');
+  const elState = document.getElementById('state'), elDec = document.getElementById('dec');
+  let mode = 'lock', t0 = 0, pct = 0, shown = -1, freq = '', nextFreq = 0;
+  function go(m, now, label, cls) { mode = m; t0 = now; elState.textContent = label; elDec.className = 'dec' + (cls ? ' ' + cls : ''); }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const age = (now - t0) / 1000;
+
+    if (mode === 'lock') {                   // quick at first, slower the closer it gets
+      pct += dt * (2.4 + 26 * Math.pow(1 - pct / 99, 1.5));
+      if (pct >= 99) { pct = 99; go('stall', now, 'Decrypting', 'hold'); }
+    } else if (mode === 'stall') {
+      if (age > 1.3) { hop(7); go('lost', now, 'Key rotated', 'bad'); }
+    } else {
+      pct *= Math.exp(-dt * 5);
+      if (age > 1.7) { pct = 0; go('lock', now, 'Decrypting'); }
+    }
+    const p = Math.round(pct);
+    if (p !== shown) { shown = p; elPct.textContent = p + '%'; }
+    elBar.style.transform = 'scaleX(' + (pct / 100).toFixed(3) + ')';
+
+    frac += dt * RATE;
+    while (frac >= 1) { frac -= 1; line(); }
+    cur += (S.x * CELL - cur) * (1 - Math.exp(-dt * 4));
+    if (now >= nextFreq) {
+      nextFreq = now + 90;
+      freq = (F0 + (cur / W) * SPAN + (Math.random() - 0.5) * 0.0005).toFixed(4);
+      elFreq.textContent = freq;
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    // the waterfall: the ring unrolled, newest line first
+    ctx.imageSmoothingEnabled = false;
+    const y0 = Math.round((TOP + (frac - 1) * CELL) * dpr) / dpr, a = rowsN - head;
+    ctx.drawImage(wf, 0, head, cols, a, 0, y0, cols * CELL, a * CELL);
+    if (head) ctx.drawImage(wf, 0, 0, cols, head, 0, y0 + a * CELL, cols * CELL, head * CELL);
+    ctx.fillStyle = fade; ctx.fillRect(0, H * 0.45, W, H * 0.55);
+
+    // tracking cursor: guides down both edges of the channel, and its tag at the bottom
+    const locked = mode !== 'lost';
+    const half = (S.w * CELL) / 2 + 6, gx = Math.round(cur) + 0.5;
+    ctx.lineWidth = 1; ctx.strokeStyle = locked ? 'rgba(94,242,255,0.32)' : 'rgba(255,92,138,0.4)';
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath();
+    ctx.moveTo(gx - half, TOP); ctx.lineTo(gx - half, H - 64);
+    ctx.moveTo(gx + half, TOP); ctx.lineTo(gx + half, H - 64);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '11px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const l1 = locked ? 'CH 014  ENCRYPTED' : 'CH 014  SEARCHING', l2 = freq + ' MHZ';
+    const pw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 22;
+    const px = Math.round(Math.max(8, Math.min(W - pw - 8, cur - pw / 2))), py = H - 58;
+    ctx.fillStyle = 'rgba(6,4,12,0.84)'; ctx.fillRect(px, py, pw, 42);
+    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, 41);
+    ctx.fillStyle = locked ? '#5ef2ff' : '#ff5c8a'; ctx.fillText(l1, px + pw / 2, py + 15);
+    ctx.fillStyle = 'rgba(211,205,230,0.62)'; ctx.fillText(l2, px + pw / 2, py + 29);
+
+    // the strip above the waterfall: frequency scale, and the newest line as a trace
+    ctx.fillStyle = '#07050e'; ctx.fillRect(0, 0, W, TOP);
+    const step = (W * 0.01) / SPAN, every = Math.ceil(84 / (step * 5)) * 5;      // px per 10 kHz; label spacing
+    ctx.strokeStyle = 'rgba(179,136,255,0.34)';
+    ctx.beginPath();
+    for (let k = 0; k <= SPAN * 100; k++) {
+      if (k % 5 && step < 7) continue;
+      const x = Math.round(k * step) + 0.5;
+      ctx.moveTo(x, 0); ctx.lineTo(x, k % 5 ? 3 : 7);
+    }
+    ctx.moveTo(0, TOP - 0.5); ctx.lineTo(W, TOP - 0.5);
+    ctx.stroke();
+    ctx.font = '10px ' + MONO; ctx.fillStyle = 'rgba(179,136,255,0.5)';
+    for (let k = every; k < SPAN * 100; k += every) ctx.fillText((F0 + k / 100).toFixed(2), k * step, 15);
+
+    const base = TOP - 5, tall = TOP - 30;
+    ctx.beginPath(); ctx.moveTo(0, base - Math.min(1, trace[0]) * tall);
+    for (let x = 0; x < cols; x++) ctx.lineTo((x + 0.5) * CELL, base - Math.min(1, trace[x] + strace[x]) * tall);
+    ctx.strokeStyle = 'rgba(179,136,255,0.85)'; ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.lineTo(cols * CELL, base + 5); ctx.lineTo(0, base + 5);
+    ctx.fillStyle = 'rgba(179,136,255,0.10)'; ctx.fill();
+    const L = Math.round(S.x - S.w / 2);     // the channel's part of the trace, in its own colour
+    ctx.beginPath();
+    for (let x = Math.max(0, L - 1); x <= Math.min(cols - 1, L + S.w); x++) ctx.lineTo((x + 0.5) * CELL, base - Math.min(1, trace[x] + strace[x]) * tall);
+    ctx.strokeStyle = '#5ef2ff'; ctx.lineWidth = 1.3; ctx.shadowColor = '#5ef2ff'; ctx.shadowBlur = 8;
+    ctx.globalAlpha = Math.min(1, S.a + 0.15); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+
+  /* -- tune in -- */
+  const btn = document.getElementById('tune'), answer = document.getElementById('answer');
+  const REPLY = ['Just static', 'Wrong channel', 'Almost had it', 'It moved', 'Key rejected'];
+  let tries = 0, t1 = 0, t2 = 0;
+  btn.addEventListener('click', () => {
+    crash = 1; hop(24);
+    go('lost', performance.now(), 'Retuning', 'bad');
+    answer.textContent = 'Tuning...';
+    clearTimeout(t1); clearTimeout(t2);
+    t1 = setTimeout(() => { answer.textContent = REPLY[tries++ % REPLY.length]; }, 1500);
+    t2 = setTimeout(() => { answer.textContent = 'Tune in'; }, 3600);
+  });
+
+  /* -- inside the site shell, "back" switches frames instead of loading the shell into this one -- */
+  document.getElementById('home').addEventListener('click', e => {
+    if (window.parent === window) return;
+    e.preventDefault();
+    window.parent.postMessage({ sq: 'show', page: 0 }, '*');
+  });
+})();
+</script>
+</body>
+</html>

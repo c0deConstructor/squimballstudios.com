@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartLight Control &mdash; Bluetooth Lights in the Browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05060a;
+    --panel-bg: rgba(10, 11, 18, 0.93);
+    --border: rgba(255, 46, 136, 0.18);
+    --accent: #ff2e88;
+    --accent2: #8fb8ff;
+    --accent3: #3ddc97;
+    --text: #d2d5e2;
+    --text-dim: #6a6f85;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    background: radial-gradient(ellipse at 50% 42%, rgba(255,46,136,0.05) 0%, var(--bg) 66%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #strip { position: fixed; inset: 0; z-index: 0; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(255,46,136,0.12); backdrop-filter: blur(4px);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+
+  /* scene picker: these really do drive the LED strip running round the page */
+  .remote { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; }
+  .link { position: relative; width: 30px; height: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--accent2); }
+  .link svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .link::before, .link::after {
+    content: ''; position: absolute; inset: 0; border: 1px solid var(--accent2); border-radius: 50%; opacity: 0;
+    animation: ping 2.8s ease-out infinite;
+  }
+  .link::after { animation-delay: 1.4s; }
+  @keyframes ping { 0% { transform: scale(.55); opacity: .7; } 100% { transform: scale(1.7); opacity: 0; } }
+  .scenes { display: flex; gap: 9px; }
+  .scenes button {
+    width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.14); padding: 0; cursor: pointer;
+    background: var(--c); box-shadow: 0 0 0 0 transparent; transition: transform .15s, box-shadow .2s, border-color .2s;
+  }
+  .scenes button:hover { transform: scale(1.14); }
+  .scenes button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .scenes button[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 16px 1px var(--g, var(--c)); }
+  .now { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 18px; min-height: 1.5em; }
+  .now b { color: #fff; font-weight: 400; }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(29px, 5.9vw, 54px); color: #f4f5fb; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(255,46,136,0.24);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 31em; margin: 0 auto 30px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(255,46,136,0.06);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(255,46,136,0.45); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(12.5px, 2.35vw, 18.5px); letter-spacing: 0; color: #f4f5fb; font-weight: 700; }
+  .cta-arrow { font-size: clamp(17px, 3vw, 22px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #4d0825; }
+  .cta:hover .cta-url   { color: #1c020d; }
+  .cta:hover .cta-arrow { color: #1c020d; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot span { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; padding: 14px 16px; }
+    .tag { letter-spacing: .22em; }
+    .remote { gap: 8px; }
+    .scenes { gap: 7px; }
+    .scenes button { width: 24px; height: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="strip"></canvas>
+<div id="grid"></div>
+
+<main class="card">
+  <div class="tag">// BLUETOOTH &nbsp;&middot;&nbsp; <b>Live site</b></div>
+  <div class="remote">
+    <div class="link" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg></div>
+    <div class="scenes" id="scenes" role="group" aria-label="Preview a lighting scene on this page">
+      <button type="button" data-scene="rainbow" aria-pressed="true"  aria-label="Rainbow chase" title="Rainbow chase"
+              style="--c: conic-gradient(#ff2e88, #ffb547, #3ddc97, #4cc3ff, #b06bff, #ff2e88); --g: #b06bff"></button>
+      <button type="button" data-scene="comet"   aria-pressed="false" aria-label="Pink comets"   title="Pink comets"   style="--c: #ff2e88"></button>
+      <button type="button" data-scene="breathe" aria-pressed="false" aria-label="Ice breathe"   title="Ice breathe"   style="--c: #4cc3ff"></button>
+      <button type="button" data-scene="sparkle" aria-pressed="false" aria-label="Mint sparkle"  title="Mint sparkle"  style="--c: #3ddc97"></button>
+      <button type="button" data-scene="candle"  aria-pressed="false" aria-label="Candle flicker" title="Candle flicker" style="--c: #ffb547"></button>
+      <button type="button" data-scene="wave"    aria-pressed="false" aria-label="Violet wave"   title="Violet wave"   style="--c: #b06bff"></button>
+    </div>
+  </div>
+  <div class="now" aria-live="polite">Scene: <b id="now">Rainbow chase</b> &middot; try one</div>
+  <h1>SmartLight Control<br><span class="hl">no app required.</span></h1>
+  <p class="lead">Control Bluetooth lights straight from a browser tab. Pair an LED strip or bulb and set its color, brightness and effects &mdash; with profiles for the common controllers: <b>ELK-BLEDOM</b>, MELK, Govee, Triones, Zengge, SP110E pixel strips, Bluetooth Hue bulbs and more.</p>
+  <a class="cta" href="https://lightcontrol.squimballstudios.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">lightcontrol.squimballstudios.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Needs a Web Bluetooth browser &middot; Chrome or Edge<br>Opens in a new tab &nearr; &middot; a <span>Squimball Studios</span> project</div>
+</main>
+
+<script>
+'use strict';
+/* An addressable LED strip stuck round the edge of the page. Each scene is a tiny
+   per-pixel shader -- (index, time) -> hue + brightness -- like the effects a strip
+   controller runs. The buttons in the card switch scenes, cross-fading between them. */
+(function () {
+  const cvs = document.getElementById('strip');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0;
+  let leds = [];                           // {x, y, ph} in CSS px, clockwise from the top-left corner
+
+  /* -- glow sprites, one per 6-degree hue step -- */
+  const HSTEP = 6, SPRITES = [];
+  function sprite(h) {
+    const k = ((Math.round(h / HSTEP) % (360 / HSTEP)) + 360 / HSTEP) % (360 / HSTEP);
+    if (SPRITES[k]) return SPRITES[k];
+    const n = 64, c = document.createElement('canvas'), hue = k * HSTEP;
+    c.width = c.height = n;
+    const g = c.getContext('2d'), grd = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    grd.addColorStop(0.00, 'hsla(' + hue + ',100%,90%,1)');
+    grd.addColorStop(0.10, 'hsla(' + hue + ',100%,64%,0.92)');
+    grd.addColorStop(0.36, 'hsla(' + hue + ',100%,56%,0.24)');
+    grd.addColorStop(0.60, 'hsla(' + hue + ',100%,54%,0.085)');     // long soft tail: a straight
+    grd.addColorStop(0.82, 'hsla(' + hue + ',100%,52%,0.02)');      // ramp to zero leaves a visible rim
+    grd.addColorStop(1.00, 'hsla(' + hue + ',100%,50%,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, n, n);
+    return (SPRITES[k] = c);
+  }
+
+  /* -- scenes: write hue (deg) into `out.h` and brightness 0..1 into `out.b` -- */
+  const SCENES = {
+    rainbow: (i, n, t, p, o) => { o.h = (i / n) * 720 + t * 70; o.b = 0.60 + 0.40 * Math.sin(i * 0.5 - t * 4); },
+    comet:   (i, n, t, p, o) => {
+      let b = 0.07;
+      for (let k = 0; k < 4; k++) {
+        const head = (t * 46 + (k * n) / 4) % n, d = (head - i + n) % n;      // LEDs behind the head
+        b += Math.exp(-d / 9);
+      }
+      o.h = 334; o.b = Math.min(1, b);
+    },
+    breathe: (i, n, t, p, o) => { o.h = 198; o.b = 0.14 + 0.86 * Math.pow(0.5 + 0.5 * Math.sin(t * 1.5 + i * 0.012), 1.6); },
+    sparkle: (i, n, t, p, o) => { o.h = 154; o.b = 0.12 + 0.88 * Math.pow(Math.max(0, Math.sin(t * (1.1 + p * 2.3) + p * 40)), 9); },
+    candle:  (i, n, t, p, o) => { o.h = 34;  o.b = 0.58 + 0.24 * Math.sin(t * 7.3 + p * 31) * Math.sin(t * 3.1 + p * 17) + 0.16 * Math.sin(t * 13.7 + p * 5); },
+    wave:    (i, n, t, p, o) => { o.h = 272 + 26 * Math.sin(i * 0.07 + t * 0.9); o.b = 0.14 + 0.86 * Math.pow(0.5 + 0.5 * Math.sin(i * 0.17 - t * 2.6), 2); }
+  };
+  let scene = 'rainbow', prev = 'rainbow', mix = 1;      // mix: 0 = all prev .. 1 = all scene
+
+  function resize() {
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+
+    // lay the strip along a rounded rectangle just inside the viewport
+    const m = Math.max(10, Math.min(22, Math.min(W, H) * 0.028));
+    const w = W - 2 * m, h = H - 2 * m, r = Math.min(30, w / 4, h / 4);
+    const sx = w - 2 * r, sy = h - 2 * r, arc = (Math.PI / 2) * r;
+    const total = 2 * (sx + sy) + 4 * arc;
+    const n = Math.max(24, Math.round(total / 19));
+    leds = [];
+    for (let i = 0; i < n; i++) {
+      let d = (i / n) * total, x, y;
+      const seg = [sx, arc, sy, arc, sx, arc, sy, arc];
+      let s = 0;
+      while (d > seg[s]) { d -= seg[s]; s++; }
+      const a = d / r;                                   // angle travelled, on the arc segments
+      if      (s === 0) { x = m + r + d;                    y = m; }
+      else if (s === 1) { x = W - m - r + Math.sin(a) * r;  y = m + r - Math.cos(a) * r; }
+      else if (s === 2) { x = W - m;                        y = m + r + d; }
+      else if (s === 3) { x = W - m - r + Math.cos(a) * r;  y = H - m - r + Math.sin(a) * r; }
+      else if (s === 4) { x = W - m - r - d;                y = H - m; }
+      else if (s === 5) { x = m + r - Math.sin(a) * r;      y = H - m - r + Math.cos(a) * r; }
+      else if (s === 6) { x = m;                            y = H - m - r - d; }
+      else              { x = m + r - Math.cos(a) * r;      y = m + r - Math.sin(a) * r; }
+      leds.push({ x: x, y: y, ph: Math.random() });
+    }
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* -- scene buttons -- */
+  const now = document.getElementById('now');
+  document.getElementById('scenes').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.dataset.scene === scene) return;
+    for (const b of btn.parentNode.children) b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+    prev = scene; scene = btn.dataset.scene; mix = 0;
+    now.textContent = btn.title;
+  });
+
+  const A = { h: 0, b: 0 }, B = { h: 0, b: 0 };
+  function paint(led, h, b, wash, core) {
+    if (b <= 0.004) return;
+    const img = sprite(h);
+    ctx.globalAlpha = Math.min(1, b * 0.10);                       // light thrown on the wall
+    ctx.drawImage(img, led.x - wash, led.y - wash, wash * 2, wash * 2);
+    ctx.globalAlpha = Math.min(1, b);                              // the emitter itself
+    ctx.drawImage(img, led.x - core, led.y - core, core * 2, core * 2);
+  }
+
+  let last = performance.now();
+  function frame(t0) {
+    const dt = Math.min(0.05, (t0 - last) / 1000); last = t0;
+    const t = t0 / 1000, n = leds.length;
+    mix = Math.min(1, mix + dt / 0.55);
+    const fa = SCENES[prev], fb = SCENES[scene];
+    const wash = Math.max(70, Math.min(W, H) * 0.15), core = 13;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < n; i++) {
+      const led = leds[i];
+      fb(i, n, t, led.ph, B);
+      if (mix < 1) { fa(i, n, t, led.ph, A); paint(led, A.h, A.b * (1 - mix), wash, core); }
+      paint(led, B.h, B.b * mix, wash, core);
+    }
+    // the unlit housings, so the strip still reads as a strip where it is dark
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.16; ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < n; i++) ctx.fillRect(leds[i].x - 1, leds[i].y - 1, 2, 2);
+    ctx.globalAlpha = 1;
+    raf = requestAnimationFrame(frame);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

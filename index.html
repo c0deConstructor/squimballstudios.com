@@ -43,7 +43,7 @@
 
   .pg-btn {
     display: flex; align-items: center; justify-content: center;
-    width: 22px; height: 22px;
+    width: 22px; height: 22px; flex-shrink: 0;
     border: 1px solid var(--border);
     background: transparent; color: var(--muted);
     font-family: inherit; font-size: 10px; font-weight: 600;
@@ -85,6 +85,15 @@
 
   .sep    { width: 1px; height: 16px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
   .spacer { flex: 1; }
+
+  /* Narrow screens: the bar scrolls sideways instead of crushing the page buttons.
+     (Costs the hover tooltips, which overflow clips -- they are no use on touch anyway.) */
+  @media (max-width: 900px) {
+    #topbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+    #topbar::-webkit-scrollbar { display: none; }
+    #topbar > * { flex-shrink: 0; }
+    .spacer { min-width: 6px; }
+  }
 
   .icon-btn {
     display: flex; align-items: center; justify-content: center;
@@ -250,13 +259,22 @@
   <div class="sep"></div>
   <button class="pg-btn" data-tip="Gravity Simulator"   onclick="show(1)">1</button>
   <button class="pg-btn" data-tip="Earthquake Animator" onclick="show(2)">2</button>
-  <button class="pg-btn" data-tip="Solar Flare Map"     onclick="show(3)">3</button>
+  <button class="pg-btn" data-tip="&pi; Rider"          onclick="show(3)">3</button>
   <button class="pg-btn" data-tip="Periodic Table"      onclick="show(4)">4</button>
   <button class="pg-btn" data-tip="PIT Game"            onclick="show(5)">5</button>
   <button class="pg-btn" data-tip="Wildlife Globe"      onclick="show(6)">6</button>
   <button class="pg-btn" data-tip="Orbit Simulator"     onclick="show(7)">7</button>
   <button class="pg-btn" data-tip="Chroma Match Game"   onclick="show(8)">8</button>
-  <button class="pg-btn" data-tip="Firework Randomizer" onclick="show(9)" id="star-btn">&#9733;<i class="spk"></i></button>
+  <button class="pg-btn" data-tip="Earshot"             onclick="show(9)">9</button>
+  <button class="pg-btn" data-tip="Drive"               onclick="show(10)">10</button>
+  <button class="pg-btn" data-tip="Crypto Checker"      onclick="show(11)">11</button>
+  <button class="pg-btn" data-tip="SmartLight Control"  onclick="show(12)">12</button>
+  <button class="pg-btn" data-tip="MyColorTools"        onclick="show(13)">13</button>
+  <button class="pg-btn" data-tip="Intercepted"         onclick="show(14)">14</button>
+  <button class="pg-btn" data-tip="Classified"          onclick="show(15)">15</button>
+  <button class="pg-btn" data-tip="Unidentified"        onclick="show(16)">16</button>
+  <!-- the star stays last: buttons and frames pair up by position, so keep both lists in the same order -->
+  <button class="pg-btn" data-tip="Firework Randomizer" onclick="show(17)" id="star-btn">&#9733;<i class="spk"></i></button>
   <div class="sep"></div>
   <button class="icon-btn" id="fs-btn" data-tip="Fullscreen" onclick="toggleFullscreen()">
     <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
@@ -377,13 +395,21 @@
   <iframe class="page-frame active" id="frame-0" data-src="pages/home.html" src=""                         title="Home"></iframe>
   <iframe class="page-frame"        id="frame-1" data-src="pages/gravity_simulator1.html"  src=""          title="Gravity Simulator 1"></iframe>
   <iframe class="page-frame"        id="frame-2" data-src="pages/moved_quakes.html"           src=""          title="Earthquake Animator"></iframe>
-  <iframe class="page-frame"        id="frame-3" data-src="pages/solar_flare_map_gl.html"  src=""          title="Solar Flare Map"></iframe>
+  <iframe class="page-frame"        id="frame-3" data-src="pages/visit_pirider.html"       src=""          title="&pi; Rider"></iframe>
   <iframe class="page-frame"        id="frame-4" data-src="pages/moved_periodic.html"      src=""          title="Periodic Table"></iframe>
   <iframe class="page-frame"        id="frame-5" data-src="pages/pit_game.html"              src=""          title="PIT Game"></iframe>
   <iframe class="page-frame"        id="frame-6" data-src="pages/wildlife_globe.html"         src=""          title="Wildlife Globe"></iframe>
   <iframe class="page-frame"        id="frame-7" data-src="pages/orbit_simulator.html"        src=""          title="Orbit Simulator"></iframe>
   <iframe class="page-frame"        id="frame-8" data-src="pages/moved_chroma.html"          src=""          title="Chroma Match"></iframe>
-  <iframe class="page-frame"        id="frame-9" data-src="pages/moved_fireworks.html"      src=""          title="Firework Randomizer"></iframe>
+  <iframe class="page-frame"        id="frame-9"  data-src="pages/visit_earshot.html"       src=""          title="Earshot"></iframe>
+  <iframe class="page-frame"        id="frame-10" data-src="pages/visit_drive.html"         src=""          title="Drive"></iframe>
+  <iframe class="page-frame"        id="frame-11" data-src="pages/visit_cryptocheck.html"   src=""          title="Crypto Checker"></iframe>
+  <iframe class="page-frame"        id="frame-12" data-src="pages/visit_lightcontrol.html"  src=""          title="SmartLight Control"></iframe>
+  <iframe class="page-frame"        id="frame-13" data-src="pages/visit_mycolortools.html"  src=""          title="MyColorTools"></iframe>
+  <iframe class="page-frame"        id="frame-14" data-src="pages/soon_014.html"            src=""          title="Intercepted (coming soon)"></iframe>
+  <iframe class="page-frame"        id="frame-15" data-src="pages/soon_015.html"            src=""          title="Classified (coming soon)"></iframe>
+  <iframe class="page-frame"        id="frame-16" data-src="pages/soon_016.html"            src=""          title="Unidentified (coming soon)"></iframe>
+  <iframe class="page-frame"        id="frame-17" data-src="pages/moved_fireworks.html"     src=""          title="Firework Randomizer"></iframe>
 </main>
 
 <script>
@@ -409,6 +435,7 @@
     const f = frames[current];
     f.src = f.dataset.src + '?v=' + Date.now();
     pgBtns[current].classList.add('active');
+    pgBtns[current].scrollIntoView({ block: 'nearest', inline: 'nearest' });   // keep it in view when the bar scrolls (narrow screens)
     f.classList.add('active');
     document.getElementById('placeholder').style.display = 'none';
     history.replaceState(null, '', idx === 0 ? location.pathname : '?p=' + idx);
