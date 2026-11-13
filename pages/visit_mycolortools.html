@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyColorTools &mdash; Live Color Identifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c11;
+    --panel-bg: rgba(12, 14, 21, 0.94);
+    --border: rgba(255, 255, 255, 0.13);
+    --accent: #6ea8fe;
+    --accent2: #ff5c5c;
+    --accent3: #6ee7a0;
+    --text: #d5d9e4;
+    --text-dim: #6b7385;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #scene { position: fixed; inset: 0; z-index: 0; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(0,0,0,0.55); backdrop-filter: blur(10px) saturate(1.1);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  .tag b { color: var(--accent3); font-weight: 400; }
+
+  /* the palette the roaming picker has pulled out of the backdrop so far */
+  .palette { display: flex; justify-content: center; gap: 8px; margin-bottom: 8px; }
+  .chip { width: 62px; }
+  .chip i {
+    display: block; height: 34px; border-radius: 8px; background: var(--c, rgba(255,255,255,0.05));
+    border: 1px solid rgba(255,255,255,0.14); transition: background-color .45s ease;
+  }
+  .chip.new i { animation: pop .45s cubic-bezier(.2,.8,.3,1.3); }
+  @keyframes pop { from { transform: scale(.6); } to { transform: none; } }
+  .chip span { display: block; margin-top: 5px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .05em; color: var(--text-dim); }
+  .now { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 18px; min-height: 1.5em; }
+  .now b { color: #fff; font-weight: 400; }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #f2f4fa; margin-bottom: 18px;
+  }
+  /* the tagline wears the site's own swatch colors */
+  h1 .hl {
+    background: linear-gradient(90deg, #ff5c5c, #ffb347 22%, #ffe66d 40%, #6ee7a0 58%, #6ea8fe 78%, #a78bfa);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 31em; margin: 0 auto 30px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(110,168,254,0.06);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(110,168,254,0.45); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(18px, 3.4vw, 26px); letter-spacing: .02em; color: #f2f4fa; font-weight: 700; }
+  .cta-arrow { font-size: clamp(18px, 3.4vw, 24px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #12305c; }
+  .cta:hover .cta-url   { color: #050f20; }
+  .cta:hover .cta-arrow { color: #050f20; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot span { color: var(--accent); }
+  .foot a { color: var(--accent3); text-decoration: none; border-bottom: 1px dotted rgba(110,231,160,0.5); }
+  .foot a:hover { border-bottom-style: solid; }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+    .palette { gap: 5px; }
+    .chip { width: 50px; }
+    .chip i { height: 28px; }
+    .chip span { font-size: 8.5px; letter-spacing: 0; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+<div id="grid"></div>
+
+<main class="card">
+  <div class="tag">// COLOR &nbsp;&middot;&nbsp; <b>Live site</b></div>
+  <div class="palette" id="palette" aria-hidden="true">
+    <div class="chip"><i></i><span>&nbsp;</span></div>
+    <div class="chip"><i></i><span>&nbsp;</span></div>
+    <div class="chip"><i></i><span>&nbsp;</span></div>
+    <div class="chip"><i></i><span>&nbsp;</span></div>
+    <div class="chip"><i></i><span>&nbsp;</span></div>
+  </div>
+  <div class="now" aria-hidden="true">Reading: <b id="now">&nbsp;</b></div>
+  <h1>MyColorTools<br><span class="hl">name that color.</span></h1>
+  <p class="lead">Point your camera at anything &mdash; or load a photo &mdash; and get its <b>exact color name</b> with HEX, RGB, HSL and more. Extract palettes, check contrast, preview colorblindness and color-correcting glasses, and play the color-training games. Free, and it all runs on your device.</p>
+  <a class="cta" href="https://mycolortools.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Open it at</span>
+    <span class="cta-url">mycolortools.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Sister site of <a href="https://chromamatchgame.com" target="_blank" rel="noopener noreferrer">chromamatchgame.com</a><br>Opens in a new tab &nearr; &middot; a <span>Squimball Studios</span> project</div>
+</main>
+
+<script>
+'use strict';
+/* A soft, out-of-focus "scene" of drifting colour, with a picker reticle that
+   wanders over it naming whatever is underneath -- the way the real tool reads a
+   camera frame. It follows the pointer when you move it, and every reading it
+   settles on is added to the palette strip in the card.
+
+   The colour under the reticle is computed, not read back from the canvas: the
+   blobs are plain radial gradients, so compositing them in order by hand gives
+   the same pixel without a getImageData() call (which would force the canvas onto
+   the slow software path). */
+(function () {
+  const cvs = document.getElementById('scene');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const MONO = "'Share Tech Mono', monospace";
+  const SANS = "'Rajdhani', sans-serif";
+  const BG = [10, 12, 17];
+  let W = 0, H = 0;
+
+  /* -- named colours (the CSS / X11 set) to match readings against -- */
+  const NAMES = [
+    ['Crimson', 0xDC143C], ['Tomato', 0xFF6347], ['Coral', 0xFF7F50], ['Salmon', 0xFA8072], ['Light Coral', 0xF08080],
+    ['Indian Red', 0xCD5C5C], ['Firebrick', 0xB22222], ['Dark Red', 0x8B0000], ['Maroon', 0x800000], ['Brown', 0xA52A2A],
+    ['Orange Red', 0xFF4500], ['Dark Orange', 0xFF8C00], ['Orange', 0xFFA500], ['Gold', 0xFFD700], ['Khaki', 0xF0E68C],
+    ['Dark Khaki', 0xBDB76B], ['Goldenrod', 0xDAA520], ['Dark Goldenrod', 0xB8860B], ['Sandy Brown', 0xF4A460], ['Peru', 0xCD853F],
+    ['Chocolate', 0xD2691E], ['Sienna', 0xA0522D], ['Saddle Brown', 0x8B4513], ['Tan', 0xD2B48C], ['Rosy Brown', 0xBC8F8F],
+    ['Olive', 0x808000], ['Olive Drab', 0x6B8E23], ['Dark Olive Green', 0x556B2F], ['Yellow Green', 0x9ACD32], ['Chartreuse', 0x7FFF00],
+    ['Lime Green', 0x32CD32], ['Forest Green', 0x228B22], ['Dark Green', 0x006400], ['Sea Green', 0x2E8B57], ['Medium Sea Green', 0x3CB371],
+    ['Dark Sea Green', 0x8FBC8F], ['Spring Green', 0x00FF7F], ['Medium Aquamarine', 0x66CDAA], ['Aquamarine', 0x7FFFD4], ['Turquoise', 0x40E0D0],
+    ['Medium Turquoise', 0x48D1CC], ['Dark Turquoise', 0x00CED1], ['Light Sea Green', 0x20B2AA], ['Teal', 0x008080], ['Dark Cyan', 0x008B8B],
+    ['Cadet Blue', 0x5F9EA0], ['Steel Blue', 0x4682B4], ['Light Steel Blue', 0xB0C4DE], ['Sky Blue', 0x87CEEB], ['Deep Sky Blue', 0x00BFFF],
+    ['Dodger Blue', 0x1E90FF], ['Cornflower Blue', 0x6495ED], ['Royal Blue', 0x4169E1], ['Medium Blue', 0x0000CD], ['Navy', 0x000080],
+    ['Midnight Blue', 0x191970], ['Dark Slate Blue', 0x483D8B], ['Slate Blue', 0x6A5ACD], ['Medium Slate Blue', 0x7B68EE], ['Medium Purple', 0x9370DB],
+    ['Blue Violet', 0x8A2BE2], ['Dark Violet', 0x9400D3], ['Dark Orchid', 0x9932CC], ['Medium Orchid', 0xBA55D3], ['Orchid', 0xDA70D6],
+    ['Plum', 0xDDA0DD], ['Violet', 0xEE82EE], ['Thistle', 0xD8BFD8], ['Magenta', 0xFF00FF], ['Dark Magenta', 0x8B008B],
+    ['Purple', 0x800080], ['Indigo', 0x4B0082], ['Medium Violet Red', 0xC71585], ['Pale Violet Red', 0xDB7093], ['Deep Pink', 0xFF1493],
+    ['Hot Pink', 0xFF69B4], ['Light Pink', 0xFFB6C1], ['Dark Salmon', 0xE9967A], ['Light Salmon', 0xFFA07A], ['Dark Slate Gray', 0x2F4F4F],
+    ['Slate Gray', 0x708090], ['Dim Gray', 0x696969], ['Black', 0x000000]
+  ];
+  function nearest(r, g, b) {              // "redmean" weighted distance: cheap, and closer to the eye than plain RGB
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < NAMES.length; i++) {
+      const v = NAMES[i][1], R = v >> 16, G = (v >> 8) & 255, B = v & 255;
+      const rm = (r + R) / 2, dr = r - R, dg = g - G, db = b - B;
+      const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return NAMES[best][0];
+  }
+  const hex = (r, g, b) => '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1).toUpperCase();
+
+  /* -- the scene -- */
+  const INKS = [[255, 92, 92], [255, 179, 71], [255, 230, 109], [110, 231, 160], [110, 168, 254], [167, 139, 250],
+                [255, 110, 199], [46, 196, 182], [58, 134, 255], [230, 57, 70], [138, 201, 38], [244, 162, 97]];
+  const A0 = 0.82;                          // blob opacity at its centre
+  let blobs = [];
+  function makeBlobs() {
+    const S = Math.min(W, H), n = Math.max(6, Math.min(11, Math.round((W * H) / 150000)));
+    const order = INKS.map((c, i) => i).sort(() => Math.random() - 0.5);
+    blobs = Array.from({ length: n }, (_, i) => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 16, vy: (Math.random() - 0.5) * 16,
+      r: S * (0.21 + Math.random() * 0.18),
+      c: INKS[order[i % order.length]]
+    }));
+  }
+  // must mirror the gradient stops in drawBlobs() exactly
+  function alphaAt(d) { return d >= 1 ? 0 : d < 0.5 ? A0 * (1 - 0.8 * d) : A0 * 1.2 * (1 - d); }
+  function read(x, y) {
+    let r = BG[0], g = BG[1], b = BG[2];
+    for (const q of blobs) {
+      const a = alphaAt(Math.hypot(x - q.x, y - q.y) / q.r);
+      if (a > 0) { r += (q.c[0] - r) * a; g += (q.c[1] - g) * a; b += (q.c[2] - b) * a; }
+    }
+    return [Math.round(r), Math.round(g), Math.round(b)];
+  }
+  function drawBlobs(dt) {
+    ctx.fillStyle = 'rgb(' + BG + ')';
+    ctx.fillRect(0, 0, W, H);
+    for (const q of blobs) {
+      q.x += q.vx * dt; q.y += q.vy * dt;
+      if (q.x < -q.r * 0.4 || q.x > W + q.r * 0.4) q.vx = -q.vx;
+      if (q.y < -q.r * 0.4 || q.y > H + q.r * 0.4) q.vy = -q.vy;
+      const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, q.r), c = 'rgba(' + q.c + ',';
+      g.addColorStop(0, c + A0 + ')'); g.addColorStop(0.5, c + A0 * 0.6 + ')'); g.addColorStop(1, c + '0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2);
+    }
+  }
+
+  /* -- the picker -- */
+  const pick = { x: 0, y: 0, tx: 0, ty: 0, dwell: 0, flash: 0, show: 1, hop: false };
+  const card = document.querySelector('.card');
+  let box = { l: 0, t: 0, r: 0, b: 0 };     // the card's layout box (centred; unaffected by its entry animation)
+  let pointerAt = -1e9, pointerX = 0, pointerY = 0;
+  function measure() {
+    const hw = card.offsetWidth / 2, hh = card.offsetHeight / 2;
+    box = { l: W / 2 - hw, r: W / 2 + hw, t: H / 2 - hh, b: H / 2 + hh };
+  }
+
+  // next stop: the most colourful of a few random spots in the space the card leaves free
+  function retarget() {
+    measure();
+    const E = 34, zones = [
+      [E, E, box.l - E, H - E], [box.r + E, E, W - E, H - E],        // side gutters
+      [E, E, W - E, box.t - E], [E, box.b + E, W - E, H - E]         // strips above / below
+    ].filter(z => z[2] - z[0] >= 12 && z[3] - z[1] >= 6);
+    const area = zones.map(z => (z[2] - z[0]) * (z[3] - z[1])), all = area.reduce((p, c) => p + c, 0);
+    let best = [W / 2, Math.max(26, box.t / 2)], vivid = -1;
+    for (let k = 0; k < 7 && zones.length; k++) {
+      let roll = Math.random() * all, zi = 0;
+      while (zi < zones.length - 1 && roll > area[zi]) roll -= area[zi++];
+      const z = zones[zi], x = z[0] + Math.random() * (z[2] - z[0]), y = z[1] + Math.random() * (z[3] - z[1]);
+      const c = read(x, y), v = Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]);
+      if (v > vivid) { vivid = v; best = [x, y]; }
+    }
+    pick.tx = best[0]; pick.ty = best[1];
+    // gliding there in a straight line may pass behind the card; if so, hop instead
+    pick.hop = false;
+    for (let k = 1; k < 12; k++) {
+      const x = pick.x + ((pick.tx - pick.x) * k) / 12, y = pick.y + ((pick.ty - pick.y) * k) / 12;
+      if (x > box.l - 26 && x < box.r + 26 && y > box.t - 26 && y < box.b + 26) { pick.hop = true; break; }
+    }
+  }
+
+  const chips = Array.from(document.querySelectorAll('#palette .chip'));
+  const elNow = document.getElementById('now');
+  const kept = [];
+  function capture(rgb) {
+    const h = hex(rgb[0], rgb[1], rgb[2]);
+    if (kept[0] === h) return;
+    kept.unshift(h); kept.length = Math.min(kept.length, chips.length);
+    chips.forEach((chip, i) => {
+      if (!kept[i]) return;
+      chip.firstElementChild.style.setProperty('--c', kept[i]);
+      chip.lastElementChild.textContent = kept[i];
+      chip.classList.remove('new');
+    });
+    void chips[0].offsetWidth;              // restart the pop animation
+    chips[0].classList.add('new');
+    pick.flash = 1;
+  }
+
+  window.addEventListener('pointermove', e => { pointerAt = performance.now(); pointerX = e.clientX; pointerY = e.clientY; });
+  window.addEventListener('pointerdown', e => {
+    if (e.target.closest('.card')) return;
+    pick.x = e.clientX; pick.y = e.clientY;
+    capture(read(pick.x, pick.y));
+  });
+
+  function resize() {
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    makeBlobs();
+    retarget(); pick.x = pick.tx; pick.y = pick.ty; pick.hop = false;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  // the web fonts change the card's size once they arrive
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+  // start with a full strip rather than five empty slots: one reading per blob centre
+  for (let i = chips.length - 1; i >= 0; i--) { const q = blobs[i % blobs.length]; capture(read(q.x, q.y)); }
+  pick.flash = 0;
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  let last = performance.now(), shownName = '';
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawBlobs(dt);
+
+    // steer
+    const following = now - pointerAt < 2600;
+    if (following) {
+      pick.x += (pointerX - pick.x) * (1 - Math.exp(-dt * 14));
+      pick.y += (pointerY - pick.y) * (1 - Math.exp(-dt * 14));
+      pick.dwell = 0; pick.hop = false;
+      pick.show = Math.min(1, pick.show + dt * 6);
+    } else if (pick.hop) {                  // fade out, jump, fade back in
+      pick.show = Math.max(0, pick.show - dt * 5);
+      if (pick.show === 0) { pick.x = pick.tx; pick.y = pick.ty; pick.hop = false; }
+    } else {
+      pick.show = Math.min(1, pick.show + dt * 5);
+      pick.x += (pick.tx - pick.x) * (1 - Math.exp(-dt * 2.1));
+      pick.y += (pick.ty - pick.y) * (1 - Math.exp(-dt * 2.1));
+      if (Math.hypot(pick.tx - pick.x, pick.ty - pick.y) < 3) {
+        pick.dwell += dt;
+        if (pick.dwell > 1.5) { capture(read(pick.x, pick.y)); retarget(); pick.dwell = 0; }
+      }
+    }
+
+    const rgb = read(pick.x, pick.y), name = nearest(rgb[0], rgb[1], rgb[2]), code = hex(rgb[0], rgb[1], rgb[2]);
+    if (name !== shownName) { shownName = name; elNow.textContent = name; }
+
+    // reticle
+    const x = pick.x, y = pick.y, R = 21;
+    ctx.globalAlpha = pick.show;
+    ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.stroke();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.stroke();
+    ctx.beginPath();
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
+      ctx.moveTo(x + c * (R - 6), y + s * (R - 6)); ctx.lineTo(x + c * (R + 7), y + s * (R + 7));
+    }
+    ctx.stroke();
+    ctx.fillStyle = 'rgb(' + rgb + ')';
+    ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.2832); ctx.fill();
+    ctx.lineWidth = 1.2; ctx.stroke();
+    if (pick.flash > 0) {                   // shutter ring when a reading is kept
+      ctx.globalAlpha = pick.flash * pick.show; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, R + (1 - pick.flash) * 30, 0, 6.2832); ctx.stroke();
+      ctx.globalAlpha = pick.show;
+      pick.flash = Math.max(0, pick.flash - dt * 2.6);
+    }
+
+    // readout tag: swatch + name + hex -- below the reticle if that is on screen
+    // and clear of the card, otherwise above it or off to one side
+    ctx.font = '600 15px ' + SANS;
+    const wName = ctx.measureText(name).width;
+    ctx.font = '11px ' + MONO;
+    const tw = Math.max(wName, ctx.measureText(code).width), bw = tw + 52, bh = 40;
+    const mid = Math.max(8, Math.min(W - bw - 8, x - bw / 2));
+    const spots = [[mid, y + R + 14], [mid, y - R - 14 - bh], [x + R + 14, y - bh / 2], [x - R - 14 - bw, y - bh / 2]];
+    let bx = spots[0][0], by = spots[0][1];
+    for (const sp of spots) {
+      const onScreen = sp[0] >= 6 && sp[0] + bw <= W - 6 && sp[1] >= 6 && sp[1] + bh <= H - 6;
+      const clear = sp[0] + bw < box.l || sp[0] > box.r || sp[1] + bh < box.t || sp[1] > box.b;
+      if (onScreen && clear) { bx = sp[0]; by = sp[1]; break; }
+    }
+    roundRect(bx, by, bw, bh, 9);
+    ctx.fillStyle = 'rgba(10,12,17,0.86)'; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,0.20)'; ctx.stroke();
+    roundRect(bx + 8, by + 8, 24, 24, 6);
+    ctx.fillStyle = 'rgb(' + rgb + ')'; ctx.fill(); ctx.stroke();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#f2f4fa'; ctx.font = '600 15px ' + SANS;
+    ctx.fillText(name, bx + 40, by + 18);
+    ctx.fillStyle = '#9aa3b7'; ctx.font = '11px ' + MONO;
+    ctx.fillText(code, bx + 40, by + 32);
+    ctx.globalAlpha = 1;
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

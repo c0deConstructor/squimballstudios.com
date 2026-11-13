@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classified &mdash; Coming Soon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070605;
+    --panel-bg: rgba(13, 11, 9, 0.94);
+    --border: rgba(255, 200, 87, 0.16);
+    --accent: #ff4438;
+    --accent2: #ffc857;
+    --text: #d6cfc2;
+    --text-dim: #6f675a;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    background: radial-gradient(ellipse at 50% 44%, rgba(255,200,87,0.045) 0%, var(--bg) 64%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* -- Backdrop layers -- */
+  #dossier { position: fixed; inset: 0; z-index: 0; }
+  #vignette { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(7,6,5,0.86) 100%); }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(255,68,56,0.10); backdrop-filter: blur(4px);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both;
+    transition: box-shadow .25s, border-color .25s;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  .card.alarm { border-color: rgba(255,68,56,0.6); box-shadow: 0 0 110px rgba(255,68,56,0.34); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent2); text-transform: uppercase; margin-bottom: 20px; }
+  .tag b { color: var(--accent); font-weight: 400; }
+
+  /* rubber stamp, thumped on a beat after the card lands */
+  .stamp {
+    position: absolute; top: 20px; right: -16px; z-index: 3; pointer-events: none;
+    font-family: var(--mono); font-size: 13px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--accent); border: 2px solid var(--accent); outline: 1px solid var(--accent); outline-offset: 2px;
+    padding: 6px 10px 6px 14px; background: rgba(13,11,9,0.7);
+    transform: rotate(8deg); opacity: 0; animation: thump .34s .85s cubic-bezier(.3,1.5,.5,1) forwards;
+  }
+  @keyframes thump { from { opacity: 0; transform: rotate(8deg) scale(2.7); } to { opacity: .9; transform: rotate(8deg) scale(1); } }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(30px, 6.2vw, 56px); color: #f4eee2; margin-bottom: 20px;
+    text-shadow: 0 0 30px rgba(255,200,87,0.16);
+  }
+  /* the codename: glyphs churn for a moment, then the censor's bar slides back over it */
+  .code { position: relative; display: inline-block; font-family: var(--mono); font-weight: 400; color: var(--accent2); letter-spacing: .06em; padding: 0 .16em; }
+  .code::after {
+    content: 'REDACTED'; position: absolute; inset: 6% 0; background: #000; border: 1px solid rgba(255,255,255,0.07);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; letter-spacing: .5em; text-indent: .5em; color: var(--accent); text-shadow: none;
+    transform-origin: left; animation: censor 5.6s 1.2s cubic-bezier(.7,0,.2,1) infinite backwards;
+  }
+  @keyframes censor {
+    0%, 22%  { transform: scaleX(0); }
+    30%, 92% { transform: scaleX(1); }
+    100%     { transform: scaleX(0); }
+  }
+
+  /* the file's cover sheet */
+  .file { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 0 auto 22px; max-width: 30em;
+          background: rgba(255,200,87,0.14); border: 1px solid rgba(255,200,87,0.14); text-align: left; }
+  .file div { background: #0d0b09; padding: 9px 12px 10px; min-width: 0; }
+  .file dt { font-family: var(--mono); font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 5px; }
+  .file dd { font-family: var(--mono); font-size: 13px; color: var(--text); white-space: nowrap; }
+  .rd { background: #000; color: transparent; border: 1px solid rgba(255,255,255,0.07); padding: 0 .5em; user-select: none; }
+
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 30em; margin: 0 auto 28px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; font: inherit; cursor: pointer;
+    border: 1px solid var(--accent); background: rgba(255,68,56,0.05);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(255,68,56,0.4); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta:focus-visible { outline: 2px solid var(--accent2); outline-offset: 3px; }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(15px, 2.9vw, 22px); letter-spacing: .06em; color: #f4eee2; font-weight: 700; text-transform: uppercase; }
+  .cta:hover .cta-label { color: #4a0d08; }
+  .cta:hover .cta-url   { color: #180302; }
+  .cta.deny { animation: shake .4s; }
+  @keyframes shake {
+    0%, 100% { transform: none; }
+    18% { transform: translateX(-9px); } 36% { transform: translateX(8px); }
+    54% { transform: translateX(-6px); } 72% { transform: translateX(4px); } 88% { transform: translateX(-2px); }
+  }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot a { color: var(--accent2); text-decoration: none; border-bottom: 1px dotted rgba(255,200,87,0.5); }
+  .foot a:hover { border-bottom-style: solid; }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; }
+    .tag { letter-spacing: .22em; }
+    .stamp { right: 6px; top: -16px; font-size: 11px; }
+    .file dd { font-size: 11px; }
+    .file div { padding: 8px 8px 9px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .code::after { animation: none; transform: scaleX(1); }
+    .cta.deny { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="dossier"></canvas>
+<div id="vignette"></div>
+
+<main class="card" id="card">
+  <div class="stamp" aria-hidden="true">Top secret</div>
+  <div class="tag">// SIM &middot; 015 &nbsp;&middot;&nbsp; <b>Classified</b></div>
+  <h1>Project<br><span class="code" id="code" aria-label="redacted">????????</span></h1>
+  <dl class="file">
+    <div><dt>Codename</dt><dd><span class="rd">redacted</span></dd></div>
+    <div><dt>Status</dt><dd>In the works</dd></div>
+    <div><dt>Release</dt><dd><span class="rd">redacted</span></dd></div>
+  </dl>
+  <p class="lead">Something new is being built behind this door. That is <b>everything</b> we are cleared to say.</p>
+  <button class="cta" id="ask" type="button">
+    <span class="cta-label">Clearance</span>
+    <span class="cta-url" id="answer" aria-live="polite">Request access</span>
+  </button>
+  <div class="foot">Coming soon &middot; check back<br><a href="../index.html" id="home">&larr; back to the open projects</a></div>
+</main>
+
+<script>
+'use strict';
+/* A wall of typewritten file text, most of it under the censor's bars. Every so
+   often a bar lifts, the words underneath churn for a moment, and it slams shut
+   again before anything can be read. (There is nothing to read: the "text" is
+   random characters.) */
+(function () {
+  const cvs = document.getElementById('dossier');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const MONO = "'Share Tech Mono', monospace";
+  const GLYPHS = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+  const FS = 13, LH = 23;
+  let W = 0, H = 0, CW = 7.2, pageH = 0;
+  let words = [], reds = [];                // all words / just the redacted ones
+  const page = document.createElement('canvas');     // one screenful of file, painted once
+  const peeks = [];                         // bars currently lifted
+  const rnd = n => (Math.random() * n) | 0;
+  const gibber = n => { let s = ''; while (n--) s += GLYPHS[rnd(GLYPHS.length)]; return s; };
+
+  function layout() {
+    W = innerWidth; H = innerHeight;
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    ctx.font = FS + 'px ' + MONO;
+    CW = ctx.measureText('M').width || 7.2;
+
+    const rows = Math.ceil(H / LH) + 1, margin = Math.max(18, W * 0.045);
+    pageH = rows * LH;
+    words = []; reds = []; peeks.length = 0;
+    for (let r = 0; r < rows; r++) {
+      const blank = Math.random() < 0.12;                    // paragraph break
+      let x = margin + (Math.random() < 0.18 ? CW * 4 : 0);
+      const end = W - margin - (Math.random() < 0.3 ? rnd(W * 0.3) : 0);
+      while (!blank) {
+        const len = 2 + rnd(9), w = len * CW;
+        if (x + w > end) break;
+        const word = { x: x, y: r * LH, w: w, len: len, text: gibber(len), red: Math.random() < 0.46 };
+        words.push(word); if (word.red) reds.push(word);
+        x += w + CW;
+      }
+    }
+
+    page.width = cvs.width; page.height = Math.ceil(pageH * dpr);
+    const g = page.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.font = FS + 'px ' + MONO; g.textBaseline = 'middle';
+    for (const w of words) {
+      if (w.red) bar(g, w, 1);
+      else { g.fillStyle = 'rgba(214,207,194,0.20)'; g.fillText(w.text, w.x, w.y + LH / 2); }
+    }
+  }
+  function bar(g, w, k) {                   // k: how much of the bar is down, 0..1
+    g.fillStyle = '#000';
+    g.fillRect(w.x - 2, w.y + 3, (w.w + 4) * k, LH - 7);
+    g.fillStyle = 'rgba(255,255,255,0.055)';
+    g.fillRect(w.x - 2, w.y + 3, (w.w + 4) * k, 1);
+  }
+  window.addEventListener('resize', layout);
+  layout();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);   // re-measure with the real font
+
+  let scroll = 0, beam = 0, nextPeek = 600, last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    scroll = (scroll + dt * 7) % pageH;
+    beam = (beam + dt * 0.085) % 1;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    const off = Math.round(scroll * dpr);
+    ctx.drawImage(page, 0, -off);
+    ctx.drawImage(page, 0, page.height - off);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // lift a bar now and then
+    if (now >= nextPeek && reds.length) {
+      nextPeek = now + 240 + Math.random() * 520;
+      const w = reds[rnd(reds.length)];
+      if (!peeks.some(p => p.w === w)) peeks.push({ w: w, t0: now, tick: 0, text: gibber(w.len) });
+    }
+    ctx.font = FS + 'px ' + MONO; ctx.textBaseline = 'middle';
+    for (let i = peeks.length - 1; i >= 0; i--) {
+      const p = peeks[i], age = now - p.t0;
+      if (age > 1050) { peeks.splice(i, 1); continue; }
+      if (now - p.tick > 55) { p.tick = now; p.text = gibber(p.w.len); }
+      // lift (0-120ms), hold, slam (900-1050ms)
+      const down = age < 120 ? 1 - age / 120 : age > 900 ? (age - 900) / 150 : 0;
+      for (let pass = 0; pass < 2; pass++) {                 // the page is drawn twice, a screen apart
+        const y = p.w.y - scroll + pass * pageH;
+        if (y < -LH || y > H) continue;
+        const at = { x: p.w.x, y: y, w: p.w.w };
+        ctx.fillStyle = '#0b0906';
+        ctx.fillRect(at.x - 3, at.y + 2, at.w + 6, LH - 5);
+        ctx.fillStyle = 'rgba(255,200,87,0.95)';
+        ctx.fillText(p.text, at.x, at.y + LH / 2);
+        if (down > 0) {
+          bar(ctx, at, down);
+          if (age > 900) { ctx.fillStyle = 'rgba(255,68,56,' + (0.7 * (1 - down)).toFixed(3) + ')'; ctx.fillRect(at.x - 2, at.y + 3, (at.w + 4) * down, LH - 7); }
+        }
+      }
+    }
+
+    // a slow scanner beam
+    const by = beam * (H + 260) - 130;
+    const grd = ctx.createLinearGradient(0, by - 130, 0, by + 130);
+    grd.addColorStop(0, 'rgba(255,200,87,0)'); grd.addColorStop(0.5, 'rgba(255,200,87,0.075)'); grd.addColorStop(1, 'rgba(255,200,87,0)');
+    ctx.fillStyle = grd; ctx.fillRect(0, by - 130, W, 260);
+    ctx.fillStyle = 'rgba(255,200,87,0.20)'; ctx.fillRect(0, by, W, 1);
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+
+  /* -- the codename: never the same twice, never legible for long -- */
+  const code = document.getElementById('code');
+  setInterval(() => { if (!document.hidden) code.textContent = gibber(8); }, 80);
+
+  /* -- the button: it will not let you in -- */
+  const ask = document.getElementById('ask'), answer = document.getElementById('answer'), card = document.getElementById('card');
+  const NO = ['Access denied', 'Clearance too low', 'Still no', 'Nice try', 'Come back later'];
+  let tries = 0, reset = 0;
+  ask.addEventListener('click', () => {
+    answer.textContent = NO[tries++ % NO.length];
+    card.classList.add('alarm');
+    ask.classList.remove('deny'); void ask.offsetWidth; ask.classList.add('deny');
+    clearTimeout(reset);
+    reset = setTimeout(() => { answer.textContent = 'Request access'; card.classList.remove('alarm'); }, 1700);
+  });
+
+  /* -- inside the site shell, "back" switches frames instead of loading the shell into this one -- */
+  document.getElementById('home').addEventListener('click', e => {
+    if (window.parent === window) return;
+    e.preventDefault();
+    window.parent.postMessage({ sq: 'show', page: 0 }, '*');
+  });
+})();
+</script>
+</body>
+</html>
