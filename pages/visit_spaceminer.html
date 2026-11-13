@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A Space Mining Game &mdash; Endless Procedural Space Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #03050c;
+    --panel-bg: rgba(5, 9, 20, 0.92);
+    --border: rgba(95, 224, 255, 0.16);
+    --accent: #5fe0ff;
+    --accent2: #ffd24f;
+    --accent3: #1a8fff;
+    --text: #d7ecff;
+    --text-dim: #67809e;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { background: var(--bg); }
+  body {
+    background: radial-gradient(ellipse at 50% 42%, rgba(95,224,255,0.05) 0%, var(--bg) 66%);
+    color: var(--text); font-family: var(--sans); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.aim { cursor: crosshair; }
+
+  /* -- Backdrop layers -- */
+  #space { position: fixed; inset: 0; z-index: 0; }
+  #grid {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(95,224,255,0.02) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(95,224,255,0.02) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+            mask-image: radial-gradient(ellipse at 50% 45%, #000 35%, transparent 80%);
+  }
+
+  /* -- Card -- */
+  .card {
+    position: relative; z-index: 2; width: min(640px, 90vw);
+    background: var(--panel-bg); border: 1px solid var(--border); border-top: 2px solid var(--accent);
+    box-shadow: 0 0 90px rgba(95,224,255,0.11); backdrop-filter: blur(4px);
+    padding: clamp(26px, 4.6vw, 48px) clamp(24px, 5vw, 56px) clamp(26px, 4vw, 44px);
+    text-align: center; animation: rise .6s cubic-bezier(.2,.7,.3,1) both; cursor: default;
+  }
+  .card::before { content: ''; position: absolute; top: -2px; left: 44px; width: 64px; height: 2px; background: var(--accent2); }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .34em; color: var(--accent); text-transform: uppercase; margin-bottom: 18px; }
+  .tag b { color: var(--accent2); font-weight: 400; }
+
+  /* cargo hold: filled by the miner working the backdrop, emptied when it docks to sell */
+  .hold { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; font-family: var(--mono); }
+  .hold-lbl { font-size: 10px; letter-spacing: .22em; color: var(--text-dim); }
+  .cells {
+    display: grid; grid-template-columns: repeat(30, 1fr); gap: 2px;
+    width: min(270px, 44vw); height: 16px; padding: 2px;
+    border: 1px solid rgba(95,224,255,0.28); background: rgba(95,224,255,0.03);
+  }
+  .cells i { display: block; background: rgba(255,255,255,0.05); transition: background-color .12s, box-shadow .12s; }
+  .cells i.on { background: var(--c); box-shadow: 0 0 6px var(--c); }
+  .cr { min-width: 104px; text-align: left; font-size: 21px; color: #fff6d8; letter-spacing: .02em; white-space: nowrap; }
+  .cr small { font-size: 9.5px; letter-spacing: .18em; color: var(--text-dim); margin-left: 5px; }
+  .cr.sell { color: var(--accent2); text-shadow: 0 0 12px rgba(255,210,79,0.55); }
+  .now { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 18px; min-height: 1.5em; }
+  .now b { color: #fff; font-weight: 400; }
+  .now i { font-style: normal; color: var(--accent); }
+
+  h1 {
+    font-family: var(--sans); font-weight: 700; line-height: 1.06; letter-spacing: .01em;
+    font-size: clamp(29px, 5.9vw, 54px); color: #eef8ff; margin-bottom: 18px;
+    text-shadow: 0 0 30px rgba(95,224,255,0.22);
+  }
+  h1 .hl { color: var(--accent); }
+  .lead { font-size: clamp(15px, 2.4vw, 18px); font-weight: 300; line-height: 1.6; color: var(--text); max-width: 31em; margin: 0 auto 30px; text-wrap: pretty; }
+  .lead b { color: #fff; font-weight: 600; }
+
+  .cta {
+    display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none;
+    border: 1px solid var(--accent); background: rgba(95,224,255,0.05);
+    padding: 16px 26px; position: relative; overflow: hidden;
+    transition: background .25s, box-shadow .25s, transform .15s;
+  }
+  .cta::before { content: ''; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: 0; }
+  .cta:hover { box-shadow: 0 0 30px rgba(95,224,255,0.42); }
+  .cta:hover::before { transform: scaleX(1); }
+  .cta:active { transform: translateY(1px); }
+  .cta > * { position: relative; z-index: 1; transition: color .25s; }
+  .cta-label { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); }
+  .cta-url { font-family: var(--mono); font-size: clamp(12.5px, 2.4vw, 19px); letter-spacing: 0; color: #eef8ff; font-weight: 700; }
+  .cta-arrow { font-size: clamp(17px, 3vw, 22px); color: var(--accent); transition: transform .25s, color .25s; }
+  .cta:hover .cta-label { color: #0b4552; }
+  .cta:hover .cta-url   { color: #02161b; }
+  .cta:hover .cta-arrow { color: #02161b; transform: translateX(5px); }
+
+  .foot { margin-top: 26px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; line-height: 1.7; color: var(--text-dim); text-wrap: balance; }
+  .foot span { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .cta { flex-direction: column; align-items: center; gap: 4px; padding: 14px 16px; }
+    .tag { letter-spacing: .22em; }
+    .hold { gap: 8px; }
+    .hold-lbl { display: none; }
+    .cr { font-size: 17px; min-width: 84px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="space"></canvas>
+<div id="grid"></div>
+
+<main class="card">
+  <div class="tag">// SPACE MINING &nbsp;&middot;&nbsp; <b>Live site</b></div>
+  <div class="hold" aria-hidden="true">
+    <div class="hold-lbl">HOLD</div>
+    <div class="cells" id="cells"></div>
+    <div class="cr" id="crBox"><span id="cr">0</span><small>CR</small></div>
+  </div>
+  <div class="now" id="now" aria-hidden="true">Scanning for rocks</div>
+  <h1>A Space Mining Game<br><span class="hl">mine. trade. explore.</span></h1>
+  <p class="lead">An endless, procedural space sandbox seen from above. Every seed is a new universe of galaxies, alien species and space fauna to <b>mine, trade, salvage and upgrade</b> your way across &mdash; with orbital mining, warp drives, pirates and black holes along the way. Or pick <b>Mission</b> for a seeded campaign you can win.</p>
+  <a class="cta" href="https://spaceminer.squimballstudios.com" target="_blank" rel="noopener noreferrer">
+    <span class="cta-label">Play it at</span>
+    <span class="cta-url">spaceminer.squimballstudios.com</span>
+    <span class="cta-arrow">&rarr;</span>
+  </a>
+  <div class="foot">Plays in the browser &middot; keyboard &amp; mouse or touch<br>Opens in a new tab &nearr; &middot; a <span>Squimball Studios</span> project</div>
+</main>
+
+<script>
+'use strict';
+/* A little Wren-class miner working an asteroid field in the free space round the card.
+   It picks a rock that is clear of the card, flies there (routing round the card's corners
+   when a straight line would take it behind it), cuts the rock with its mining laser until
+   it cracks, and the ore it knocks loose is pulled into the hold by the magnet -- which is
+   what the readout in the card shows. With the hold full it flies to the station parked in
+   a corner and sells. Click or tap a rock to send it there instead. */
+(function () {
+  const cvs = document.getElementById('space');
+  const ctx = cvs.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let W = 0, H = 0, S = 1;                 // CSS px; S scales ship, rocks and station with the viewport
+
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+  /* ores from the game's own commodity table: name, color, base price (cr), how common */
+  const ORES = [
+    ['Iron Ore',     '#c27a55',   9, 30],
+    ['Nickel Ore',   '#b9b38a',  12, 22],
+    ['Copper Ore',   '#e08a4c',  19, 18],
+    ['Cobalt Ore',   '#4f7dff',  27, 13],
+    ['Titanium Ore', '#cfd8e3',  40,  9],
+    ['Lumenite',     '#7ff9ff',  85,  5],
+    ['Gold Ore',     '#ffd34d', 112,  4],
+    ['Uranium Ore',  '#7dff6a', 120,  3],
+    ['Iridium Ore',  '#c8b6ff', 175,  2]
+  ];
+  const ORE_SUM = ORES.reduce((s, o) => s + o[3], 0);
+  function pickOre() {
+    let k = Math.random() * ORE_SUM;
+    for (let i = 0; i < ORES.length; i++) { k -= ORES[i][3]; if (k <= 0) return i; }
+    return 0;
+  }
+
+  /* -- glow sprites, cached per color -- */
+  const GLOW = {};
+  function glow(hex) {
+    if (GLOW[hex]) return GLOW[hex];
+    const n = 48, c = document.createElement('canvas');
+    c.width = c.height = n;
+    const g = c.getContext('2d'), grd = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    const r = parseInt(hex.slice(1, 3), 16), gg = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    grd.addColorStop(0.00, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.14, 'rgba(' + r + ',' + gg + ',' + b + ',0.95)');
+    grd.addColorStop(0.40, 'rgba(' + r + ',' + gg + ',' + b + ',0.25)');
+    grd.addColorStop(0.70, 'rgba(' + r + ',' + gg + ',' + b + ',0.06)');
+    grd.addColorStop(1.00, 'rgba(' + r + ',' + gg + ',' + b + ',0)');
+    g.fillStyle = grd; g.fillRect(0, 0, n, n);
+    return (GLOW[hex] = c);
+  }
+
+  /* ---------- the card, as a box to keep the action out of ---------- */
+  const card = document.querySelector('.card');
+  const box = { l: 0, r: 0, t: 0, b: 0 };
+  function measure() {
+    // offsetWidth/Height: the layout box, unaffected by the card's entry animation
+    const w = card.offsetWidth, h = card.offsetHeight, P = 18;
+    box.l = W / 2 - w / 2 - P; box.r = W / 2 + w / 2 + P;
+    box.t = H / 2 - h / 2 - P; box.b = H / 2 + h / 2 + P;
+    // when the card leaves almost no open space (phones), stop steering round it: the action
+    // peeks out at the edges and the readout in the card keeps moving
+    const cover = Math.max(0, Math.min(box.r, W) - Math.max(box.l, 0)) * Math.max(0, Math.min(box.b, H) - Math.max(box.t, 0)) / (W * H);
+    if (cover > 0.75) box.l = box.r = box.t = box.b = -1e5;
+  }
+  const inBox = (x, y, m) => x > box.l - m && x < box.r + m && y > box.t - m && y < box.b + m;
+  const onScreen = (x, y, m) => x > m && x < W - m && y > m && y < H - m;
+
+  function segHits(ax, ay, bx, by, m) {     // does segment a-b cross the box grown by m? (Liang-Barsky)
+    const dx = bx - ax, dy = by - ay;
+    const p = [-dx, dx, -dy, dy], q = [ax - (box.l - m), (box.r + m) - ax, ay - (box.t - m), (box.b + m) - ay];
+    let t0 = 0, t1 = 1;
+    for (let i = 0; i < 4; i++) {
+      if (p[i] === 0) { if (q[i] < 0) return false; continue; }
+      const u = q[i] / p[i];
+      if (p[i] < 0) { if (u > t1) return false; if (u > t0) t0 = u; }
+      else          { if (u < t0) return false; if (u < t1) t1 = u; }
+    }
+    return true;
+  }
+
+  /* shortest way from a to b that stays out from behind the card: straight, or via one or two
+     of its (pushed-out) corners */
+  function route(ax, ay, bx, by) {
+    const M = 10, C = 30;
+    if (inBox(bx, by, 0)) return [{ x: bx, y: by }];
+    if (inBox(ax, ay, M)) {                 // already behind it (a resize): leave by the nearest side
+      const dl = ax - box.l, dr = box.r - ax, dt = ay - box.t, db = box.b - ay, m = Math.min(dl, dr, dt, db);
+      const ex = m === dl ? box.l - C : m === dr ? box.r + C : ax;
+      const ey = m === dt ? box.t - C : m === db ? box.b + C : ay;
+      return [{ x: ex, y: ey }].concat(route(ex, ey, bx, by));
+    }
+    if (!segHits(ax, ay, bx, by, M)) return [{ x: bx, y: by }];
+    const cs = [{ x: box.l - C, y: box.t - C }, { x: box.r + C, y: box.t - C },
+                { x: box.r + C, y: box.b + C }, { x: box.l - C, y: box.b + C }];
+    let best = null, bestLen = Infinity;
+    function tryPath(pts) {
+      let len = 0, px = ax, py = ay;
+      for (const p of pts) {
+        if (segHits(px, py, p.x, p.y, M)) return;
+        len += Math.hypot(p.x - px, p.y - py); px = p.x; py = p.y;
+      }
+      if (segHits(px, py, bx, by, M)) return;
+      len += Math.hypot(bx - px, by - py);
+      if (len < bestLen) { bestLen = len; best = pts; }
+    }
+    for (let i = 0; i < 4; i++) {
+      tryPath([cs[i]]);
+      tryPath([cs[i], cs[(i + 1) % 4]]);
+      tryPath([cs[i], cs[(i + 3) % 4]]);
+    }
+    return (best || []).concat([{ x: bx, y: by }]);
+  }
+
+  /* ---------- backdrop: nebula + far stars painted once, two drifting star layers ---------- */
+  const layer = document.createElement('canvas');
+  let stars = [];
+  const DRIFT = (function () {             // the whole field drifts one way, slowly
+    const a = rnd(0, Math.PI * 2);
+    return { x: Math.cos(a), y: Math.sin(a) };
+  })();
+
+  function paintLayer() {
+    layer.width = cvs.width; layer.height = cvs.height;
+    const g = layer.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const blobs = [['26,143,255', 0.09], ['95,224,255', 0.06], ['154,92,255', 0.07]];
+    for (const b of blobs) {
+      const x = rnd(0, W), y = rnd(0, H), r = Math.max(W, H) * rnd(0.28, 0.45);
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(' + b[0] + ',' + b[1] + ')');
+      grd.addColorStop(0.5, 'rgba(' + b[0] + ',' + (b[1] * 0.35).toFixed(3) + ')');
+      grd.addColorStop(1, 'rgba(' + b[0] + ',0)');
+      g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    }
+    const n = Math.min(520, Math.round(W * H / 3400));
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = 'rgba(200,225,255,' + rnd(0.10, 0.42).toFixed(2) + ')';
+      const s = Math.random() < 0.9 ? 1 : 1.5;
+      g.fillRect(rnd(0, W), rnd(0, H), s, s);
+    }
+  }
+  function makeStars() {
+    stars = [];
+    const n = Math.min(260, Math.round(W * H / 7000));
+    for (let i = 0; i < n; i++) {
+      const near = Math.random() < 0.3;
+      stars.push({ x: rnd(0, W), y: rnd(0, H), z: near ? rnd(0.9, 1.4) : rnd(0.35, 0.7),
+                   b: near ? rnd(0.5, 0.95) : rnd(0.25, 0.6), ph: rnd(0, 6.28) });
+    }
+  }
+
+  /* ---------- rocks ---------- */
+  let rocks = [], N = 10;
+  function makeRock(x, y, r, ore) {
+    const n = 9 + (Math.random() * 6 | 0), shape = [];
+    for (let i = 0; i < n; i++) shape.push(rnd(0.74, 1.08));
+    for (let k = 0; k < 2; k++)            // relax it once or twice so it reads as rock, not star
+      for (let i = 0; i < n; i++) shape[i] = (shape[(i + n - 1) % n] + 2 * shape[i] + shape[(i + 1) % n]) / 4;
+    const specks = [], craters = [];
+    const ns = 4 + Math.round(r * 0.22);
+    for (let i = 0; i < ns; i++) specks.push({ a: rnd(0, 6.28), d: Math.sqrt(Math.random()) * 0.66, s: rnd(1, 2.4) });
+    const nc = 1 + (Math.random() * 3 | 0);
+    for (let i = 0; i < nc; i++) craters.push({ a: rnd(0, 6.28), d: rnd(0.1, 0.55), s: rnd(0.12, 0.24) });
+    const sp = rnd(7, 17) * S;
+    const units = Math.max(2, Math.round(r / S * 0.22));
+    return {
+      x: x, y: y, r: r, rot: rnd(0, 6.28), spin: rnd(-0.35, 0.35),
+      vx: DRIFT.x * sp + rnd(-4, 4), vy: DRIFT.y * sp + rnd(-4, 4),
+      shape: shape, specks: specks, craters: craters,
+      ore: ore === undefined ? pickOre() : ore, units: units, units0: units, cut: 0, scale: 1
+    };
+  }
+  function spawnUpwind() {
+    const r = rnd(18, 44) * S, m = r + 50;
+    let x, y;
+    if (Math.random() < Math.abs(DRIFT.x) / (Math.abs(DRIFT.x) + Math.abs(DRIFT.y))) {
+      x = DRIFT.x > 0 ? -m : W + m; y = rnd(0, H);
+    } else {
+      y = DRIFT.y > 0 ? -m : H + m; x = rnd(0, W);
+    }
+    rocks.push(makeRock(x, y, r));
+  }
+  const rr = (k) => k.r * k.scale;         // a rock's current radius
+
+  /* ---------- station, parked in whichever corner sits furthest from the card ---------- */
+  const station = { x: 0, y: 0, R: 24, corner: -1, dx: 0, dy: 0, rot: 0 };
+  function placeStation() {
+    station.R = 24 * S;
+    const mx = station.R * 1.75 + 12, my = station.R + 26;      // the solar wings reach 1.75 R sideways
+    const cs = [[mx, my], [W - mx, my], [W - mx, H - my], [mx, H - my]];
+    const score = (c) => Math.hypot(Math.max(box.l - c[0], 0, c[0] - box.r), Math.max(box.t - c[1], 0, c[1] - box.b));
+    if (station.corner < 0) {
+      const best = Math.max.apply(null, cs.map(score));
+      const ok = []; cs.forEach((c, i) => { if (score(c) >= best - 6) ok.push(i); });
+      station.corner = ok[(Math.random() * ok.length) | 0];
+    }
+    const c = cs[station.corner];
+    station.x = c[0]; station.y = c[1];
+    // the docking point: just off the ring, on the side facing the open space
+    const base = Math.atan2(H / 2 - c[1], W / 2 - c[0]);
+    const off = station.R + 22 * S;
+    for (let k = 0; k < 12; k++) {
+      const a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35;
+      const x = c[0] + Math.cos(a) * off, y = c[1] + Math.sin(a) * off;
+      if ((onScreen(x, y, 12) && !inBox(x, y, 14)) || k === 11) { station.dx = x; station.dy = y; break; }
+    }
+  }
+
+  /* ---------- ship + hold ---------- */
+  const CAP = 30;                           // the Wren's hold
+  const ship = { x: 0, y: 0, vx: 0, vy: 0, a: -Math.PI / 2, thrust: 0 };
+  let mode = 'seek';                        // seek -> mine -> dock -> sell -> seek
+  let target = null, standA = 0, wps = [], wpGoalX = 0, wpGoalY = 0;
+  const hold = [];                          // ore index per unit
+  let credits = 0, sold = 0, soldT = 0, sellT = 0, laser = false, focus = 0;
+  const chunks = [], sparks = [], debris = [], flames = [], floats = [], rings = [];
+
+  function standPoint(k, a) { const d = rr(k) + 44 * S; return { x: k.x + Math.cos(a) * d, y: k.y + Math.sin(a) * d }; }
+  function standOK(p) { return onScreen(p.x, p.y, 14) && !inBox(p.x, p.y, 16); }
+  function pickStand(k) {
+    const base = Math.atan2(ship.y - k.y, ship.x - k.x);
+    for (let i = 0; i < 12; i++) {
+      const a = base + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 6);
+      if (standOK(standPoint(k, a))) return a;
+    }
+    return null;
+  }
+  function usable(k) {
+    return k && k.units > 0 && rocks.indexOf(k) >= 0 && onScreen(k.x, k.y, rr(k) * 0.6) && !inBox(k.x, k.y, rr(k) + 6);
+  }
+  function pickRock() {
+    let best = null, bestS = Infinity, bestA = 0;
+    for (const k of rocks) {
+      if (!usable(k)) continue;
+      const a = pickStand(k);
+      if (a === null) continue;
+      const p = standPoint(k, a);
+      const s = (Math.hypot(p.x - ship.x, p.y - ship.y) + (segHits(ship.x, ship.y, p.x, p.y, 10) ? 380 : 0)
+                 - ORES[k.ore][2] * 0.6) * rnd(0.85, 1.15);     // rarer ore is worth a detour
+      if (s < bestS) { bestS = s; best = k; bestA = a; }
+    }
+    if (best) standA = bestA;
+    return best;
+  }
+
+  /* ---------- the card readout ---------- */
+  const cellsEl = document.getElementById('cells'), crEl = document.getElementById('cr'),
+        crBox = document.getElementById('crBox'), nowEl = document.getElementById('now');
+  const CELLS = [];
+  for (let i = 0; i < CAP; i++) CELLS.push(cellsEl.appendChild(document.createElement('i')));
+  let nowHtml = '';
+  function setNow(h) { if (h !== nowHtml) { nowHtml = h; nowEl.innerHTML = h; } }
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  function status() {
+    if (mode === 'sell') return setNow('Docked &middot; selling <b>' + hold.length + ' left</b>');
+    if (mode === 'dock') return setNow('Hold full &middot; <b>heading to the station</b>');
+    if (soldT > 0) return setNow('Sold the hold for <b>' + fmt(sold) + ' cr</b>');
+    if (!target) return setNow('Scanning for rocks');
+    const what = '<b>' + ORES[target.ore][0] + '</b>';
+    setNow((mode === 'mine' ? 'Mining ' : 'Heading for ') + what + ' &middot; <i>tap a rock</i>');
+  }
+
+  /* ---------- effects ---------- */
+  function spawnChunk(k, hx, hy) {
+    const a = Math.atan2(hy - k.y, hx - k.x) + rnd(-0.9, 0.9), sp = rnd(50, 110);
+    chunks.push({ x: hx, y: hy, vx: Math.cos(a) * sp + k.vx, vy: Math.sin(a) * sp + k.vy, age: 0, ore: k.ore });
+  }
+  function crack(k) {
+    const R = rr(k);
+    for (let i = 0; i < 18; i++) {
+      const a = rnd(0, 6.28), sp = rnd(25, 120) * S;
+      debris.push({ x: k.x + Math.cos(a) * R * 0.5, y: k.y + Math.sin(a) * R * 0.5, vx: Math.cos(a) * sp + k.vx, vy: Math.sin(a) * sp + k.vy,
+                    rot: rnd(0, 6.28), spin: rnd(-6, 6), s: rnd(1.6, 3.6) * S, life: 0, max: rnd(0.9, 1.7) });
+    }
+    rings.push({ x: k.x, y: k.y, r: R * 0.6, life: 0, c: ORES[k.ore][1] });
+    if (k.r >= 28 * S) {                    // big rocks leave a couple of smaller pieces behind
+      for (let i = 0; i < 2; i++) {
+        const a = rnd(0, 6.28), c = makeRock(k.x + Math.cos(a) * R * 0.4, k.y + Math.sin(a) * R * 0.4, k.r * rnd(0.36, 0.46), k.ore);
+        c.vx = k.vx + Math.cos(a) * rnd(10, 22); c.vy = k.vy + Math.sin(a) * rnd(10, 22);
+        c.units = c.units0 = 2;
+        rocks.push(c);
+      }
+    }
+    rocks.splice(rocks.indexOf(k), 1);
+  }
+
+  /* ---------- sizing ---------- */
+  function resize() {
+    W = innerWidth; H = innerHeight;
+    S = clamp(Math.min(W, H) / 820, 0.72, 1.2);
+    cvs.width = Math.floor(W * dpr); cvs.height = Math.floor(H * dpr);
+    cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+    measure();
+    paintLayer(); makeStars(); placeStation();
+    N = clamp(Math.round(W * H / 72000), 7, 18);
+    if (!rocks.length) {
+      for (let i = 0; i < N; i++) rocks.push(makeRock(rnd(0, W), rnd(0, H), rnd(16, 46) * S));
+      ship.x = station.dx; ship.y = station.dy;
+    }
+    wps = [];
+  }
+  window.addEventListener('resize', resize);
+
+  /* ---------- click / tap a rock to mine it ---------- */
+  function rockAt(x, y) {
+    let hit = null, bd = Infinity;
+    for (const k of rocks) {
+      const d = Math.hypot(k.x - x, k.y - y);
+      if (d < rr(k) + 12 && d < bd) { bd = d; hit = k; }
+    }
+    return hit;
+  }
+  window.addEventListener('pointerdown', e => {
+    if (e.target.closest && e.target.closest('.card')) return;
+    if (mode === 'dock' || mode === 'sell') return;
+    const k = rockAt(e.clientX, e.clientY);
+    if (!k || !usable(k)) return;
+    const a = pickStand(k);
+    if (a === null) return;
+    target = k; standA = a; mode = 'seek'; wps = []; focus = 0.7; soldT = 0;
+  });
+  window.addEventListener('pointermove', e => {
+    const over = !(e.target.closest && e.target.closest('.card')) && rockAt(e.clientX, e.clientY);
+    document.body.classList.toggle('aim', !!over);
+  });
+
+  /* ---------- simulation ---------- */
+  const SPEED = () => clamp(Math.min(W, H) * 0.36, 150, 340);
+  let retarget = 0;
+
+  function steer(gx, gy, dt, final) {
+    if (Math.hypot(gx - wpGoalX, gy - wpGoalY) > 40 || !wps.length) {
+      wps = route(ship.x, ship.y, gx, gy); wpGoalX = gx; wpGoalY = gy;
+    } else {
+      wps[wps.length - 1] = { x: gx, y: gy };          // the goal drifts with its rock
+    }
+    let wp = wps[0];
+    if (wps.length > 1 && Math.hypot(wp.x - ship.x, wp.y - ship.y) < 26) { wps.shift(); wp = wps[0]; }
+    const dx = wp.x - ship.x, dy = wp.y - ship.y, d = Math.max(Math.hypot(dx, dy), 1e-6);
+    const vmax = SPEED(), last = wps.length === 1;
+    const want = last && final ? Math.min(vmax, d * 2.2) : vmax;
+    let ax = (dx / d) * want - ship.vx, ay = (dy / d) * want - ship.vy;
+    const al = Math.hypot(ax, ay), amax = vmax * 2.1 * dt;
+    if (al > amax && al > 1e-6) { ax *= amax / al; ay *= amax / al; }   // al floor is deliberate: 0/0 = NaN parks the ship at (0,0)
+    ship.vx += ax; ship.vy += ay;
+    ship.thrust = clamp(al / Math.max(amax, 1e-6), 0, 1) * (Math.hypot(ship.vx, ship.vy) > 12 || al > amax * 0.5 ? 1 : 0.2);
+    return d;
+  }
+  function turnTo(a, rate, dt) {
+    let da = a - ship.a;
+    da = Math.atan2(Math.sin(da), Math.cos(da));
+    ship.a += clamp(da, -rate * dt, rate * dt);
+  }
+
+  function update(dt) {
+    // rocks drift; ones that leave the field come back upwind as new rocks
+    for (let i = rocks.length - 1; i >= 0; i--) {
+      const k = rocks[i];
+      k.x += k.vx * dt; k.y += k.vy * dt; k.rot += k.spin * dt;
+      k.scale += ((0.55 + 0.45 * k.units / k.units0) - k.scale) * Math.min(1, dt * 6);
+      const m = k.r + 90;
+      if (k.x < -m || k.x > W + m || k.y < -m || k.y > H + m) {
+        rocks.splice(i, 1);
+        if (k === target) target = null;
+      }
+    }
+    while (rocks.length < N) spawnUpwind();
+
+    const full = hold.length + chunks.length >= CAP;
+    if (full && (mode === 'seek' || mode === 'mine')) { mode = 'dock'; target = null; wps = []; }
+
+    laser = false;
+    let hx = 0, hy = 0;
+    if (mode === 'seek' || mode === 'mine') {
+      if (!usable(target)) { target = null; mode = 'seek'; }
+      retarget -= dt;
+      if (!target && retarget <= 0) { target = pickRock(); retarget = 0.4; wps = []; }
+      if (target) {
+        let p = standPoint(target, standA);
+        if (!standOK(p)) {
+          const a = pickStand(target);
+          if (a === null) { target = null; mode = 'seek'; }
+          else { standA = a; p = standPoint(target, a); }
+        }
+        if (target) {
+          const d = steer(p.x, p.y, dt, true);
+          const sp = Math.hypot(ship.vx, ship.vy);
+          if (mode === 'seek' && d < 12 && sp < 70) mode = 'mine';
+          else if (mode === 'mine' && d > 36) mode = 'seek';
+          const toRock = Math.atan2(target.y - ship.y, target.x - ship.x);
+          if (mode === 'mine') {
+            turnTo(toRock, 7, dt);
+            const off = Math.atan2(Math.sin(toRock - ship.a), Math.cos(toRock - ship.a));
+            if (Math.abs(off) < 0.25) {
+              laser = true;
+              const R = rr(target) * 0.9;
+              const j = Math.sin(performance.now() * 0.011) * 0.18;     // the beam wanders a little over the face
+              hx = target.x - Math.cos(toRock + j) * R; hy = target.y - Math.sin(toRock + j) * R;
+              target.cut += dt;
+              if (target.cut >= 0.42) {
+                target.cut -= 0.42; target.units--;
+                spawnChunk(target, hx, hy);
+                if (target.units <= 0) { crack(target); target = null; mode = 'seek'; retarget = 0.25; }
+              }
+            }
+          } else {
+            turnTo(sp > 30 ? Math.atan2(ship.vy, ship.vx) : toRock, 5, dt);
+          }
+        }
+      }
+      if (!target) {                        // nothing in reach: idle off the card, near the station
+        steer(station.dx, station.dy, dt, true);
+        turnTo(Math.atan2(ship.vy, ship.vx) || ship.a, 3, dt);
+      }
+    } else if (mode === 'dock') {
+      const d = steer(station.dx, station.dy, dt, true);
+      const sp = Math.hypot(ship.vx, ship.vy);
+      turnTo(sp > 30 ? Math.atan2(ship.vy, ship.vx) : Math.atan2(station.y - ship.y, station.x - ship.x), 5, dt);
+      if (d < 10 && sp < 40 && !chunks.length) { mode = 'sell'; sellT = 0; sold = 0; }
+    } else if (mode === 'sell') {
+      steer(station.dx, station.dy, dt, true);
+      turnTo(Math.atan2(station.y - ship.y, station.x - ship.x), 5, dt);
+      sellT += dt;
+      while (sellT >= 0.07 && hold.length) {
+        sellT -= 0.07;
+        const ore = hold.pop(), price = ORES[ore][2];
+        credits += price; sold += price;
+        CELLS[hold.length].classList.remove('on');
+        crEl.textContent = fmt(credits);
+      }
+      crBox.classList.toggle('sell', hold.length > 0);
+      if (!hold.length) {
+        crBox.classList.remove('sell');
+        floats.push({ x: station.x, y: station.y - station.R - 10, t: 0, s: '+' + fmt(sold) + ' cr' });
+        mode = 'seek'; soldT = 2.4; retarget = 0;
+      }
+    }
+    soldT = Math.max(0, soldT - dt);
+    focus = Math.max(0, focus - dt);
+
+    ship.x += ship.vx * dt; ship.y += ship.vy * dt;
+
+    // thruster exhaust
+    if (ship.thrust > 0.15) {
+      const bx = ship.x - Math.cos(ship.a) * 9 * S, by = ship.y - Math.sin(ship.a) * 9 * S;
+      const n = ship.thrust > 0.6 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        const a = ship.a + Math.PI + rnd(-0.3, 0.3), sp = rnd(60, 130);
+        flames.push({ x: bx, y: by, vx: Math.cos(a) * sp + ship.vx * 0.3, vy: Math.sin(a) * sp + ship.vy * 0.3, life: 0, max: rnd(0.22, 0.4) });
+      }
+    }
+    // sparks off the cut
+    if (laser) {
+      for (let i = 0; i < 2; i++) {
+        const a = Math.atan2(ship.y - hy, ship.x - hx) + rnd(-1.2, 1.2), sp = rnd(60, 190);
+        sparks.push({ x: hx, y: hy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0, max: rnd(0.15, 0.4) });
+      }
+    }
+    beam.on = laser; beam.hx = hx; beam.hy = hy;
+
+    // ore chunks: tossed out of the cut, then the magnet takes them
+    for (let i = chunks.length - 1; i >= 0; i--) {
+      const c = chunks[i];
+      c.age += dt;
+      if (c.age > 0.22) {
+        const dx = ship.x - c.x, dy = ship.y - c.y, d = Math.max(Math.hypot(dx, dy), 1e-6);
+        const pull = 1500 * Math.min(1, (c.age - 0.22) * 3);
+        c.vx += (dx / d) * pull * dt; c.vy += (dy / d) * pull * dt;
+        const damp = Math.max(0, 1 - 2.6 * dt);
+        c.vx *= damp; c.vy *= damp;
+        if (d < 10 * S) {
+          chunks.splice(i, 1);
+          if (hold.length < CAP) {
+            const cell = CELLS[hold.length];
+            cell.style.setProperty('--c', ORES[c.ore][1]);
+            cell.classList.add('on');
+            hold.push(c.ore);
+          }
+          continue;
+        }
+      } else { c.vx *= 1 - 1.5 * dt; c.vy *= 1 - 1.5 * dt; }
+      c.x += c.vx * dt; c.y += c.vy * dt;
+    }
+    for (const list of [sparks, flames, debris]) {
+      for (let i = list.length - 1; i >= 0; i--) {
+        const p = list[i];
+        p.life += dt;
+        if (p.life >= p.max) { list.splice(i, 1); continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        if (p.spin) p.rot += p.spin * dt;
+      }
+    }
+    for (let i = rings.length - 1; i >= 0; i--) { rings[i].life += dt; if (rings[i].life > 0.6) rings.splice(i, 1); }
+    for (let i = floats.length - 1; i >= 0; i--) { floats[i].t += dt; if (floats[i].t > 2) floats.splice(i, 1); }
+
+    for (const s of stars) {
+      s.x -= DRIFT.x * 4 * s.z * dt; s.y -= DRIFT.y * 4 * s.z * dt;
+      if (s.x < 0) s.x += W; else if (s.x > W) s.x -= W;
+      if (s.y < 0) s.y += H; else if (s.y > H) s.y -= H;
+    }
+    station.rot += dt * 0.25;
+    status();
+  }
+  const beam = { on: false, hx: 0, hy: 0 };
+
+  /* ---------- drawing ---------- */
+  function drawRock(k) {
+    const R = rr(k), n = k.shape.length, c = Math.cos(k.rot), s = Math.sin(k.rot);
+    ctx.save();
+    ctx.translate(k.x, k.y);
+    // lit from the top-left in screen space, so the gradient is set before the vertices are rotated
+    const g = ctx.createLinearGradient(-R, -R, R, R);
+    g.addColorStop(0, '#46526a'); g.addColorStop(0.55, '#1b2231'); g.addColorStop(1, '#090c13');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2, d = k.shape[i] * R;
+      const lx = Math.cos(a) * d, ly = Math.sin(a) * d;
+      const x = lx * c - ly * s, y = lx * s + ly * c;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(150,185,230,0.20)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    for (const cr of k.craters) {
+      const a = cr.a + k.rot;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * cr.d * R, Math.sin(a) * cr.d * R, cr.s * R, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = ORES[k.ore][1];
+    ctx.globalAlpha = 0.85;
+    for (const sp of k.specks) {
+      const a = sp.a + k.rot;
+      ctx.fillRect(Math.cos(a) * sp.d * R - sp.s / 2, Math.sin(a) * sp.d * R - sp.s / 2, sp.s, sp.s);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawStation(t) {
+    const R = station.R, x = station.x, y = station.y;
+    ctx.save();
+    ctx.translate(x, y);
+    // solar wings
+    ctx.fillStyle = 'rgba(26,143,255,0.22)'; ctx.strokeStyle = 'rgba(95,224,255,0.35)'; ctx.lineWidth = 1;
+    for (const sgn of [-1, 1]) {
+      ctx.fillRect(sgn > 0 ? R * 0.35 : -R * 1.75, -R * 0.22, R * 1.4, R * 0.44);
+      ctx.strokeRect(sgn > 0 ? R * 0.35 : -R * 1.75, -R * 0.22, R * 1.4, R * 0.44);
+    }
+    ctx.rotate(station.rot);
+    ctx.strokeStyle = 'rgba(190,215,245,0.55)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(190,215,245,0.35)';
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * R * 0.3, Math.sin(a) * R * 0.3); ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R); ctx.stroke();
+    }
+    ctx.fillStyle = '#141c2c'; ctx.strokeStyle = 'rgba(95,224,255,0.6)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // running lights round the ring
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2, on = ((t * 2 + i) | 0) % 2 === 0;
+      const img = glow(i % 2 ? '#ffd24f' : '#5fe0ff');
+      ctx.globalAlpha = on ? 0.95 : 0.25;
+      ctx.drawImage(img, Math.cos(a) * R - 6, Math.sin(a) * R - 6, 12, 12);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+  }
+
+  function drawShip() {
+    const k = S * 1.05;
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    ctx.rotate(ship.a + Math.PI / 2);        // the hull is drawn nose-up
+    if (ship.thrust > 0.1) {                 // engine flame
+      ctx.globalCompositeOperation = 'lighter';
+      const L = (7 + 11 * ship.thrust) * k * (0.85 + Math.random() * 0.3);
+      const fg = ctx.createLinearGradient(0, 5 * k, 0, 5 * k + L);
+      fg.addColorStop(0, 'rgba(255,240,190,0.95)'); fg.addColorStop(0.4, 'rgba(255,177,79,0.7)'); fg.addColorStop(1, 'rgba(255,90,40,0)');
+      ctx.fillStyle = fg;
+      ctx.beginPath(); ctx.moveTo(-3.2 * k, 6 * k); ctx.lineTo(0, 5 * k + L); ctx.lineTo(3.2 * k, 6 * k); ctx.closePath(); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.shadowColor = '#5fe0ff'; ctx.shadowBlur = 12;
+    const hg = ctx.createLinearGradient(0, -13 * k, 0, 10 * k);
+    hg.addColorStop(0, '#d8fbff'); hg.addColorStop(0.5, '#5fe0ff'); hg.addColorStop(1, '#1a8fff');
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.moveTo(0, -13 * k); ctx.lineTo(7 * k, 9 * k); ctx.lineTo(0, 5 * k); ctx.lineTo(-7 * k, 9 * k);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(3,5,12,0.75)';     // cockpit
+    ctx.beginPath(); ctx.moveTo(0, -6 * k); ctx.lineTo(2 * k, -1 * k); ctx.lineTo(-2 * k, -1 * k); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    ctx.drawImage(layer, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    for (const s of stars) {
+      const b = s.b * (0.75 + 0.25 * Math.sin(t * 1.3 + s.ph));
+      ctx.fillStyle = 'rgba(215,236,255,' + b.toFixed(3) + ')';
+      const sz = s.z > 0.85 ? 1.6 : 1;
+      ctx.fillRect(s.x, s.y, sz, sz);
+    }
+
+    drawStation(t);
+    if (mode === 'sell') {                   // tractor link while docked
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(95,224,255,' + (0.25 + 0.15 * Math.sin(t * 9)).toFixed(3) + ')';
+      ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(ship.x, ship.y); ctx.lineTo(station.x, station.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    for (const k of rocks) drawRock(k);
+
+    // target brackets
+    if (target) {
+      const R = rr(target) + 9 + (focus > 0 ? focus * 14 : 0), L = 6;
+      ctx.strokeStyle = 'rgba(255,210,79,' + (mode === 'mine' ? 0.85 : 0.55) + ')';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        const cx = target.x + sx * R, cy = target.y + sy * R;
+        ctx.moveTo(cx, cy - sy * L); ctx.lineTo(cx, cy); ctx.lineTo(cx - sx * L, cy);
+      }
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(120,135,160,0.9)';
+    for (const p of debris) {
+      ctx.globalAlpha = 1 - p.life / p.max;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.beginPath(); ctx.moveTo(0, -p.s); ctx.lineTo(p.s, p.s * 0.8); ctx.lineTo(-p.s * 0.9, p.s * 0.6); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (const r of rings) {
+      const f = r.life / 0.6;
+      ctx.globalAlpha = (1 - f) * 0.8;
+      ctx.drawImage(glow(r.c), r.x - r.r * (1 + f), r.y - r.r * (1 + f), r.r * 2 * (1 + f), r.r * 2 * (1 + f));
+    }
+    ctx.globalAlpha = 1;
+    if (beam.on) {
+      const nx = ship.x + Math.cos(ship.a) * 12 * S, ny = ship.y + Math.sin(ship.a) * 12 * S;
+      const fl = 0.75 + Math.random() * 0.25;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(95,224,255,' + (0.22 * fl).toFixed(3) + ')'; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(nx, ny); ctx.lineTo(beam.hx, beam.hy); ctx.stroke();
+      ctx.strokeStyle = 'rgba(220,250,255,' + (0.9 * fl).toFixed(3) + ')'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(nx, ny); ctx.lineTo(beam.hx, beam.hy); ctx.stroke();
+      const hs = 26 * fl;
+      ctx.drawImage(glow(target ? ORES[target.ore][1] : '#ffd24f'), beam.hx - hs / 2, beam.hy - hs / 2, hs, hs);
+    }
+    for (const c of chunks) {
+      const sz = 11;
+      ctx.drawImage(glow(ORES[c.ore][1]), c.x - sz / 2, c.y - sz / 2, sz, sz);
+    }
+    ctx.lineCap = 'round'; ctx.lineWidth = 1.3;
+    for (const p of sparks) {
+      const f = 1 - p.life / p.max;
+      ctx.strokeStyle = 'rgba(255,' + (200 + 55 * f | 0) + ',' + (140 + 100 * f | 0) + ',' + f.toFixed(3) + ')';
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); ctx.stroke();
+    }
+    for (const p of flames) {
+      const f = 1 - p.life / p.max;
+      ctx.globalAlpha = f * 0.8;
+      const sz = 3 + 5 * f;
+      ctx.drawImage(glow('#ffb14f'), p.x - sz / 2, p.y - sz / 2, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+
+    drawShip();
+
+    ctx.font = '600 ' + Math.round(13 * S + 2) + 'px "Share Tech Mono", monospace';
+    ctx.textAlign = 'center';
+    for (const f of floats) {
+      ctx.globalAlpha = Math.min(1, (2 - f.t) * 1.5);
+      ctx.fillStyle = '#ffd24f';
+      ctx.fillText(f.s, f.x, f.y - f.t * 16);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    // the first rAF timestamp can predate `last`; a negative dt is deliberately floored to 0
+    const dt = clamp((now - last) / 1000, 0, 0.05); last = now;
+    update(dt);
+    draw(now / 1000);
+    raf = requestAnimationFrame(frame);
+  }
+
+  resize();
+  // the web fonts change the card's height once they arrive; measure it again
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); placeStation(); wps = []; });
+  let raf = requestAnimationFrame(frame);
+  window.addEventListener('pagehide', () => cancelAnimationFrame(raf));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) cancelAnimationFrame(raf);
+    else { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>
